@@ -278,16 +278,17 @@ function ExecutiveReportContent({ onClose }: { onClose?: () => void }) {
               <h1 className="text-xl font-bold text-slate-900">
                 Mapa Comparativo de Cotação e Decisão de Compra
               </h1>
-            <p className="text-sm text-slate-700">
-              Obra:{" "}
-              <strong className="text-slate-900">
-                {currentProject?.nome} ({currentProject?.codigo_sigla})
-              </strong>{" "}
-              • Disciplina:{" "}
-              <strong className="text-slate-900">
-                {currentSc.categoria_principal}
-              </strong>
-            </p>
+              <p className="text-sm text-slate-700">
+                Obra:{" "}
+                <strong className="text-slate-900">
+                  {currentProject?.nome} ({currentProject?.codigo_sigla})
+                </strong>{" "}
+                • Disciplina:{" "}
+                <strong className="text-slate-900">
+                  {currentSc.categoria_principal}
+                </strong>
+              </p>
+            </div>
           </div>
 
           <div className="bg-slate-100 border border-slate-300 rounded-lg px-4 py-3 text-right text-sm space-y-1">
