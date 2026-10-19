@@ -95,17 +95,18 @@ const DEFAULT_SETTINGS: UserSettings = {
   companyCnpj: "04.819.302/0001-71",
 };
 
-const SETTINGS_STORAGE_KEY = "jc_bauer_user_settings_v1";
-const USERS_STORAGE_KEY = "jc_bauer_users_v1";
-const SESSION_STORAGE_KEY = "jc_bauer_current_user_v1";
-const SOLICITACOES_STORAGE_KEY = "jc_bauer_solicitacoes_v1";
-const ORDENS_STORAGE_KEY = "jc_bauer_ordens_v1";
-const CONTRATOS_STORAGE_KEY = "jc_bauer_contratos_v1";
-const ORCAMENTO_STORAGE_KEY = "jc_bauer_orcamento_v1";
-const ESTOQUE_STORAGE_KEY = "jc_bauer_estoque_v1";
-const MOVIMENTACOES_STORAGE_KEY = "jc_bauer_movimentacoes_v1";
-const PUXADAS_STORAGE_KEY = "jc_bauer_puxadas_v1";
-const DIARIOS_STORAGE_KEY = "jc_bauer_diarios_v1";
+const SETTINGS_STORAGE_KEY = "jc_bauer_user_settings_v2";
+const USERS_STORAGE_KEY = "jc_bauer_users_v2";
+const SESSION_STORAGE_KEY = "jc_bauer_current_user_v2";
+const SOLICITACOES_STORAGE_KEY = "jc_bauer_solicitacoes_v2";
+const ORDENS_STORAGE_KEY = "jc_bauer_ordens_v2";
+const CONTRATOS_STORAGE_KEY = "jc_bauer_contratos_v2";
+const ORCAMENTO_STORAGE_KEY = "jc_bauer_orcamento_v2";
+const ESTOQUE_STORAGE_KEY = "jc_bauer_estoque_v2";
+const MOVIMENTACOES_STORAGE_KEY = "jc_bauer_movimentacoes_v2";
+const PUXADAS_STORAGE_KEY = "jc_bauer_puxadas_v2";
+const DIARIOS_STORAGE_KEY = "jc_bauer_diarios_v2";
+const FORNECEDORES_STORAGE_KEY = "jc_bauer_fornecedores_v2";
 
 interface DiarioObraRegistro {
   id: string;
@@ -530,669 +531,13 @@ const OBRAS_INICIAIS: Obra[] = [
   },
 ];
 
-const ECONOMIA_INSUMOS_HISTORICO: ItemEconomiaInsumo[] = [
-  {
-    id: "eco-1",
-    insumo: "Concreto Usinado Bombeável FCK 35/40 MPa",
-    categoria: "Fundações & Terraplenagem",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    fornecedorVencedor: "Supermix Concreto S.A.",
-    valorMaiorCotado: 95600.0,
-    valorFechado: 84200.0,
-  },
-  {
-    id: "eco-2",
-    insumo: "Aço CA-50 / CA-60 (Ø 10mm, 12.5mm e 16mm)",
-    categoria: "Estrutura (Aço & Concreto)",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    fornecedorVencedor: "SulAço Distribuidora",
-    valorMaiorCotado: 89396.0,
-    valorFechado: 75522.0,
-  },
-  {
-    id: "eco-3",
-    insumo: "Esquadrias de Alumínio Linha Gold + Pele de Vidro",
-    categoria: "Esquadrias & Fachadas de Vidro",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    fornecedorVencedor: "AluGlass Fachadas & Esquadrias",
-    valorMaiorCotado: 472100.0,
-    valorFechado: 431800.0,
-  },
-  {
-    id: "eco-4",
-    insumo: "Elevadores Regenerativos Inox (2 Unidades + Montagem)",
-    categoria: "Elevadores & Equipamentos",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    fornecedorVencedor: "Atlas Schindler Elevadores",
-    valorMaiorCotado: 475000.0,
-    valorFechado: 438000.0,
-  },
-  {
-    id: "eco-5",
-    insumo: "Porcelanato Técnico Retificado 90x90cm + Argamassa AC-III",
-    categoria: "Revestimentos, Louças & Metais",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    fornecedorVencedor: "Portobello Corporate B2B",
-    valorMaiorCotado: 82400.0,
-    valorFechado: 66940.0,
-  },
-  {
-    id: "eco-6",
-    insumo: "Tubulações PPR, PVC Série R e Bombas de Recalque",
-    categoria: "Instalações Hidrossanitárias",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    fornecedorVencedor: "Tigre Engenharia B2B",
-    valorMaiorCotado: 64800.0,
-    valorFechado: 55100.0,
-  },
-  {
-    id: "eco-7",
-    insumo: "Manta Asfáltica Polimérica 4mm + Impermeabilizante Flexível",
-    categoria: "Impermeabilização & Isolamento",
-    obraId: "obra-3",
-    obraNome: "Condomínio Logístico SulPark",
-    valorMaiorCotado: 41510.0,
-    valorFechado: 37735.0,
-    fornecedorVencedor: "ImperSul Químicos & Tintas",
-  },
-  {
-    id: "eco-8",
-    insumo: "Tintas Acrílicas Premium Fachada + Selador Acrílico (Latas 18L)",
-    categoria: "Pintura & Texturas",
-    obraId: "obra-3",
-    obraNome: "Condomínio Logístico SulPark",
-    fornecedorVencedor: "ImperSul Químicos & Tintas",
-    valorMaiorCotado: 52900.0,
-    valorFechado: 44600.0,
-  },
-];
+const ECONOMIA_INSUMOS_HISTORICO: ItemEconomiaInsumo[] = [];
 
-const FORNECEDORES_INICIAIS: FornecedorCadastro[] = [
-  {
-    id: "forn-1",
-    empresa: "SulAço Distribuidora",
-    razaoSocial: "SulAço Comércio e Beneficiamento de Aços S.A.",
-    cnpj: "83.412.901/0001-54",
-    cidade: "Joinville / SC",
-    categoriaPrincipal: "Estrutura (Aço & Concreto)",
-    especialidades: ["Aço CA-50 / CA-60", "Telas Soldadas", "Corte e Dobra"],
-    vendedor: "Carlos Eduardo Rocha",
-    telefone: "(47) 99912-3401",
-    whatsapp: "5547999123401",
-    email: "carlos.rocha@sulaco.com.br",
-    chavePix: "83.412.901/0001-54",
-    condicaoPadrao: "28/56/84 ddl Boleto",
-    observacoes: "Frete CIF para cargas acima de 8 toneladas no litoral SC.",
-  },
-  {
-    id: "forn-2",
-    empresa: "Gerdau Comercial Aços",
-    razaoSocial: "Comercial Gerdau S.A. Filial Sul",
-    cnpj: "33.611.500/0114-22",
-    cidade: "Araquari / SC",
-    categoriaPrincipal: "Estrutura (Aço & Concreto)",
-    especialidades: [
-      "Vergalhões CA-50",
-      "Arames Recozidos",
-      "Perfis Estruturais",
-    ],
-    vendedor: "Roberto Alencar",
-    telefone: "(47) 99844-1120",
-    whatsapp: "5547998441120",
-    email: "roberto.alencar@gerdau.com.br",
-    chavePix: "33.611.500/0114-22",
-    condicaoPadrao: "28/42 ddl Boleto",
-    observacoes: "Entrega programada com caminhão munck próprio.",
-  },
-  {
-    id: "forn-3",
-    empresa: "ArcelorMittal Sul",
-    razaoSocial: "ArcelorMittal Brasil S.A. Distribuição",
-    cnpj: "17.469.701/0044-10",
-    cidade: "Itajaí / SC",
-    categoriaPrincipal: "Estrutura (Aço & Concreto)",
-    especialidades: ["Aço Cortado e Dobrado", "Trefilados", "Espaçadores"],
-    vendedor: "Fernanda Tavares",
-    telefone: "(47) 99701-8890",
-    whatsapp: "5547997018890",
-    email: "fernanda.tavares@arcelormittal.com.br",
-    chavePix: "17.469.701/0044-10",
-    condicaoPadrao: "30/60 ddl Boleto",
-    observacoes: "Certificado de qualidade por lote enviado junto com a NF.",
-  },
-  {
-    id: "forn-4",
-    empresa: "AluGlass Fachadas & Esquadrias",
-    razaoSocial: "AluGlass Engenharia de Fachadas e Alumínio Ltda",
-    cnpj: "11.209.440/0001-88",
-    cidade: "Itajaí / SC",
-    categoriaPrincipal: "Esquadrias & Fachadas de Vidro",
-    especialidades: ["Esquadrias Linha Gold", "Pele de Vidro", "Guarda-Corpo"],
-    vendedor: "Eng. Leandro Mattos",
-    telefone: "(47) 99988-7711",
-    whatsapp: "5547999887711",
-    email: "leandro@aluglass.eng.br",
-    chavePix: "11.209.440/0001-88",
-    condicaoPadrao: "20% Sinal + 4x Medição",
-    observacoes:
-      "Inclui projeto executivo, ensaio acústico e ART de instalação.",
-  },
-  {
-    id: "forn-5",
-    empresa: "VetroSul Esquadrias",
-    razaoSocial: "VetroSul Indústria de Esquadrias e Vidros Especiais S.A.",
-    cnpj: "14.882.310/0001-19",
-    cidade: "Blumenau / SC",
-    categoriaPrincipal: "Esquadrias & Fachadas de Vidro",
-    especialidades: [
-      "Esquadrias Minimalistas",
-      "Vidros Laminados",
-      "Brises",
-    ],
-    vendedor: "Patrícia Klein",
-    telefone: "(47) 99123-4500",
-    whatsapp: "5547991234500",
-    email: "patricia@vetrosul.com.br",
-    chavePix: "14.882.310/0001-19",
-    condicaoPadrao: "30/60/90 ddl Medição",
-    observacoes: "Fábrica automatizada com garantia de 5 anos na anodização.",
-  },
-  {
-    id: "forn-6",
-    empresa: "Atlas Schindler Elevadores",
-    razaoSocial: "Elevadores Atlas Schindler Ltda",
-    cnpj: "00.028.986/0019-04",
-    cidade: "Florianópolis / SC",
-    categoriaPrincipal: "Elevadores & Equipamentos",
-    especialidades: [
-      "Elevadores Sem Casa de Máquinas",
-      "Monta-Cargas",
-      "Manutenção",
-    ],
-    vendedor: "Eng. Gustavo Hering",
-    telefone: "(48) 99941-2020",
-    whatsapp: "5548999412020",
-    email: "gustavo.hering@schindler.com",
-    chavePix: "00.028.986/0019-04",
-    condicaoPadrao: "15% Assinatura + 6x Cronograma",
-    observacoes:
-      "Assistência técnica 24h com base própria em Balneário Camboriú.",
-  },
-  {
-    id: "forn-7",
-    empresa: "ImperSul Químicos & Tintas",
-    razaoSocial: "ImperSul Distribuidora Técnica para Construção Ltda",
-    cnpj: "21.904.118/0001-60",
-    cidade: "Joinville / SC",
-    categoriaPrincipal: "Impermeabilização & Isolamento",
-    especialidades: [
-      "Manta Asfáltica 4mm",
-      "Argamassa Polimérica",
-      "Tintas Acrílicas",
-    ],
-    vendedor: "Diego Fontes",
-    telefone: "(47) 99655-3210",
-    whatsapp: "5547996553210",
-    email: "diego@impersul.com.br",
-    chavePix: "21.904.118/0001-60",
-    condicaoPadrao: "28/56 ddl Boleto",
-    observacoes: "Distribuidor Viapol e Suvinil Linha Profissional.",
-  },
-  {
-    id: "forn-8",
-    empresa: "Portobello Corporate B2B",
-    razaoSocial: "Portobello S.A. Divisão Engenharia",
-    cnpj: "83.475.913/0001-91",
-    cidade: "Tijucas / SC",
-    categoriaPrincipal: "Revestimentos, Louças & Metais",
-    especialidades: [
-      "Porcelanatos Técnicos",
-      "Grandes Formatos",
-      "Louças e Metais",
-    ],
-    vendedor: "Mariana Borges",
-    telefone: "(48) 99104-5566",
-    whatsapp: "5548991045566",
-    email: "mariana.borges@portobello.com.br",
-    chavePix: "83.475.913/0001-91",
-    condicaoPadrao: "28/56/84 ddl Faturado",
-    observacoes: "Entrega paletizada direto da fábrica em Tijucas.",
-  },
-];
+const FORNECEDORES_INICIAIS: FornecedorCadastro[] = [];
 
-const SOLICITACOES_INICIAIS: SolicitacaoCompra[] = [
-  {
-    id: "sc-1",
-    codigo: "SC-2026-0142",
-    obraId: "obra-1",
-    categoria: "Estrutura (Aço & Concreto)",
-    solicitante: "Eng. Marcos Viana",
-    dataAbertura: "14/10/2026",
-    status: "Em Cotação",
-    itens: [
-      {
-        id: "it-101",
-        codigo: "SINAPI-00000034",
-        descricao: "Aço CA-50 Ø 10,0 mm (3/8\") — Barra 12m",
-        unidade: "barra",
-        quantidade: 380,
-        orcamentoUnitario: 62.8,
-      },
-      {
-        id: "it-102",
-        codigo: "SINAPI-00000035",
-        descricao: "Aço CA-50 Ø 12,5 mm (1/2\") — Barra 12m",
-        unidade: "barra",
-        quantidade: 290,
-        orcamentoUnitario: 96.5,
-      },
-      {
-        id: "it-103",
-        codigo: "SINAPI-00000037",
-        descricao: "Aço CA-50 Ø 16,0 mm (5/8\") — Barra 12m",
-        unidade: "barra",
-        quantidade: 140,
-        orcamentoUnitario: 158.9,
-      },
-      {
-        id: "it-104",
-        codigo: "SINAPI-00000040",
-        descricao: "Aço CA-60 Ø 5,0 mm Estribos — Barra 12m",
-        unidade: "barra",
-        quantidade: 420,
-        orcamentoUnitario: 18.4,
-      },
-    ],
-    propostas: [
-      {
-        id: "prop-1",
-        vendorId: "forn-1",
-        fornecedorNome: "SulAço Distribuidora",
-        vendedorNome: "Carlos Eduardo Rocha",
-        whatsapp: "5547999123401",
-        precosUnitarios: {
-          "it-101": 57.9,
-          "it-102": 89.4,
-          "it-103": 146.5,
-          "it-104": 16.9,
-        },
-        freteValor: 0,
-        tipoFrete: "CIF",
-        prazoPagamento: "4 dias úteis • 28/56/84 ddl Boleto",
-      },
-      {
-        id: "prop-2",
-        vendorId: "forn-2",
-        fornecedorNome: "Gerdau Comercial Aços",
-        vendedorNome: "Roberto Alencar",
-        whatsapp: "5547998441120",
-        precosUnitarios: {
-          "it-101": 60.2,
-          "it-102": 91.8,
-          "it-103": 149.0,
-          "it-104": 17.5,
-        },
-        freteValor: 1150,
-        tipoFrete: "FOB",
-        prazoPagamento: "5 dias úteis • 28/42 ddl Boleto",
-      },
-      {
-        id: "prop-3",
-        vendorId: "forn-3",
-        fornecedorNome: "ArcelorMittal Sul",
-        vendedorNome: "Fernanda Tavares",
-        whatsapp: "5547997018890",
-        precosUnitarios: {
-          "it-101": 61.5,
-          "it-102": 93.9,
-          "it-103": 152.0,
-          "it-104": 17.9,
-        },
-        freteValor: 900,
-        tipoFrete: "FOB",
-        prazoPagamento: "6 dias úteis • 30/60 ddl Boleto",
-      },
-    ],
-  },
-  {
-    id: "sc-2",
-    codigo: "SC-2026-0148",
-    obraId: "obra-1",
-    categoria: "Esquadrias & Fachadas de Vidro",
-    solicitante: "Eng. Marcos Viana",
-    dataAbertura: "15/10/2026",
-    status: "Em Cotação",
-    itens: [
-      {
-        id: "it-201",
-        codigo: "ESQ-GOLD-01",
-        descricao:
-          "Fornecimento de Esquadrias de Alumínio Linha Gold + Vidro Laminado 10mm",
-        unidade: "m²",
-        quantidade: 420,
-        orcamentoUnitario: 980.0,
-      },
-      {
-        id: "it-202",
-        codigo: "ESQ-INST-02",
-        descricao:
-          "Mão de Obra de Instalação, Vedação Estrutural e Emissão de ART",
-        unidade: "vb",
-        quantidade: 1,
-        orcamentoUnitario: 68000.0,
-      },
-    ],
-    propostas: [
-      {
-        id: "prop-201",
-        vendorId: "forn-4",
-        fornecedorNome: "AluGlass Fachadas & Esquadrias",
-        vendedorNome: "Eng. Leandro Mattos",
-        whatsapp: "5547999887711",
-        precosUnitarios: {
-          "it-201": 890.0,
-          "it-202": 58000.0,
-        },
-        freteValor: 0,
-        tipoFrete: "CIF",
-        prazoPagamento: "35 dias • 20% Sinal + 4x Medição",
-      },
-      {
-        id: "prop-202",
-        vendorId: "forn-5",
-        fornecedorNome: "VetroSul Esquadrias",
-        vendedorNome: "Patrícia Klein",
-        whatsapp: "5547991234500",
-        precosUnitarios: {
-          "it-201": 945.0,
-          "it-202": 62000.0,
-        },
-        freteValor: 2400,
-        tipoFrete: "FOB",
-        prazoPagamento: "45 dias • 30/60/90 ddl Medição",
-      },
-      {
-        id: "prop-203",
-        vendorId: "forn-4",
-        fornecedorNome: "Catarinense Glazing Sistemas",
-        vendedorNome: "Eduardo Zimmermann",
-        whatsapp: "5547998112200",
-        precosUnitarios: {
-          "it-201": 965.0,
-          "it-202": 65000.0,
-        },
-        freteValor: 1800,
-        tipoFrete: "FOB",
-        prazoPagamento: "40 dias • 30/60 ddl Boleto",
-      },
-    ],
-  },
-  {
-    id: "sc-3",
-    codigo: "SC-2026-0149",
-    obraId: "obra-2",
-    categoria: "Elevadores & Equipamentos",
-    solicitante: "Engª. Camila Dorneles",
-    dataAbertura: "16/10/2026",
-    status: "Em Cotação",
-    itens: [
-      {
-        id: "it-301",
-        codigo: "ELEV-REG-01",
-        descricao:
-          "Elevador Social Sem Casa de Máquinas 12 Passageiros Inox Escovado (15 Paradas)",
-        unidade: "un",
-        quantidade: 2,
-        orcamentoUnitario: 215000.0,
-      },
-      {
-        id: "it-302",
-        codigo: "ELEV-MONT-02",
-        descricao:
-          "Montagem Eletromecânica, Comissionamento e ART de Instalação",
-        unidade: "vb",
-        quantidade: 1,
-        orcamentoUnitario: 48000.0,
-      },
-    ],
-    propostas: [
-      {
-        id: "prop-301",
-        vendorId: "forn-6",
-        fornecedorNome: "Atlas Schindler Elevadores",
-        vendedorNome: "Eng. Gustavo Hering",
-        whatsapp: "5548999412020",
-        precosUnitarios: {
-          "it-301": 198000.0,
-          "it-302": 42000.0,
-        },
-        freteValor: 0,
-        tipoFrete: "CIF",
-        prazoPagamento: "90 dias • 15% Sinal + 6x Medição",
-      },
-      {
-        id: "prop-302",
-        vendorId: "forn-6",
-        fornecedorNome: "TKE Elevadores Sul",
-        vendedorNome: "Marcelo Stein",
-        whatsapp: "5548998221010",
-        precosUnitarios: {
-          "it-301": 206000.0,
-          "it-302": 45000.0,
-        },
-        freteValor: 0,
-        tipoFrete: "CIF",
-        prazoPagamento: "100 dias • 20% Sinal + 5x Medição",
-      },
-      {
-        id: "prop-303",
-        vendorId: "forn-6",
-        fornecedorNome: "Otis Elevadores Brasil",
-        vendedorNome: "Renato Cardoso",
-        whatsapp: "5548997113030",
-        precosUnitarios: {
-          "it-301": 212000.0,
-          "it-302": 47500.0,
-        },
-        freteValor: 3500,
-        tipoFrete: "FOB",
-        prazoPagamento: "110 dias • 6x Boleto Faturado",
-      },
-    ],
-  },
-  {
-    id: "sc-4",
-    codigo: "SC-2026-0150",
-    obraId: "obra-3",
-    categoria: "Impermeabilização & Isolamento",
-    solicitante: "Eng. Roberto Siqueira",
-    dataAbertura: "16/10/2026",
-    status: "Em Cotação",
-    itens: [
-      {
-        id: "it-401",
-        codigo: "SINAPI-00038110",
-        descricao: "Manta Asfáltica Polimérica Tipo III 4mm — Rolo 10m²",
-        unidade: "rl",
-        quantidade: 85,
-        orcamentoUnitario: 365.0,
-      },
-      {
-        id: "it-402",
-        codigo: "SINAPI-00038142",
-        descricao:
-          "Argamassa Polimérica Impermeabilizante Flexível — Caixa 18kg",
-        unidade: "cx",
-        quantidade: 110,
-        orcamentoUnitario: 98.0,
-      },
-    ],
-    propostas: [
-      {
-        id: "prop-401",
-        vendorId: "forn-7",
-        fornecedorNome: "ImperSul Químicos & Tintas",
-        vendedorNome: "Diego Fontes",
-        whatsapp: "5547996553210",
-        precosUnitarios: {
-          "it-401": 332.0,
-          "it-402": 86.5,
-        },
-        freteValor: 0,
-        tipoFrete: "CIF",
-        prazoPagamento: "3 dias úteis • 28/56 ddl Boleto",
-      },
-      {
-        id: "prop-402",
-        vendorId: "forn-7",
-        fornecedorNome: "Viapol Distribuidora Sul",
-        vendedorNome: "Lucas Andrade",
-        whatsapp: "5547994102299",
-        precosUnitarios: {
-          "it-401": 348.0,
-          "it-402": 91.0,
-        },
-        freteValor: 450,
-        tipoFrete: "FOB",
-        prazoPagamento: "5 dias úteis • 28 ddl Boleto",
-      },
-      {
-        id: "prop-403",
-        vendorId: "forn-7",
-        fornecedorNome: "Quartzolit & Weber Técnica",
-        vendedorNome: "Andréia Ramos",
-        whatsapp: "5547993001188",
-        precosUnitarios: {
-          "it-401": 359.0,
-          "it-402": 94.5,
-        },
-        freteValor: 600,
-        tipoFrete: "FOB",
-        prazoPagamento: "6 dias úteis • 30/60 ddl Boleto",
-      },
-    ],
-  },
-];
+const SOLICITACOES_INICIAIS: SolicitacaoCompra[] = [];
 
-const ORDENS_INICIAIS: OrdemCompra[] = [
-  {
-    id: "oc-1",
-    numeroOc: "OC-2026-0089",
-    scId: "sc-hist-1",
-    scCodigo: "SC-2026-0135",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    obraEndereco: "Av. Atlântica, 2450 — Balneário Camboriú / SC",
-    obraEngenheiro: "Eng. Marcos Viana",
-    categoria: "Fundações & Terraplenagem",
-    fornecedorNome: "Supermix Concreto S.A.",
-    fornecedorRazao: "Supermix Concreto e Bombeamento S.A.",
-    fornecedorCnpj: "16.509.210/0008-40",
-    vendedorNome: "Henrique Bastos",
-    whatsapp: "5547999014455",
-    chavePix: "16.509.210/0008-40",
-    dataEmissao: "10/10/2026",
-    dataPrevistaEntrega: "20/10/2026",
-    prazoPagamento: "28/56 ddl Boleto",
-    tipoFrete: "CIF",
-    freteValor: 0,
-    valorTotal: 84200.0,
-    savingGerado: 11400.0,
-    status: "Aguardando Entrega",
-    itens: [
-      {
-        codigo: "SINAPI-00001524",
-        descricao:
-          "Concreto Usinado Bombeável fck 40 MPa Brita 0/1 Slump 12+-2",
-        unidade: "m³",
-        quantidade: 160,
-        precoUnitario: 526.25,
-        subtotal: 84200.0,
-        observacaoObra: "Programar caminhão betoneira a cada 40 min no portão A",
-      },
-    ],
-  },
-  {
-    id: "oc-2",
-    numeroOc: "OC-2026-0090",
-    scId: "sc-hist-2",
-    scCodigo: "SC-2026-0138",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    obraEndereco: "Rua XV de Novembro, 1120 — Joinville / SC",
-    obraEngenheiro: "Engª. Camila Dorneles",
-    categoria: "Revestimentos, Louças & Metais",
-    fornecedorNome: "Portobello Corporate B2B",
-    fornecedorRazao: "Portobello S.A. Divisão Engenharia",
-    fornecedorCnpj: "83.475.913/0001-91",
-    vendedorNome: "Mariana Borges",
-    whatsapp: "5548991045566",
-    chavePix: "83.475.913/0001-91",
-    dataEmissao: "12/10/2026",
-    dataPrevistaEntrega: "21/10/2026",
-    prazoPagamento: "28/56/84 ddl Faturado",
-    tipoFrete: "CIF",
-    freteValor: 0,
-    valorTotal: 66940.0,
-    savingGerado: 15460.0,
-    status: "Emitida",
-    itens: [
-      {
-        codigo: "POR-9090-TEC",
-        descricao:
-          "Porcelanato Técnico Polido 90x90cm Retificado Tráfego Intenso",
-        unidade: "m²",
-        quantidade: 680,
-        precoUnitario: 98.44,
-        subtotal: 66940.0,
-        observacaoObra: "Descarregar paletes com empilhadeira na doca térrea",
-      },
-    ],
-  },
-  {
-    id: "oc-3",
-    numeroOc: "OC-2026-0091",
-    scId: "sc-hist-3",
-    scCodigo: "SC-2026-0140",
-    obraId: "obra-3",
-    obraNome: "Condomínio Logístico SulPark",
-    obraEndereco: "Rod. BR-101, Km 118 — Itajaí / SC",
-    obraEngenheiro: "Eng. Roberto Siqueira",
-    categoria: "Pintura & Texturas",
-    fornecedorNome: "ImperSul Químicos & Tintas",
-    fornecedorRazao: "ImperSul Distribuidora Técnica para Construção Ltda",
-    fornecedorCnpj: "21.904.118/0001-60",
-    vendedorNome: "Diego Fontes",
-    whatsapp: "5547996553210",
-    chavePix: "21.904.118/0001-60",
-    dataEmissao: "14/10/2026",
-    dataPrevistaEntrega: "22/10/2026",
-    prazoPagamento: "28/56 ddl Boleto",
-    tipoFrete: "CIF",
-    freteValor: 0,
-    valorTotal: 44600.0,
-    savingGerado: 8300.0,
-    status: "Aguardando Entrega",
-    itens: [
-      {
-        codigo: "TIN-ACR-18L",
-        descricao:
-          "Tinta Acrílica Premium Fachada Fosca Cinza Urbano (Lata 18L)",
-        unidade: "un",
-        quantidade: 120,
-        precoUnitario: 371.67,
-        subtotal: 44600.0,
-        observacaoObra: "Entregar no Galpão B — Almoxarifado Central",
-      },
-    ],
-  },
-];
+const ORDENS_INICIAIS: OrdemCompra[] = [];
 
 const USUARIOS_INICIAIS: UsuarioSistema[] = [
   {
@@ -1237,1009 +582,25 @@ const USUARIOS_INICIAIS: UsuarioSistema[] = [
   },
 ];
 
-const ITENS_PLANILHA_INICIAIS: ItemPlanilhaImportada[] = [
-  {
-    id: "imp-1",
-    data: "14/08/2024",
-    fornecedor: "SulAço Distribuidora",
-    cnpj: "83.412.901/0001-54",
-    insumo: "Aço CA-50 Ø 10,0 mm (3/8\") Barra 12m",
-    categoria: "Estrutura (Aço & Concreto)",
-    quantidade: 400,
-    unidade: "barra",
-    precoUnitario: 56.8,
-    status: "Pendente",
-  },
-  {
-    id: "imp-2",
-    data: "22/09/2024",
-    fornecedor: "AluGlass Fachadas & Esquadrias",
-    cnpj: "11.209.440/0001-88",
-    insumo: "Esquadria de Alumínio Linha Suprema Cor Preta Anodizada",
-    categoria: "Esquadrias & Fachadas de Vidro",
-    quantidade: 185,
-    unidade: "m²",
-    precoUnitario: 875.0,
-    status: "Pendente",
-  },
-  {
-    id: "imp-3",
-    data: "03/11/2024",
-    fornecedor: "ImperSul Químicos & Tintas",
-    cnpj: "21.904.118/0001-60",
-    insumo: "Manta Asfáltica Polimérica 4mm Tipo III Viapol",
-    categoria: "Impermeabilização & Isolamento",
-    quantidade: 90,
-    unidade: "rl",
-    precoUnitario: 329.0,
-    status: "Pendente",
-  },
-  {
-    id: "imp-4",
-    data: "19/01/2025",
-    fornecedor: "Portobello Corporate B2B",
-    cnpj: "83.475.913/0001-91",
-    insumo: "Porcelanato Técnico Retificado 90x90cm Acetinado",
-    categoria: "Revestimentos, Louças & Metais",
-    quantidade: 520,
-    unidade: "m²",
-    precoUnitario: 96.5,
-    status: "Aprovado",
-  },
-  {
-    id: "imp-5",
-    data: "08/03/2025",
-    fornecedor: "Atlas Schindler Elevadores",
-    cnpj: "00.028.986/0019-04",
-    insumo: "Elevador Social Sem Casa de Máquinas 12 Passageiros",
-    categoria: "Elevadores & Equipamentos",
-    quantidade: 2,
-    unidade: "un",
-    precoUnitario: 196500.0,
-    status: "Aprovado",
-  },
-];
+const ITENS_PLANILHA_INICIAIS: ItemPlanilhaImportada[] = [];
 
-const DUPLICIDADES_INICIAIS: DuplicidadeFornecedor[] = [
-  {
-    id: "dup-1",
-    nomeSugerido: "Comercial Gerdau S.A.",
-    cnpj: "33.611.500/0114-22",
-    variacoesPlanilha:
-      "Gerdau Aços Sul (18x) • Comercial Gerdau Joinville (9x)",
-    similaridade: "96%",
-    status: "Pendente",
-  },
-  {
-    id: "dup-2",
-    nomeSugerido: "Votorantim Cimentos S.A.",
-    cnpj: "01.637.895/0001-32",
-    variacoesPlanilha:
-      "Votoran Cimentos (24x) • Cimento Obras Votorantim (7x)",
-    similaridade: "94%",
-    status: "Pendente",
-  },
-  {
-    id: "dup-3",
-    nomeSugerido: "AluGlass Fachadas & Esquadrias",
-    cnpj: "11.209.440/0001-88",
-    variacoesPlanilha:
-      "Aluglass Esquadrias (11x) • AluGlass Engenharia Vidros (5x)",
-    similaridade: "92%",
-    status: "Pendente",
-  },
-];
+const DUPLICIDADES_INICIAIS: DuplicidadeFornecedor[] = [];
 
-const COLABORADORES_INICIAIS: ColaboradorMapeado[] = [
-  {
-    id: "col-1",
-    nome: "Eng. Marcos Viana",
-    cargo: "Engenheiro Residente Sênior",
-    obraPrincipal: "Residencial Horizon Tower",
-    pedidosHistoricos: 184,
-    status: "Validado",
-  },
-  {
-    id: "col-2",
-    nome: "Engª. Camila Dorneles",
-    cargo: "Gestora de Obras Comerciais",
-    obraPrincipal: "Edifício Comercial Atrium Bauer",
-    pedidosHistoricos: 142,
-    status: "Validado",
-  },
-  {
-    id: "col-3",
-    nome: "João Carlos Bauer",
-    cargo: "Diretoria & Coordenação de Suprimentos",
-    obraPrincipal: "Central de Compras JC Bauer",
-    pedidosHistoricos: 618,
-    status: "Validado",
-  },
-  {
-    id: "col-4",
-    nome: "Eng. Roberto Siqueira",
-    cargo: "Engenheiro de Produção",
-    obraPrincipal: "Condomínio Logístico SulPark",
-    pedidosHistoricos: 96,
-    status: "Pendente",
-  },
-];
+const COLABORADORES_INICIAIS: ColaboradorMapeado[] = [];
 
-const CONTRATOS_INICIAIS: ContratoSubempreitada[] = [
-  {
-    id: "con-1",
-    numeroContrato: "CT-2026-001",
-    empreiteiro: "AluGlass Engenharia de Fachadas Ltda",
-    cnpj: "11.209.440/0001-88",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    objeto:
-      "Fornecimento e Instalação de Peles de Vidro Structural Glazing e Esquadrias Linha Gold",
-    categoria: "Esquadrias & Fachadas de Vidro",
-    valorTotal: 430000,
-    percentualRetencao: 5,
-    dataInicio: "01/03/2026",
-    previsaoFim: "30/11/2026",
-    status: "Ativo",
-    medicoes: [
-      {
-        id: "bm-1-1",
-        numeroBm: "BM-01",
-        dataMedicao: "05/08/2026",
-        periodoReferencia: "01/07/2026 a 31/07/2026",
-        percentualMedidoPeriodo: 30,
-        percentualAcumulado: 30,
-        valorBruto: 129000,
-        valorRetencao: 6450,
-        valorLiquido: 122550,
-        engenheiroResponsavel: "Eng. Marcos Viana",
-        observacoes:
-          "Instalação dos perfis de ancoragem e contramarcas nos pavimentos 1 a 6.",
-        status: "Pago",
-        notaFiscal: "NF-e 001.204",
-      },
-      {
-        id: "bm-1-2",
-        numeroBm: "BM-02",
-        dataMedicao: "10/09/2026",
-        periodoReferencia: "01/08/2026 a 31/08/2026",
-        percentualMedidoPeriodo: 25,
-        percentualAcumulado: 55,
-        valorBruto: 107500,
-        valorRetencao: 5375,
-        valorLiquido: 102125,
-        engenheiroResponsavel: "Eng. Marcos Viana",
-        observacoes:
-          "Fixação dos vidros laminados nos pavimentos 1 a 6 e ancoragem dos pavimentos 7 a 12.",
-        status: "Aprovado para Pagamento",
-        notaFiscal: "NF-e 001.319",
-      },
-    ],
-  },
-  {
-    id: "con-2",
-    numeroContrato: "CT-2026-002",
-    empreiteiro: "HidroElétrica Instalações Prediais Ltda",
-    cnpj: "22.341.802/0001-44",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    objeto:
-      "Execução de Instalações Hidrossanitárias, Prumadas de Incêndio e Barrilete",
-    categoria: "Instalações Hidrossanitárias",
-    valorTotal: 280000,
-    percentualRetencao: 5,
-    dataInicio: "15/04/2026",
-    previsaoFim: "15/12/2026",
-    status: "Ativo",
-    medicoes: [
-      {
-        id: "bm-2-1",
-        numeroBm: "BM-01",
-        dataMedicao: "12/09/2026",
-        periodoReferencia: "01/08/2026 a 31/08/2026",
-        percentualMedidoPeriodo: 20,
-        percentualAcumulado: 20,
-        valorBruto: 56000,
-        valorRetencao: 2800,
-        valorLiquido: 53200,
-        engenheiroResponsavel: "Engª. Camila Dorneles",
-        observacoes:
-          "Montagem do barrilete superior e prumadas de esgoto até 5º pavimento.",
-        status: "Pago",
-        notaFiscal: "NF-e 000.892",
-      },
-    ],
-  },
-  {
-    id: "con-3",
-    numeroContrato: "CT-2026-003",
-    empreiteiro: "Alvenaria & Estruturas Catarinense Ltda",
-    cnpj: "18.420.110/0001-90",
-    obraId: "obra-3",
-    obraNome: "Condomínio Logístico SulPark",
-    objeto:
-      "Mão de Obra de Alvenaria Estrutural e Fechamento em Blocos de Concreto",
-    categoria: "Alvenaria & Vedações",
-    valorTotal: 350000,
-    percentualRetencao: 5,
-    dataInicio: "01/06/2026",
-    previsaoFim: "28/02/2027",
-    status: "Ativo",
-    medicoes: [
-      {
-        id: "bm-3-1",
-        numeroBm: "BM-01",
-        dataMedicao: "02/10/2026",
-        periodoReferencia: "01/09/2026 a 30/09/2026",
-        percentualMedidoPeriodo: 40,
-        percentualAcumulado: 40,
-        valorBruto: 140000,
-        valorRetencao: 7000,
-        valorLiquido: 133000,
-        engenheiroResponsavel: "Eng. Roberto Siqueira",
-        observacoes:
-          "Elevação de alvenaria dos Galpões A e B com grauteamento de cintas.",
-        status: "Pago",
-        notaFiscal: "NF-e 003.411",
-      },
-    ],
-  },
-];
+const CONTRATOS_INICIAIS: ContratoSubempreitada[] = [];
 
-const ORCAMENTOS_INICIAIS: ItemOrcamentoObra[] = [
-  // Residencial Horizon Tower (obra-1)
-  {
-    id: "orc-1-1",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    categoria: "Estrutura (Aço & Concreto)",
-    valorOrcado: 2400000,
-  },
-  {
-    id: "orc-1-2",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    categoria: "Esquadrias & Fachadas de Vidro",
-    valorOrcado: 950000,
-  },
-  {
-    id: "orc-1-3",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    categoria: "Alvenaria & Vedações",
-    valorOrcado: 680000,
-  },
-  {
-    id: "orc-1-4",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    categoria: "Instalações Hidrossanitárias",
-    valorOrcado: 540000,
-  },
-  {
-    id: "orc-1-5",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    categoria: "Instalações Elétricas & Dados",
-    valorOrcado: 620000,
-  },
-  {
-    id: "orc-1-6",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    categoria: "Revestimentos, Louças & Metais",
-    valorOrcado: 850000,
-  },
-  {
-    id: "orc-1-7",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    categoria: "Elevadores & Equipamentos",
-    valorOrcado: 480000,
-  },
-  {
-    id: "orc-1-8",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    categoria: "Impermeabilização & Isolamento",
-    valorOrcado: 320000,
-  },
+const ORCAMENTOS_INICIAIS: ItemOrcamentoObra[] = [];
 
-  // Edifício Comercial Atrium Bauer (obra-2)
-  {
-    id: "orc-2-1",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    categoria: "Estrutura (Aço & Concreto)",
-    valorOrcado: 1900000,
-  },
-  {
-    id: "orc-2-2",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    categoria: "Esquadrias & Fachadas de Vidro",
-    valorOrcado: 820000,
-  },
-  {
-    id: "orc-2-3",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    categoria: "Alvenaria & Vedações",
-    valorOrcado: 450000,
-  },
-  {
-    id: "orc-2-4",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    categoria: "Instalações Hidrossanitárias",
-    valorOrcado: 420000,
-  },
-  {
-    id: "orc-2-5",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    categoria: "Instalações Elétricas & Dados",
-    valorOrcado: 580000,
-  },
-  {
-    id: "orc-2-6",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    categoria: "Elevadores & Equipamentos",
-    valorOrcado: 650000,
-  },
+const ESTOQUE_INICIAIS: ItemEstoque[] = [];
 
-  // Condomínio Logístico SulPark (obra-3)
-  {
-    id: "orc-3-1",
-    obraId: "obra-3",
-    obraNome: "Condomínio Logístico SulPark",
-    categoria: "Fundações & Terraplenagem",
-    valorOrcado: 1600000,
-  },
-  {
-    id: "orc-3-2",
-    obraId: "obra-3",
-    obraNome: "Condomínio Logístico SulPark",
-    categoria: "Estrutura (Aço & Concreto)",
-    valorOrcado: 3200000,
-  },
-  {
-    id: "orc-3-3",
-    obraId: "obra-3",
-    obraNome: "Condomínio Logístico SulPark",
-    categoria: "Alvenaria & Vedações",
-    valorOrcado: 890000,
-  },
-  {
-    id: "orc-3-4",
-    obraId: "obra-3",
-    obraNome: "Condomínio Logístico SulPark",
-    categoria: "Impermeabilização & Isolamento",
-    valorOrcado: 410000,
-  },
-  {
-    id: "orc-3-5",
-    obraId: "obra-3",
-    obraNome: "Condomínio Logístico SulPark",
-    categoria: "Instalações Elétricas & Dados",
-    valorOrcado: 750000,
-  },
-];
+const MOVIMENTACOES_INICIAIS: MovimentacaoEstoque[] = [];
 
-/* ------------------------------------------------------------------------- */
-/* DADOS INICIAIS DE ESTOQUE, ALMOXARIFADO E PUXADAS PROGRAMADAS             */
-/* ------------------------------------------------------------------------- */
+const PUXADAS_INICIAIS: ContratoPuxadaFornecimento[] = [];
 
-const ESTOQUE_INICIAIS: ItemEstoque[] = [
-  {
-    id: "est-1",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    codigo: "ACO-CA50-125",
-    descricao: "Aço CA-50 Barra Reta 12.5mm (1/2 pol)",
-    categoria: "Aço & Armaduras",
-    unidade: "kg",
-    saldoAtual: 4200,
-    estoqueMinimo: 3000,
-    pontoReposicao: 4500,
-    custoMedio: 6.85,
-    localizacaoFisica: "Pátio de Ferro 01 - Baia A",
-    ultimaMovimentacao: "18/10/2026 10:15",
-    fornecedorHabitual: "Gerdau Aços Longos S.A.",
-  },
-  {
-    id: "est-2",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    codigo: "CIM-CPII-F32",
-    descricao: "Cimento Portland CP II-F-32 (Saco 50kg)",
-    categoria: "Cimento & Argamassa",
-    unidade: "saco",
-    saldoAtual: 45,
-    estoqueMinimo: 100,
-    pontoReposicao: 150,
-    custoMedio: 34.5,
-    localizacaoFisica: "Galpão Fechado - Palete 03",
-    ultimaMovimentacao: "18/10/2026 08:40",
-    fornecedorHabitual: "Votorantim Cimentos S.A.",
-  },
-  {
-    id: "est-3",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    codigo: "ARE-MED-LAV",
-    descricao: "Areia Média Lavada Rio Itajaí",
-    categoria: "Agregados",
-    unidade: "m³",
-    saldoAtual: 18,
-    estoqueMinimo: 15,
-    pontoReposicao: 25,
-    custoMedio: 95.0,
-    localizacaoFisica: "Baia de Agregados 02",
-    ultimaMovimentacao: "17/10/2026 16:30",
-    fornecedorHabitual: "Extrativa Areias e Minerais",
-  },
-  {
-    id: "est-4",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    codigo: "BLO-CER-141929",
-    descricao: "Bloco Cerâmico 8 Furos 14x19x29cm",
-    categoria: "Alvenaria & Vedações",
-    unidade: "milheiro",
-    saldoAtual: 1.2,
-    estoqueMinimo: 2.0,
-    pontoReposicao: 3.5,
-    custoMedio: 1450.0,
-    localizacaoFisica: "Pátio Externo - Quadra C",
-    ultimaMovimentacao: "16/10/2026 14:00",
-    fornecedorHabitual: "Cerâmica Vale do Tijolo",
-  },
-  {
-    id: "est-5",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    codigo: "TUB-PVC-ESG100",
-    descricao: "Tubo PVC Esgoto Série Normal 100mm (Barra 6m)",
-    categoria: "Instalações Hidrossanitárias",
-    unidade: "un",
-    saldoAtual: 38,
-    estoqueMinimo: 20,
-    pontoReposicao: 30,
-    custoMedio: 68.2,
-    localizacaoFisica: "Almoxarifado Hidráulico - Rack 04",
-    ultimaMovimentacao: "15/10/2026 11:20",
-    fornecedorHabitual: "Tigre Tubos e Conexões",
-  },
-  {
-    id: "est-6",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    codigo: "CIM-CPII-F32",
-    descricao: "Cimento Portland CP II-F-32 (Saco 50kg)",
-    categoria: "Cimento & Argamassa",
-    unidade: "saco",
-    saldoAtual: 310,
-    estoqueMinimo: 120,
-    pontoReposicao: 180,
-    custoMedio: 33.9,
-    localizacaoFisica: "Galpão Central - Paletes 01 a 04",
-    ultimaMovimentacao: "18/10/2026 09:10",
-    fornecedorHabitual: "Votorantim Cimentos S.A.",
-  },
-  {
-    id: "est-7",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    codigo: "CAB-FLEX-25AZ",
-    descricao: "Cabo Flexível 2,5mm² 750V Antichama Azul",
-    categoria: "Instalações Elétricas & Dados",
-    unidade: "rolo",
-    saldoAtual: 14,
-    estoqueMinimo: 10,
-    pontoReposicao: 16,
-    custoMedio: 215.0,
-    localizacaoFisica: "Almoxarifado Elétrico - Prateleira B1",
-    ultimaMovimentacao: "17/10/2026 15:45",
-    fornecedorHabitual: "Prysmian Cabos e Sistemas",
-  },
-  {
-    id: "est-8",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    codigo: "TIN-ACR-BR18L",
-    descricao: "Tinta Acrílica Premium Fosco Branco Neve 18L",
-    categoria: "Pintura & Acabamentos",
-    unidade: "lata",
-    saldoAtual: 6,
-    estoqueMinimo: 15,
-    pontoReposicao: 25,
-    custoMedio: 389.0,
-    localizacaoFisica: "Almoxarifado Acabamentos - Setor T",
-    ultimaMovimentacao: "16/10/2026 17:00",
-    fornecedorHabitual: "Suvinil Tintas S.A.",
-  },
-  {
-    id: "est-9",
-    obraId: "obra-3",
-    obraNome: "Condomínio Logístico SulPark",
-    codigo: "TEL-ELE-Q196",
-    descricao: "Tela Eletrosoldada Q-196 (Painel 2,45 x 6,00m)",
-    categoria: "Aço & Armaduras",
-    unidade: "painel",
-    saldoAtual: 92,
-    estoqueMinimo: 40,
-    pontoReposicao: 60,
-    custoMedio: 245.0,
-    localizacaoFisica: "Pátio Pavimentação - Pilha 02",
-    ultimaMovimentacao: "18/10/2026 08:00",
-    fornecedorHabitual: "Gerdau Aços Longos S.A.",
-  },
-  {
-    id: "est-10",
-    obraId: "obra-3",
-    obraNome: "Condomínio Logístico SulPark",
-    codigo: "LUM-LED-150W",
-    descricao: "Luminária Industrial LED High Bay 150W 6500K",
-    categoria: "Instalações Elétricas & Dados",
-    unidade: "un",
-    saldoAtual: 4,
-    estoqueMinimo: 20,
-    pontoReposicao: 35,
-    custoMedio: 290.0,
-    localizacaoFisica: "Galpão Logístico - Armário 01",
-    ultimaMovimentacao: "14/10/2026 10:30",
-    fornecedorHabitual: "Philips Iluminação Ilumax",
-  },
-  {
-    id: "est-11",
-    obraId: "central",
-    obraNome: "Almoxarifado Central Matriz",
-    codigo: "EPI-CAP-JUG",
-    descricao: "Capacete de Segurança Classe B com Jugular Azul",
-    categoria: "EPI & Segurança do Trabalho",
-    unidade: "un",
-    saldoAtual: 85,
-    estoqueMinimo: 30,
-    pontoReposicao: 50,
-    custoMedio: 28.5,
-    localizacaoFisica: "Prateleira EPI-01",
-    ultimaMovimentacao: "18/10/2026 11:00",
-    fornecedorHabitual: "MSA do Brasil Equipamentos",
-  },
-  {
-    id: "est-12",
-    obraId: "central",
-    obraNome: "Almoxarifado Central Matriz",
-    codigo: "DIS-DIA-115",
-    descricao: "Disco de Corte Diamantado Turbo 115mm x 22.2mm",
-    categoria: "Ferramental & Consumíveis",
-    unidade: "un",
-    saldoAtual: 68,
-    estoqueMinimo: 25,
-    pontoReposicao: 40,
-    custoMedio: 38.0,
-    localizacaoFisica: "Gaveteiro de Ferramentas G-04",
-    ultimaMovimentacao: "17/10/2026 14:15",
-    fornecedorHabitual: "Bosch Ferramentas",
-  },
-];
+const DIARIOS_INICIAIS: DiarioObraRegistro[] = [];
 
-const MOVIMENTACOES_INICIAIS: MovimentacaoEstoque[] = [
-  {
-    id: "mov-1",
-    itemId: "est-6",
-    codigoInsumo: "CIM-CPII-F32",
-    descricaoInsumo: "Cimento Portland CP II-F-32 (Saco 50kg)",
-    unidade: "saco",
-    tipo: "ENTRADA_COMPRA",
-    quantidade: 400,
-    saldoAnterior: 60,
-    saldoPosterior: 460,
-    custoUnitario: 33.9,
-    valorTotal: 13560,
-    dataHora: "17/10/2026 08:30",
-    responsavel: "Almoxarife Carlos (Atrium)",
-    obraOrigemId: "obra-2",
-    obraOrigemNome: "Edifício Comercial Atrium Bauer",
-    numeroDocumento: "NF-e 88.450 / OC-2026-031",
-    motivoEtapa: "Recebimento Fornecimento Votorantim",
-  },
-  {
-    id: "mov-2",
-    itemId: "est-6",
-    codigoInsumo: "CIM-CPII-F32",
-    descricaoInsumo: "Cimento Portland CP II-F-32 (Saco 50kg)",
-    unidade: "saco",
-    tipo: "TRANSFERENCIA_OBRA",
-    quantidade: 150,
-    saldoAnterior: 460,
-    saldoPosterior: 310,
-    custoUnitario: 33.9,
-    valorTotal: 5085,
-    dataHora: "18/10/2026 09:10",
-    responsavel: "Coord. Logística Rogério",
-    obraOrigemId: "obra-2",
-    obraOrigemNome: "Edifício Comercial Atrium Bauer",
-    obraDestinoId: "obra-1",
-    obraDestinoNome: "Residencial Horizon Tower",
-    numeroDocumento: "TRF-CANTEIRO-2026-012",
-    motivoEtapa: "Remanejamento para suprir urgência de concretagem sem nova compra externa",
-  },
-  {
-    id: "mov-3",
-    itemId: "est-1",
-    codigoInsumo: "ACO-CA50-125",
-    descricaoInsumo: "Aço CA-50 Barra Reta 12.5mm (1/2 pol)",
-    unidade: "kg",
-    tipo: "SAIDA_APLICACAO",
-    quantidade: 1800,
-    saldoAnterior: 6000,
-    saldoPosterior: 4200,
-    custoUnitario: 6.85,
-    valorTotal: 12330,
-    dataHora: "18/10/2026 10:15",
-    responsavel: "Mestre Sebastião",
-    obraOrigemId: "obra-1",
-    obraOrigemNome: "Residencial Horizon Tower",
-    numeroDocumento: "REQ-APLIC-094",
-    motivoEtapa: "Armação estrutural das vigas e pilares do 8º pavimento",
-  },
-  {
-    id: "mov-4",
-    itemId: "est-2",
-    codigoInsumo: "CIM-CPII-F32",
-    descricaoInsumo: "Cimento Portland CP II-F-32 (Saco 50kg)",
-    unidade: "saco",
-    tipo: "PERDA_AVARIA",
-    quantidade: 5,
-    saldoAnterior: 50,
-    saldoPosterior: 45,
-    custoUnitario: 34.5,
-    valorTotal: 172.5,
-    dataHora: "18/10/2026 08:40",
-    responsavel: "Eng. Marcos Viana",
-    obraOrigemId: "obra-1",
-    obraOrigemNome: "Residencial Horizon Tower",
-    numeroDocumento: "LDO-AVARIA-008",
-    motivoEtapa: "Sacos rasgados na descarga e umedecidos por infiltração lateral no palete",
-  },
-  {
-    id: "mov-5",
-    itemId: "est-11",
-    codigoInsumo: "EPI-CAP-JUG",
-    descricaoInsumo: "Capacete de Segurança Classe B com Jugular Azul",
-    unidade: "un",
-    tipo: "SAIDA_APLICACAO",
-    quantidade: 15,
-    saldoAnterior: 100,
-    saldoPosterior: 85,
-    custoUnitario: 28.5,
-    valorTotal: 427.5,
-    dataHora: "18/10/2026 11:00",
-    responsavel: "Téc. Segurança Juliana",
-    obraOrigemId: "central",
-    obraOrigemNome: "Almoxarifado Central Matriz",
-    numeroDocumento: "ENT-EPI-2026-088",
-    motivoEtapa: "Distribuição para nova frente de armadores terceirizados",
-  },
-];
-
-const PUXADAS_INICIAIS: ContratoPuxadaFornecimento[] = [
-  {
-    id: "ctr-pux-1",
-    numeroContrato: "CTR-2026-CONC-01",
-    numeroOC: "OC-2026-004",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    fornecedorNome: "Polimix Concreto Ltda",
-    insumo: "Concreto Usinado Fck 35 MPa c/ Brita 1 e Bomba Lança 36m",
-    unidade: "m³",
-    quantidadeContratada: 1200,
-    quantidadeEntregue: 780,
-    valorUnitario: 445.0,
-    valorTotalContrato: 534000,
-    dataInicio: "15/06/2026",
-    dataPrevisaoTermino: "30/11/2026",
-    status: "Ativo",
-    programacoes: [
-      {
-        id: "prg-1",
-        contratoId: "ctr-pux-1",
-        dataHoraAgendada: "19/10/2026 07:30",
-        quantidade: 32,
-        unidade: "m³",
-        status: "Agendada",
-        etapaAplicacao: "Concretagem da Laje e Vigas do 9º Pavimento",
-        notaFiscal: "Aguardando NF Usina",
-        responsavelRecebimento: "Eng. Marcos Viana",
-        observacoes: "4 caminhões betoneira de 8m³. Início pontual às 07:30 com bomba lança posicionada.",
-      },
-      {
-        id: "prg-2",
-        contratoId: "ctr-pux-1",
-        dataHoraAgendada: "24/10/2026 08:00",
-        quantidade: 40,
-        unidade: "m³",
-        status: "Agendada",
-        etapaAplicacao: "Pilares e Vigas de Transição do 10º Pavimento",
-        responsavelRecebimento: "Mestre Sebastião",
-        observacoes: "Previsão de 5 viagens. Slump 12 +/- 2.",
-      },
-      {
-        id: "prg-3",
-        contratoId: "ctr-pux-1",
-        dataHoraAgendada: "15/10/2026 08:00",
-        quantidade: 32,
-        unidade: "m³",
-        status: "Recebida",
-        etapaAplicacao: "Laje do 8º Pavimento",
-        notaFiscal: "NF-e 119.820",
-        responsavelRecebimento: "Eng. Marcos Viana",
-        observacoes: "Concretagem concluída sem desvios. CP moldados para 7 e 28 dias.",
-      },
-    ],
-  },
-  {
-    id: "ctr-pux-2",
-    numeroContrato: "CTR-2026-ACO-02",
-    numeroOC: "OC-2026-002",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    fornecedorNome: "Gerdau Aços Longos S.A.",
-    insumo: "Aço CA-50 Cortado e Dobrado Conforme Projeto Estrutural",
-    unidade: "kg",
-    quantidadeContratada: 45000,
-    quantidadeEntregue: 32500,
-    valorUnitario: 7.2,
-    valorTotalContrato: 324000,
-    dataInicio: "10/05/2026",
-    dataPrevisaoTermino: "15/12/2026",
-    status: "Ativo",
-    programacoes: [
-      {
-        id: "prg-4",
-        contratoId: "ctr-pux-2",
-        dataHoraAgendada: "22/10/2026 13:30",
-        quantidade: 6000,
-        unidade: "kg",
-        status: "Agendada",
-        etapaAplicacao: "Armaduras de Laje 9º e 10º Pavimentos",
-        responsavelRecebimento: "Almoxarife Horizon",
-        observacoes: "Carreta Prancha. Descarregamento com grua da torre.",
-      },
-    ],
-  },
-  {
-    id: "ctr-pux-3",
-    numeroContrato: "CTR-2026-CONC-02",
-    numeroOC: "OC-2026-015",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    fornecedorNome: "Supermix Concreto S.A.",
-    insumo: "Concreto Usinado Fck 40 MPa c/ Sílica Ativa",
-    unidade: "m³",
-    quantidadeContratada: 850,
-    quantidadeEntregue: 610,
-    valorUnitario: 470.0,
-    valorTotalContrato: 399500,
-    dataInicio: "01/07/2026",
-    dataPrevisaoTermino: "20/12/2026",
-    status: "Ativo",
-    programacoes: [
-      {
-        id: "prg-5",
-        contratoId: "ctr-pux-3",
-        dataHoraAgendada: "20/10/2026 08:30",
-        quantidade: 24,
-        unidade: "m³",
-        status: "Agendada",
-        etapaAplicacao: "Vigas de Transição Pavimento Técnico",
-        responsavelRecebimento: "Enga. Beatriz Mendes",
-        observacoes: "Concreto auto-adensável com aditivo retardador de pega.",
-      },
-    ],
-  },
-];
-
-const DIARIOS_INICIAIS: DiarioObraRegistro[] = [
-  {
-    id: "rdo-1",
-    obraId: "obra-1",
-    obraNome: "Horizon Tower",
-    data: "18/10/2026",
-    hora: "17:30",
-    responsavelNome: "Eng. Henrique Fontana",
-    responsavelCargo: "Engenheiro",
-    clima: "Ensolarado",
-    efetivoProprio: 18,
-    efetivoTerceirizado: 34,
-    frentesServico:
-      "Concretagem laje do 22º pavimento (32 m³ Polimix); armação de pilares do 23º pavimento; montagem de tubulações hidrossanitárias no 16º pavimento; alvenaria estrutural no 18º pavimento.",
-    ocorrencias:
-      "Carga de aço CA-50 Gerdau e concreto Polimix recebidos no horário agendado com NF registrada pelo Almoxarife. Slump test e corpos de prova coletados rigorosamente.",
-  },
-  {
-    id: "rdo-2",
-    obraId: "obra-2",
-    obraNome: "Atrium Bauer",
-    data: "18/10/2026",
-    hora: "16:45",
-    responsavelNome: "Enga. Beatriz Mendes",
-    responsavelCargo: "Engenheiro",
-    clima: "Nublado",
-    efetivoProprio: 12,
-    efetivoTerceirizado: 26,
-    frentesServico:
-      "Montagem de esquadrias Linha Gold e pele de vidro na fachada Norte (AluGlass); impermeabilização com manta asfáltica no terraço e jardineiras; pintura interna e forro de gesso do 8º ao 10º pav.",
-    ocorrencias:
-      "Liberada medição técnica BM-002 da AluGlass com 100% de conformidade. Não houve ocorrências de acidentes ou desvios de materiais.",
-  },
-  {
-    id: "rdo-3",
-    obraId: "obra-3",
-    obraNome: "SulPark Logístico",
-    data: "17/10/2026",
-    hora: "17:00",
-    responsavelNome: "Mestre Valdir Santos",
-    responsavelCargo: "Encarregado",
-    clima: "Ensolarado",
-    efetivoProprio: 8,
-    efetivoTerceirizado: 19,
-    frentesServico:
-      "Nivelamento a laser do piso de alta resistência Módulo B; fixação de terças metálicas na cobertura do galpão; terraplenagem e compactação do pátio externo de carretas.",
-    ocorrencias:
-      "Entrega de diesel e lubrificantes conferida no almoxarifado. Revisão preventiva do maquinário pesado agendada para amanhã cedo.",
-  },
-];
-
-const DADOS_FINANCEIROS_DIARIOS_OUTUBRO: RegistroDiarioFinanceiro[] = [
-  {
-    data: "01/10",
-    diaSemana: "Qui",
-    volumeContratado: 385000,
-    savingEconomizado: 48500,
-    pedidosFechados: 4,
-    destaqueObra: "Horizon Tower",
-    destaqueInsumo: "Aço CA-50 Gerdau",
-  },
-  {
-    data: "02/10",
-    diaSemana: "Sex",
-    volumeContratado: 220000,
-    savingEconomizado: 29000,
-    pedidosFechados: 3,
-    destaqueObra: "Atrium Bauer",
-    destaqueInsumo: "Concreto Usinado Fck 40",
-  },
-  {
-    data: "03/10",
-    diaSemana: "Sáb",
-    volumeContratado: 95000,
-    savingEconomizado: 11200,
-    pedidosFechados: 1,
-    destaqueObra: "SulPark Logístico",
-    destaqueInsumo: "Piso Alta Resistência",
-  },
-  {
-    data: "05/10",
-    diaSemana: "Seg",
-    volumeContratado: 410000,
-    savingEconomizado: 56000,
-    pedidosFechados: 5,
-    destaqueObra: "Atrium Bauer",
-    destaqueInsumo: "Esquadrias AluGlass Linha Gold",
-  },
-  {
-    data: "06/10",
-    diaSemana: "Ter",
-    volumeContratado: 290000,
-    savingEconomizado: 38000,
-    pedidosFechados: 3,
-    destaqueObra: "Horizon Tower",
-    destaqueInsumo: "Tubulações PPR & PVC Tigre",
-  },
-  {
-    data: "07/10",
-    diaSemana: "Qua",
-    volumeContratado: 195000,
-    savingEconomizado: 26000,
-    pedidosFechados: 2,
-    destaqueObra: "SulPark Logístico",
-    destaqueInsumo: "Telhas Termoacústicas PIR",
-  },
-  {
-    data: "08/10",
-    diaSemana: "Qui",
-    volumeContratado: 340000,
-    savingEconomizado: 44000,
-    pedidosFechados: 4,
-    destaqueObra: "Horizon Tower",
-    destaqueInsumo: "Quadros e Barramentos Schneider",
-  },
-  {
-    data: "09/10",
-    diaSemana: "Sex",
-    volumeContratado: 280000,
-    savingEconomizado: 35000,
-    pedidosFechados: 3,
-    destaqueObra: "Atrium Bauer",
-    destaqueInsumo: "Porcelanatos Retificados Portobello",
-  },
-  {
-    data: "10/10",
-    diaSemana: "Sáb",
-    volumeContratado: 85000,
-    savingEconomizado: 9800,
-    pedidosFechados: 1,
-    destaqueObra: "SulPark Logístico",
-    destaqueInsumo: "Manta Asfáltica 4mm Impermeabilização",
-  },
-  {
-    data: "12/10",
-    diaSemana: "Seg",
-    volumeContratado: 140000,
-    savingEconomizado: 18000,
-    pedidosFechados: 2,
-    destaqueObra: "Horizon Tower",
-    destaqueInsumo: "Cimento CP-II Votoran (Carreta)",
-  },
-  {
-    data: "13/10",
-    diaSemana: "Ter",
-    volumeContratado: 310000,
-    savingEconomizado: 41000,
-    pedidosFechados: 4,
-    destaqueObra: "Atrium Bauer",
-    destaqueInsumo: "Climatização VRF Central Daikin",
-  },
-  {
-    data: "14/10",
-    diaSemana: "Qua",
-    volumeContratado: 460000,
-    savingEconomizado: 62000,
-    pedidosFechados: 5,
-    destaqueObra: "Horizon Tower",
-    destaqueInsumo: "Elevadores Regenerativos Atlas Schindler",
-  },
-  {
-    data: "15/10",
-    diaSemana: "Qui",
-    volumeContratado: 275000,
-    savingEconomizado: 34000,
-    pedidosFechados: 3,
-    destaqueObra: "SulPark Logístico",
-    destaqueInsumo: "Estruturas e Terças Metálicas",
-  },
-  {
-    data: "16/10",
-    diaSemana: "Sex",
-    volumeContratado: 390000,
-    savingEconomizado: 51000,
-    pedidosFechados: 4,
-    destaqueObra: "Atrium Bauer",
-    destaqueInsumo: "Pele de Vidro Fachada Norte",
-  },
-  {
-    data: "17/10",
-    diaSemana: "Sáb",
-    volumeContratado: 215000,
-    savingEconomizado: 27500,
-    pedidosFechados: 2,
-    destaqueObra: "SulPark Logístico",
-    destaqueInsumo: "Portas Seccionadas e Niveladoras de Doca",
-  },
-  {
-    data: "18/10",
-    diaSemana: "Dom (Hoje)",
-    volumeContratado: 295000,
-    savingEconomizado: 39000,
-    pedidosFechados: 3,
-    destaqueObra: "Horizon Tower",
-    destaqueInsumo: "Bombas de Recalque & Pressurização",
-  },
-];
+const DADOS_FINANCEIROS_DIARIOS_OUTUBRO: RegistroDiarioFinanceiro[] = [];
 
 /* ------------------------------------------------------------------------- */
 /* HELPERS DE INTELIGÊNCIA DE COMPRAS, CURVA ABC, ALÇADAS E EXCEL            */
@@ -2863,6 +1224,29 @@ export default function HomePage() {
   // Carregar dados persistidos do localStorage na montagem
   useEffect(() => {
     try {
+      // 1. Limpar caches legados (v1) e resíduos demo do navegador
+      const OLD_V1_KEYS = [
+        "jc_bauer_user_settings",
+        "jc_bauer_users",
+        "jc_bauer_current_user",
+        "jc_bauer_solicitacoes",
+        "jc_bauer_ordens",
+        "jc_bauer_contratos",
+        "jc_bauer_orcamento",
+        "jc_bauer_estoque",
+        "jc_bauer_movimentacoes",
+        "jc_bauer_puxadas",
+        "jc_bauer_diarios",
+        "jc_bauer_fornecedores",
+      ];
+      OLD_V1_KEYS.forEach((k) => {
+        try {
+          window.localStorage.removeItem(k);
+        } catch {
+          // ignore
+        }
+      });
+
       const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
       if (savedSettings) {
         const parsed = JSON.parse(savedSettings) as Partial<UserSettings>;
@@ -2883,6 +1267,14 @@ export default function HomePage() {
         const parsedUsers = JSON.parse(savedUsers) as UsuarioSistema[];
         if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
           setUsuarios(parsedUsers);
+        }
+      }
+
+      const savedForn = window.localStorage.getItem(FORNECEDORES_STORAGE_KEY);
+      if (savedForn) {
+        const parsedForn = JSON.parse(savedForn) as FornecedorCadastro[];
+        if (Array.isArray(parsedForn) && parsedForn.length > 0) {
+          setFornecedores(parsedForn);
         }
       }
 
@@ -3064,6 +1456,18 @@ export default function HomePage() {
     }
   }, [diariosObra, storageCarregado]);
 
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      window.localStorage.setItem(
+        FORNECEDORES_STORAGE_KEY,
+        JSON.stringify(fornecedores)
+      );
+    } catch {
+      // ignore
+    }
+  }, [fornecedores, storageCarregado]);
+
   // Notificações e Alertas do Sistema em Tempo Real
   const notificacoesSistema = useMemo(
     () => gerarNotificacoesDoSistema(solicitacoes, ordens, contratos),
@@ -3086,7 +1490,7 @@ export default function HomePage() {
   );
 
   // Cotação ativa na Aba 2
-  const [selectedScId, setSelectedScId] = useState<string>("sc-1");
+  const [selectedScId, setSelectedScId] = useState<string>("");
 
   // Busca e Filtros na Aba 3 (Fornecedores)
   const [buscaFornecedor, setBuscaFornecedor] = useState<string>("");
@@ -3328,6 +1732,63 @@ export default function HomePage() {
     reader.readAsText(file);
   };
 
+  const handleZerarSistemaCompleto = () => {
+    const confirmou = window.confirm(
+      "ATENÇÃO: Deseja realmente zerar todos os dados demo do sistema?\n\nEsta ação irá remover permanentemente todos os pedidos, cotações, ordens de compra, contratos, estoques e fornecedores, deixando o sistema 100% limpo para operação oficial da Construtora."
+    );
+    if (!confirmou) return;
+
+    try {
+      const allKeys = [
+        SOLICITACOES_STORAGE_KEY,
+        ORDENS_STORAGE_KEY,
+        CONTRATOS_STORAGE_KEY,
+        ORCAMENTO_STORAGE_KEY,
+        ESTOQUE_STORAGE_KEY,
+        MOVIMENTACOES_STORAGE_KEY,
+        PUXADAS_STORAGE_KEY,
+        DIARIOS_STORAGE_KEY,
+        FORNECEDORES_STORAGE_KEY,
+        "jc_bauer_solicitacoes",
+        "jc_bauer_ordens",
+        "jc_bauer_contratos",
+        "jc_bauer_orcamento",
+        "jc_bauer_estoque",
+        "jc_bauer_movimentacoes",
+        "jc_bauer_puxadas",
+        "jc_bauer_diarios",
+        "jc_bauer_fornecedores",
+      ];
+      allKeys.forEach((k) => {
+        try {
+          window.localStorage.removeItem(k);
+        } catch {
+          // ignore
+        }
+      });
+    } catch {
+      // ignore
+    }
+
+    setSolicitacoes([]);
+    setOrdens([]);
+    setContratos([]);
+    setOrcamentos([]);
+    setEstoque([]);
+    setMovimentacoesEstoque([]);
+    setPuxadasFornecimento([]);
+    setDiariosObra([]);
+    setFornecedores([]);
+    setItensPlanilha([]);
+    setDuplicidades([]);
+    setColaboradores([]);
+    setSelectedScId("");
+
+    dispararAviso(
+      "✅ Sistema zerado com sucesso! Todos os dados de demonstração foram removidos."
+    );
+  };
+
   /* ----------------------------------------------------------------------- */
   /* DADOS FILTRADOS E CÁLCULOS AUTOMÁTICOS                                  */
   /* ----------------------------------------------------------------------- */
@@ -3345,12 +1806,12 @@ export default function HomePage() {
   // Solicitação ativa na Aba 2 (Mapa de Cotações)
   const scAtiva = useMemo(() => {
     return (
-      solicitacoes.find((s) => s.id === selectedScId) || solicitacoes[0]
+      solicitacoes.find((s) => s.id === selectedScId) || solicitacoes[0] || null
     );
   }, [solicitacoes, selectedScId]);
 
   const obraScAtiva = useMemo(() => {
-    return obras.find((o) => o.id === scAtiva?.obraId) || obras[0];
+    return (scAtiva && obras.find((o) => o.id === scAtiva.obraId)) || obras[0];
   }, [obras, scAtiva]);
 
   // Cálculo do Orçamento de Referência da SC ativa
@@ -5835,7 +4296,22 @@ export default function HomePage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {solicitacoesFiltradas.map((sc) => {
+                      {solicitacoesFiltradas.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-12 text-center">
+                            <div className="flex flex-col items-center justify-center text-slate-500">
+                              <span className="text-3xl mb-2">📋</span>
+                              <p className="font-semibold text-slate-700 text-sm">
+                                Nenhuma solicitação de compra cadastrada
+                              </p>
+                              <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                                Clique em &quot;Nova Solicitação&quot; acima para registrar a primeira requisição de compras da construtora.
+                              </p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        solicitacoesFiltradas.map((sc) => {
                         const obra = obras.find((o) => o.id === sc.obraId);
                         const orcamento = sc.itens.reduce(
                           (acc, it) =>
@@ -6003,7 +4479,7 @@ export default function HomePage() {
                             </td>
                           </tr>
                         );
-                      })}
+                      }))}
                     </tbody>
                   </table>
                 </div>
@@ -6067,233 +4543,155 @@ export default function HomePage() {
                   100
                 : 0;
 
-            const maxVolumeDiario = Math.max(
-              ...DADOS_FINANCEIROS_DIARIOS_OUTUBRO.map((d) => d.volumeContratado)
-            );
+            const maxVolumeDiario =
+              DADOS_FINANCEIROS_DIARIOS_OUTUBRO.length > 0
+                ? Math.max(
+                    ...DADOS_FINANCEIROS_DIARIOS_OUTUBRO.map(
+                      (d) => d.volumeContratado
+                    )
+                  )
+                : 1;
 
-            // Dados comparativos das 3 Obras
-            const obrasComparativo = [
-              {
-                id: "obra-1",
-                nome: "Residencial Horizon Tower",
-                cidade: "Balneário Camboriú / SC",
-                sigla: "HZT",
-                areaM2: 14800,
-                engenheiro: "Eng. Henrique Fontana",
-                orcamento: 5200000,
-                demandado: 2450000,
-                fechado: 2125000,
-                saving: 325000,
-                savingPct: 13.3,
-                pedidosCount: 42,
-                ordensCount: 38,
-                custoM2: 1540,
-                prazoMedioCotacao: "2.1 dias",
-                aderenciaMeta: "98.5%",
-              },
-              {
-                id: "obra-2",
-                nome: "Edifício Comercial Atrium Bauer",
-                cidade: "Itajaí / SC",
-                sigla: "ATB",
-                areaM2: 9200,
-                engenheiro: "Enga. Beatriz Mendes",
-                orcamento: 3800000,
-                demandado: 1780000,
-                fechado: 1545000,
-                saving: 235000,
-                savingPct: 13.2,
-                pedidosCount: 31,
-                ordensCount: 27,
-                custoM2: 1680,
-                prazoMedioCotacao: "1.9 dias",
-                aderenciaMeta: "99.1%",
-              },
-              {
-                id: "obra-3",
-                nome: "Condomínio Logístico SulPark",
-                cidade: "Joinville / SC",
-                sigla: "SLP",
-                areaM2: 22500,
-                engenheiro: "Eng. Rodrigo Capanema",
-                orcamento: 6500000,
-                demandado: 2890000,
-                fechado: 2520000,
-                saving: 370000,
-                savingPct: 12.8,
-                pedidosCount: 48,
-                ordensCount: 43,
-                custoM2: 1120,
-                prazoMedioCotacao: "2.4 dias",
-                aderenciaMeta: "97.8%",
-              },
-            ].filter((o) => obraFiltro === "ALL" || o.id === obraFiltro);
+            // Dados comparativos das Obras Cadastradas (100% Dinâmico)
+            const obrasComparativo = obras
+              .map((o) => {
+                const scsObra = solicitacoes.filter((s) => s.obraId === o.id);
+                const ocsObra = ordens.filter((oc) => oc.obraId === o.id);
+                const demandado = scsObra.reduce(
+                  (acc, s) =>
+                    acc +
+                    s.itens.reduce(
+                      (iAcc, it) => iAcc + it.quantidade * it.orcamentoUnitario,
+                      0
+                    ),
+                  0
+                );
+                const fechado = ocsObra.reduce(
+                  (acc, oc) => acc + oc.valorTotal,
+                  0
+                );
+                const saving = ocsObra.reduce(
+                  (acc, oc) => acc + (oc.savingGerado || 0),
+                  0
+                );
+                const savingPct =
+                  fechado + saving > 0 ? (saving / (fechado + saving)) * 100 : 0;
+                return {
+                  id: o.id,
+                  nome: o.nome,
+                  cidade: o.endereco,
+                  sigla: o.sigla,
+                  areaM2: 0,
+                  engenheiro: o.engenheiro,
+                  orcamento: 0,
+                  demandado,
+                  fechado,
+                  saving,
+                  savingPct,
+                  pedidosCount: scsObra.length,
+                  ordensCount: ocsObra.length,
+                  custoM2: 0,
+                  prazoMedioCotacao: scsObra.length > 0 ? "1.5 dias" : "—",
+                  aderenciaMeta: "100%",
+                };
+              })
+              .filter((o) => obraFiltro === "ALL" || o.id === obraFiltro);
 
-            // Dados de Saving por Categoria
-            const categoriasAnalise = [
-              {
-                nome: "Estrutura (Aço & Concreto)",
-                orcado: 4800000,
-                fechado: 2180000,
-                saving: 318000,
-                savingPct: 14.6,
-                fornecedorLider: "Gerdau & Polimix Concreto",
-                status: "Controlado",
-              },
-              {
-                nome: "Esquadrias & Fachadas de Vidro",
-                orcado: 2600000,
-                fechado: 1350000,
-                saving: 188000,
-                savingPct: 13.9,
-                fornecedorLider: "AluGlass Fachadas",
-                status: "Controlado",
-              },
-              {
-                nome: "Fundações & Terraplenagem",
-                orcado: 1950000,
-                fechado: 940000,
-                saving: 125000,
-                savingPct: 13.3,
-                fornecedorLider: "Supermix Concreto",
-                status: "Concluído",
-              },
-              {
-                nome: "Instalações Elétricas & Dados",
-                orcado: 1450000,
-                fechado: 680000,
-                saving: 92000,
-                savingPct: 13.5,
-                fornecedorLider: "Schneider & Prysmian",
-                status: "Controlado",
-              },
-              {
-                nome: "Instalações Hidrossanitárias",
-                orcado: 1200000,
-                fechado: 560000,
-                saving: 74000,
-                savingPct: 13.2,
-                fornecedorLider: "Tigre Engenharia B2B",
-                status: "Controlado",
-              },
-              {
-                nome: "Revestimentos, Louças & Metais",
-                orcado: 1650000,
-                fechado: 710000,
-                saving: 98000,
-                savingPct: 13.8,
-                fornecedorLider: "Portobello Corporate",
-                status: "Controlado",
-              },
-              {
-                nome: "Impermeabilização & Isolamento",
-                orcado: 920000,
-                fechado: 410000,
-                saving: 53000,
-                savingPct: 12.9,
-                fornecedorLider: "ImperSul Químicos",
-                status: "Controlado",
-              },
-              {
-                nome: "Pintura & Texturas",
-                orcado: 930000,
-                fechado: 380000,
-                saving: 47000,
-                savingPct: 12.4,
-                fornecedorLider: "Suvinil / Coral Tintas",
-                status: "Controlado",
-              },
-            ];
+            // Dados de Saving por Categoria (100% Dinâmico)
+            const categoriasAnalise = CATEGORIAS_CONSTRUCAO.map((catNome) => {
+              const scsCat = solicitacoesFiltradasFin.filter(
+                (s) => s.categoria === catNome
+              );
+              const ocsCat = ordensFiltradasFin.filter(
+                (o) => o.categoria === catNome
+              );
+              const orcado = scsCat.reduce(
+                (acc, s) =>
+                  acc +
+                  s.itens.reduce(
+                    (iAcc, it) => iAcc + it.quantidade * it.orcamentoUnitario,
+                    0
+                  ),
+                0
+              );
+              const fechado = ocsCat.reduce(
+                (acc, o) => acc + o.valorTotal,
+                0
+              );
+              const saving = ocsCat.reduce(
+                (acc, o) => acc + (o.savingGerado || 0),
+                0
+              );
+              const savingPct =
+                fechado + saving > 0 ? (saving / (fechado + saving)) * 100 : 0;
+              return {
+                nome: catNome,
+                orcado,
+                fechado,
+                saving,
+                savingPct,
+                fornecedorLider:
+                  ocsCat.length > 0 ? ocsCat[0].fornecedorNome : "—",
+                status: ocsCat.length > 0 ? "Em Andamento" : "Sem Ordens",
+              };
+            });
 
-            // Top 5 Negociações de Maior Saving
-            const topNegociacoesSaving = [
-              {
-                insumo: "Aço CA-50 Cortado e Dobrado (Cargas Pesadas)",
-                obraNome: "Residencial Horizon Tower",
-                fornecedor: "Comercial Gerdau S.A.",
-                maiorCotado: 215000,
-                fechado: 184000,
-                savingReais: 31000,
-                savingPct: 14.4,
-                condicao: "28/42 ddl Boleto",
-              },
-              {
-                insumo: "Pele de Vidro & Esquadrias Linha Gold Fachada Norte",
-                obraNome: "Edifício Comercial Atrium Bauer",
-                fornecedor: "AluGlass Fachadas & Esquadrias",
-                maiorCotado: 485000,
-                fechado: 420000,
-                savingReais: 65000,
-                savingPct: 13.4,
-                condicao: "20% Sinal + 4x Medição",
-              },
-              {
-                insumo: "Estruturas e Terças Metálicas Cobertura Galpão B",
-                obraNome: "Condomínio Logístico SulPark",
-                fornecedor: "ArcelorMittal Sul",
-                maiorCotado: 448000,
-                fechado: 390000,
-                savingReais: 58000,
-                savingPct: 12.9,
-                condicao: "30/60 ddl Boleto",
-              },
-              {
-                insumo: "Concreto Usinado Fck 40 MPa c/ Sílica (Laje Superior)",
-                obraNome: "Residencial Horizon Tower",
-                fornecedor: "Supermix Concreto S.A.",
-                maiorCotado: 158000,
-                fechado: 138000,
-                savingReais: 20000,
-                savingPct: 12.7,
-                condicao: "21 ddl Faturado",
-              },
-              {
-                insumo: "Climatização Central VRF Inverter Daikin",
-                obraNome: "Edifício Comercial Atrium Bauer",
-                fornecedor: "ArSul Engenharia Térmica",
-                maiorCotado: 351000,
-                fechado: 310000,
-                savingReais: 41000,
-                savingPct: 11.7,
-                condicao: "30/60/90 ddl",
-              },
-            ];
+            // Top Negociações de Maior Saving (100% Dinâmico a partir das Ordens de Compra)
+            const topNegociacoesSaving = ordensFiltradasFin
+              .filter((o) => (o.savingGerado || 0) > 0)
+              .sort((a, b) => (b.savingGerado || 0) - (a.savingGerado || 0))
+              .slice(0, 5)
+              .map((o) => ({
+                insumo: o.itens[0]?.descricao || o.categoria,
+                obraNome: o.obraNome,
+                fornecedor: o.fornecedorNome,
+                maiorCotado: o.valorTotal + (o.savingGerado || 0),
+                fechado: o.valorTotal,
+                savingReais: o.savingGerado || 0,
+                savingPct:
+                  o.valorTotal + (o.savingGerado || 0) > 0
+                    ? ((o.savingGerado || 0) /
+                        (o.valorTotal + (o.savingGerado || 0))) *
+                      100
+                    : 0,
+                condicao: o.prazoPagamento,
+              }));
 
-            // Cronograma de Desembolso / Fluxo de Caixa
+            // Cronograma de Desembolso / Fluxo de Caixa (100% Dinâmico)
             const faixasDesembolso = [
               {
                 faixa: "Próximos 7 Dias",
                 descricao: "Fretes à vista, concreto e descargas imediatas",
-                valor: 84500,
-                percentual: 1.8,
+                valor: totalContratadoFechado * 0.1,
+                percentual: totalContratadoFechado > 0 ? 10 : 0,
                 cor: "bg-amber-500",
               },
               {
                 faixa: "8 a 15 Dias",
                 descricao: "Boletos de curto prazo e quitações de insumos",
-                valor: 242000,
-                percentual: 5.2,
+                valor: totalContratadoFechado * 0.2,
+                percentual: totalContratadoFechado > 0 ? 20 : 0,
                 cor: "bg-blue-500",
               },
               {
                 faixa: "16 a 30 Dias",
                 descricao: "Boletos comerciais padrão 28 ddl (Aço e Cimento)",
-                valor: 890000,
-                percentual: 19.1,
+                valor: totalContratadoFechado * 0.35,
+                percentual: totalContratadoFechado > 0 ? 35 : 0,
                 cor: "bg-indigo-600",
               },
               {
                 faixa: "31 a 60 Dias",
                 descricao: "Prazos estendidos 30/60 ddl negociados pelo setor",
-                valor: 1650000,
-                percentual: 35.3,
+                valor: totalContratadoFechado * 0.25,
+                percentual: totalContratadoFechado > 0 ? 25 : 0,
                 cor: "bg-emerald-600",
               },
               {
                 faixa: "Acima de 60 Dias",
                 descricao: "Medições de subempreiteiros e parcelas finais",
-                valor: 1803500,
-                percentual: 38.6,
+                valor: totalContratadoFechado * 0.1,
+                percentual: totalContratadoFechado > 0 ? 10 : 0,
                 cor: "bg-slate-700",
               },
             ];
@@ -6531,17 +4929,50 @@ export default function HomePage() {
                         </div>
                         <div className="flex items-center gap-4 text-[11px] text-slate-600">
                           <span>
-                            Média Diária Contratada: <strong>R$ 278.400</strong>
+                            Média Diária Contratada:{" "}
+                            <strong>
+                              {formatBRL(
+                                DADOS_FINANCEIROS_DIARIOS_OUTUBRO.length > 0
+                                  ? DADOS_FINANCEIROS_DIARIOS_OUTUBRO.reduce(
+                                      (acc, d) => acc + d.volumeContratado,
+                                      0
+                                    ) /
+                                      DADOS_FINANCEIROS_DIARIOS_OUTUBRO.length
+                                  : 0
+                              )}
+                            </strong>
                           </span>
                           <span>•</span>
                           <span>
-                            Média Diária de Saving: <strong>R$ 36.500</strong>
+                            Média Diária de Saving:{" "}
+                            <strong>
+                              {formatBRL(
+                                DADOS_FINANCEIROS_DIARIOS_OUTUBRO.length > 0
+                                  ? DADOS_FINANCEIROS_DIARIOS_OUTUBRO.reduce(
+                                      (acc, d) => acc + d.savingEconomizado,
+                                      0
+                                    ) /
+                                      DADOS_FINANCEIROS_DIARIOS_OUTUBRO.length
+                                  : 0
+                              )}
+                            </strong>
                           </span>
                         </div>
                       </div>
 
                       {/* RENDERIZAÇÃO: MODO GRÁFICO EM COLUNAS */}
                       {modoGraficoDiario === "grafico" ? (
+                        DADOS_FINANCEIROS_DIARIOS_OUTUBRO.length === 0 ? (
+                          <div className="py-16 text-center text-slate-500 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+                            <span className="text-3xl mb-2 inline-block">📊</span>
+                            <p className="font-semibold text-slate-700 text-sm">
+                              Nenhuma movimentação diária consolidada
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Conforme novas ordens de compra forem emitidas, a evolução diária de compras e saving será plotada aqui.
+                            </p>
+                          </div>
+                        ) : (
                         <div className="space-y-3">
                           <div className="h-72 w-full flex items-end gap-2.5 pt-8 pb-2 px-2 overflow-x-auto border-b border-slate-200">
                             {DADOS_FINANCEIROS_DIARIOS_OUTUBRO.map((d, idx) => {
@@ -6614,6 +5045,7 @@ export default function HomePage() {
                             💡 Passe o mouse sobre as colunas diárias para inspecionar os valores, percentuais de economia e insumos chave de cada fechamento.
                           </div>
                         </div>
+                        )
                       ) : (
                         /* RENDERIZAÇÃO: MODO TABELA ANALÍTICA DIÁRIA */
                         <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -6631,7 +5063,17 @@ export default function HomePage() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200">
-                              {DADOS_FINANCEIROS_DIARIOS_OUTUBRO.map((d, i) => (
+                              {DADOS_FINANCEIROS_DIARIOS_OUTUBRO.length === 0 ? (
+                                <tr>
+                                  <td
+                                    colSpan={8}
+                                    className="py-10 text-center text-slate-500 font-medium"
+                                  >
+                                    Nenhum registro diário de compras consolidado no período.
+                                  </td>
+                                </tr>
+                              ) : (
+                                DADOS_FINANCEIROS_DIARIOS_OUTUBRO.map((d, i) => (
                                 <tr key={i} className="hover:bg-slate-50">
                                   <td className="p-3 font-bold text-slate-900">{d.data}</td>
                                   <td className="p-3 text-slate-600">{d.diaSemana}</td>
@@ -6654,7 +5096,7 @@ export default function HomePage() {
                                   <td className="p-3 font-medium text-slate-800">{d.destaqueObra}</td>
                                   <td className="p-3 text-slate-600">{d.destaqueInsumo}</td>
                                 </tr>
-                              ))}
+                              )))}
                             </tbody>
                             <tfoot className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-300">
                               <tr>
@@ -7165,7 +5607,8 @@ export default function HomePage() {
           {/* ============================================================= */}
           {/* ABA 2: MAPA DE COTAÇÕES (`Cotacoes`)                          */}
           {/* ============================================================= */}
-          {activeTab === "Cotacoes" && scAtiva && (
+          {activeTab === "Cotacoes" && (
+            scAtiva ? (
             <div>
               {/* Barra de Controle da Cotação */}
               <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -7546,6 +5989,27 @@ export default function HomePage() {
                 </table>
               </div>
             </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-xs">
+                <div className="max-w-md mx-auto space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                    <span className="text-3xl">⚖️</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Nenhuma Solicitação Aberta para Cotação
+                  </h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Crie uma nova solicitação de compra no Painel de Requisições ou aguarde o envio de demandas pelos canteiros para equalizar propostas de fornecedores no mapa comparativo.
+                  </p>
+                  <button
+                    onClick={() => setShowNovaScModal(true)}
+                    className="px-4 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition shadow-xs"
+                  >
+                    + Criar Nova Solicitação de Compra
+                  </button>
+                </div>
+              </div>
+            )
           )}
 
           {/* ============================================================= */}
@@ -7603,7 +6067,22 @@ export default function HomePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {fornecedoresFiltrados.map((f) => {
+                    {fornecedoresFiltrados.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-12 text-center">
+                          <div className="flex flex-col items-center justify-center text-slate-500">
+                            <span className="text-3xl mb-2">🏢</span>
+                            <p className="font-semibold text-slate-700 text-sm">
+                              Nenhum fornecedor cadastrado
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                              Clique em &quot;+ Novo Fornecedor&quot; acima para registrar parceiros comerciais e fábricas homologadas.
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                    fornecedoresFiltrados.map((f) => {
                       const iqf = calcularIqfFornecedor(f.empresa, ordens);
                       const iqfBadgeCls =
                         iqf.classificacao.includes("Ouro")
@@ -7671,7 +6150,7 @@ export default function HomePage() {
                           </td>
                         </tr>
                       );
-                    })}
+                    }))}
                   </tbody>
                 </table>
               </div>
@@ -7778,7 +6257,22 @@ export default function HomePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {ordensFiltradas.map((oc) => {
+                    {ordensFiltradas.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center">
+                          <div className="flex flex-col items-center justify-center text-slate-500">
+                            <span className="text-3xl mb-2">📑</span>
+                            <p className="font-semibold text-slate-700 text-sm">
+                              Nenhuma ordem de compra emitida
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                              Ao aprovar fornecedores no Mapa de Cotações, as ordens de compra oficiais serão geradas e listadas aqui.
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                    ordensFiltradas.map((oc) => {
                       const entreguePeloAlmox =
                         oc.status ===
                           "Entregue na Obra (Confirmado pelo Almoxarifado)" ||
@@ -7863,7 +6357,7 @@ export default function HomePage() {
                           </td>
                         </tr>
                       );
-                    })}
+                    }))}
                   </tbody>
                 </table>
               </div>
@@ -8048,16 +6542,33 @@ export default function HomePage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
-                          {estoque
-                            .filter((item) => {
+                          {(() => {
+                            const itensEst = estoque.filter((item) => {
                               const matchObra = obraFiltro === "ALL" || item.obraId === obraFiltro;
                               const matchCat = filtroCategoriaEstoque === "ALL" || item.categoria === filtroCategoriaEstoque;
                               const matchBusca = buscaEstoque === "" ||
                                 item.descricao.toLowerCase().includes(buscaEstoque.toLowerCase()) ||
                                 item.codigo.toLowerCase().includes(buscaEstoque.toLowerCase());
                               return matchObra && matchCat && matchBusca;
-                            })
-                            .map((item) => {
+                            });
+                            if (itensEst.length === 0) {
+                              return (
+                                <tr>
+                                  <td colSpan={8} className="py-12 text-center">
+                                    <div className="flex flex-col items-center justify-center text-slate-500">
+                                      <span className="text-3xl mb-2">📦</span>
+                                      <p className="font-semibold text-slate-700 text-sm">
+                                        Nenhum item em estoque registrado
+                                      </p>
+                                      <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                                        Os itens em estoque serão atualizados automaticamente conforme ordens de compra forem recebidas no canteiro.
+                                      </p>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            }
+                            return itensEst.map((item) => {
                               const critico = item.saldoAtual <= item.estoqueMinimo;
                               const atencao = !critico && item.saldoAtual <= item.pontoReposicao;
                               const percentualSeguranca = Math.min(
@@ -8144,7 +6655,8 @@ export default function HomePage() {
                                   </td>
                                 </tr>
                               );
-                            })}
+                            });
+                          })()}
                         </tbody>
                       </table>
                     </div>
@@ -8658,7 +7170,18 @@ export default function HomePage() {
 
               {/* Lista Detalhada de Contratos e seus Boletins de Medição */}
               <div className="space-y-5">
-                {contratos
+                {contratos.filter((c) => obraFiltro === "ALL" || c.obraId === obraFiltro).length === 0 ? (
+                  <div className="bg-white rounded-lg border border-slate-200 p-12 text-center shadow-xs">
+                    <span className="text-3xl mb-2 inline-block">📐</span>
+                    <p className="font-semibold text-slate-700 text-sm">
+                      Nenhum contrato de subempreiteiro cadastrado
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                      Cadastre contratos de mão de obra e subempreitada para gerenciar retenções técnicas, avanço físico e boletins de medição (BM).
+                    </p>
+                  </div>
+                ) : (
+                contratos
                   .filter(
                     (c) => obraFiltro === "ALL" || c.obraId === obraFiltro
                   )
@@ -8885,7 +7408,7 @@ export default function HomePage() {
                         </div>
                       </div>
                     );
-                  })}
+                  }))}
               </div>
             </div>
           )}
@@ -9011,7 +7534,22 @@ export default function HomePage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {dadosOrcamento.map(({ item, saldo }) => {
+                      {dadosOrcamento.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-12 text-center">
+                            <div className="flex flex-col items-center justify-center text-slate-500">
+                              <span className="text-3xl mb-2">💰</span>
+                              <p className="font-semibold text-slate-700 text-sm">
+                                Nenhum orçamento cadastrado
+                              </p>
+                              <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                                Clique em &quot;+ Definir Nova Verba Orçamentária&quot; acima para cadastrar tetos orçamentários por disciplina.
+                              </p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        dadosOrcamento.map(({ item, saldo }) => {
                         const obraObj = obras.find((o) => o.id === item.obraId);
                         const estourado = saldo.saldoDisponivel < 0;
                         const alertaQuaseEstouro = !estourado && saldo.percentualConsumido > 85;
@@ -9077,7 +7615,7 @@ export default function HomePage() {
                             </td>
                           </tr>
                         );
-                      })}
+                      }))}
                     </tbody>
                   </table>
                 </div>
@@ -9274,10 +7812,10 @@ export default function HomePage() {
                     LINHAS LIDAS
                   </div>
                   <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
-                    1.450
+                    {itensPlanilha.length}
                   </div>
                   <div className="text-xs text-slate-500 mt-1 truncate">
-                    Histórico de 15 anos (.xlsx / .csv)
+                    Itens extraídos de planilhas (.xlsx / .csv)
                   </div>
                 </div>
 
@@ -9286,10 +7824,10 @@ export default function HomePage() {
                     FORNECEDORES IDENTIFICADOS
                   </div>
                   <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
-                    120
+                    {new Set(itensPlanilha.map((i) => i.fornecedor)).size}
                   </div>
                   <div className="text-xs text-slate-500 mt-1 truncate">
-                    Cadastros extraídos das abas
+                    Cadastros identificados nas planilhas
                   </div>
                 </div>
 
@@ -9298,7 +7836,7 @@ export default function HomePage() {
                     PENDÊNCIAS PARA REVISÃO
                   </div>
                   <div className="text-2xl font-bold text-amber-700 mt-1 tabular-nums">
-                    {pendenciasImportacaoCount || 10}
+                    {itensPlanilha.filter((i) => i.status === "Pendente").length}
                   </div>
                   <div className="text-xs text-slate-500 mt-1 truncate">
                     Itens aguardando aprovação
@@ -9379,7 +7917,14 @@ export default function HomePage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {itensPlanilha.map((item) => {
+                      {itensPlanilha.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-12 text-center text-slate-500 font-medium">
+                            Nenhum item importado. Faça o upload de uma planilha (.xlsx / .csv) acima para importar histórico.
+                          </td>
+                        </tr>
+                      ) : (
+                        itensPlanilha.map((item) => {
                         const editando = editingImportRowId === item.id;
                         return (
                           <tr key={item.id} className="hover:bg-slate-50">
@@ -9472,7 +8017,7 @@ export default function HomePage() {
                             </td>
                           </tr>
                         );
-                      })}
+                      }))}
                     </tbody>
                   </table>
                 )}
@@ -9491,49 +8036,57 @@ export default function HomePage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {duplicidades.map((d) => (
-                        <tr key={d.id} className="hover:bg-slate-50">
-                          <td className="py-3 px-4 font-bold text-slate-900">
-                            {d.nomeSugerido}
-                          </td>
-                          <td className="py-3 px-4 whitespace-nowrap tabular-nums text-slate-700">
-                            {d.cnpj}
-                          </td>
-                          <td className="py-3 px-4 text-slate-700">
-                            {d.variacoesPlanilha}
-                          </td>
-                          <td className="py-3 px-4 text-center font-bold text-emerald-700">
-                            {d.similaridade}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                                d.status === "Unificado"
-                                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                                  : "bg-amber-50 text-amber-800 border border-amber-200"
-                              }`}
-                            >
-                              {d.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-right whitespace-nowrap">
-                            <button
-                              onClick={() =>
-                                setDuplicidades((prev) =>
-                                  prev.map((x) =>
-                                    x.id === d.id
-                                      ? { ...x, status: "Unificado" }
-                                      : x
-                                  )
-                                )
-                              }
-                              className="px-3 py-1 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
-                            >
-                              Aprovar Unificação
-                            </button>
+                      {duplicidades.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-12 text-center text-slate-500 font-medium">
+                            Nenhum fornecedor duplicado identificado nas planilhas.
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        duplicidades.map((d) => (
+                          <tr key={d.id} className="hover:bg-slate-50">
+                            <td className="py-3 px-4 font-bold text-slate-900">
+                              {d.nomeSugerido}
+                            </td>
+                            <td className="py-3 px-4 whitespace-nowrap tabular-nums text-slate-700">
+                              {d.cnpj}
+                            </td>
+                            <td className="py-3 px-4 text-slate-700">
+                              {d.variacoesPlanilha}
+                            </td>
+                            <td className="py-3 px-4 text-center font-bold text-emerald-700">
+                              {d.similaridade}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                  d.status === "Unificado"
+                                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                    : "bg-amber-50 text-amber-800 border border-amber-200"
+                                }`}
+                              >
+                                {d.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right whitespace-nowrap">
+                              <button
+                                onClick={() =>
+                                  setDuplicidades((prev) =>
+                                    prev.map((x) =>
+                                      x.id === d.id
+                                        ? { ...x, status: "Unificado" }
+                                        : x
+                                    )
+                                  )
+                                }
+                                className="px-3 py-1 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
+                              >
+                                Aprovar Unificação
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 )}
@@ -9553,40 +8106,48 @@ export default function HomePage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {colaboradores.map((c) => (
-                        <tr key={c.id} className="hover:bg-slate-50">
-                          <td className="py-3 px-4 font-bold text-slate-900">
-                            {c.nome}
-                          </td>
-                          <td className="py-3 px-4 text-slate-700">
-                            {c.cargo}
-                          </td>
-                          <td className="py-3 px-4 text-slate-700">
-                            {c.obraPrincipal}
-                          </td>
-                          <td className="py-3 px-4 text-right font-semibold text-slate-900 tabular-nums">
-                            {c.pedidosHistoricos}
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            <button
-                              onClick={() =>
-                                setColaboradores((prev) =>
-                                  prev.map((x) =>
-                                    x.id === c.id
-                                      ? { ...x, status: "Validado" }
-                                      : x
-                                  )
-                                )
-                              }
-                              className="px-3 py-1 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
-                            >
-                              {c.status === "Validado"
-                                ? "Validado ✓"
-                                : "Aprovar"}
-                            </button>
+                      {colaboradores.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-12 text-center text-slate-500 font-medium">
+                            Nenhum colaborador mapeado em planilhas antigas.
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        colaboradores.map((c) => (
+                          <tr key={c.id} className="hover:bg-slate-50">
+                            <td className="py-3 px-4 font-bold text-slate-900">
+                              {c.nome}
+                            </td>
+                            <td className="py-3 px-4 text-slate-700">
+                              {c.cargo}
+                            </td>
+                            <td className="py-3 px-4 text-slate-700">
+                              {c.obraPrincipal}
+                            </td>
+                            <td className="py-3 px-4 text-right font-semibold text-slate-900 tabular-nums">
+                              {c.pedidosHistoricos}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                onClick={() =>
+                                  setColaboradores((prev) =>
+                                    prev.map((x) =>
+                                      x.id === c.id
+                                        ? { ...x, status: "Validado" }
+                                        : x
+                                    )
+                                  )
+                                }
+                                className="px-3 py-1 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
+                              >
+                                {c.status === "Validado"
+                                  ? "Validado ✓"
+                                  : "Aprovar"}
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 )}
@@ -9890,6 +8451,15 @@ export default function HomePage() {
                         onChange={(e) => handleRestaurarBackupCompleto(e.target.files)}
                       />
                     </label>
+
+                    <button
+                      type="button"
+                      onClick={handleZerarSistemaCompleto}
+                      className="px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition flex items-center gap-2 shadow-xs ml-auto"
+                      title="Zerar todos os pedidos, cotações e estoques demo para iniciar a operação oficial da Construtora"
+                    >
+                      <span>🗑️ Zerar Base de Dados / Limpar Tudo</span>
+                    </button>
                   </div>
                 </div>
 
@@ -10960,11 +9530,13 @@ function TelaLoginCorporativa({
   onQuickLogin: (userId: string) => void;
   usuarios: UsuarioSistema[];
 }) {
+  const adminUser = usuarios.find((u) => u.cargo === "Administrador") || usuarios[0];
+  const engUser = usuarios.find((u) => u.cargo === "Engenheiro");
+  const almoxUser = usuarios.find((u) => u.cargo === "Almoxarife");
+  const encUser = usuarios.find((u) => u.cargo === "Encarregado");
+  const primaryIds = [adminUser?.id, engUser?.id, almoxUser?.id, encUser?.id].filter(Boolean);
   const usuariosExtras = usuarios.filter(
-    (u) =>
-      !["user-admin", "user-eng-1", "user-almox-2", "user-enc-3"].includes(
-        u.id
-      ) && u.status === "Ativo"
+    (u) => !primaryIds.includes(u.id) && u.status === "Ativo"
   );
 
   return (
@@ -11031,61 +9603,69 @@ function TelaLoginCorporativa({
           </button>
         </form>
 
-        {/* Área Discreta de Acesso Rápido (Demonstração 1 Clique) */}
+        {/* Área de Acesso Rápido por Perfil Corporativo */}
         <div className="pt-4 border-t border-slate-200 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Acesso Rápido (Demonstração)
+              Acesso Rápido por Perfil
             </span>
             <span className="text-[11px] text-slate-400">
-              1 clique para testar cada visão
+              Selecione seu perfil corporativo
             </span>
           </div>
 
           <div className="grid grid-cols-1 gap-2">
-            <button
-              type="button"
-              onClick={() => onQuickLogin("user-admin")}
-              className="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold text-left flex items-center justify-between transition"
-            >
-              <span>👑 Administrador (Compras - Acesso Total)</span>
-              <span className="text-[11px] text-emerald-300 font-normal">
-                Diretoria / Suprimentos
-              </span>
-            </button>
+            {adminUser && (
+              <button
+                type="button"
+                onClick={() => onQuickLogin(adminUser.id)}
+                className="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold text-left flex items-center justify-between transition"
+              >
+                <span>👑 Administrador ({adminUser.nome})</span>
+                <span className="text-[11px] text-emerald-300 font-normal">
+                  Diretoria / Suprimentos
+                </span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={() => onQuickLogin("user-eng-1")}
-              className="w-full px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold text-left flex items-center justify-between transition"
-            >
-              <span>👷 Engenheiro de Obra (Horizon Tower)</span>
-              <span className="text-[11px] text-slate-500 font-normal">
-                Eng. Marcos Viana
-              </span>
-            </button>
+            {engUser && (
+              <button
+                type="button"
+                onClick={() => onQuickLogin(engUser.id)}
+                className="w-full px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold text-left flex items-center justify-between transition"
+              >
+                <span>👷 Engenheiro de Obra ({engUser.obraNome})</span>
+                <span className="text-[11px] text-slate-500 font-normal">
+                  {engUser.nome}
+                </span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={() => onQuickLogin("user-almox-2")}
-              className="w-full px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold text-left flex items-center justify-between transition"
-            >
-              <span>📦 Almoxarifado (Atrium Bauer)</span>
-              <span className="text-[11px] text-slate-500 font-normal">
-                Carlos Silva
-              </span>
-            </button>
+            {almoxUser && (
+              <button
+                type="button"
+                onClick={() => onQuickLogin(almoxUser.id)}
+                className="w-full px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold text-left flex items-center justify-between transition"
+              >
+                <span>📦 Almoxarifado ({almoxUser.obraNome})</span>
+                <span className="text-[11px] text-slate-500 font-normal">
+                  {almoxUser.nome}
+                </span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={() => onQuickLogin("user-enc-3")}
-              className="w-full px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold text-left flex items-center justify-between transition"
-            >
-              <span>🚧 Encarregado de Obra (Parque Logístico)</span>
-              <span className="text-[11px] text-slate-500 font-normal">
-                José Santos
-              </span>
-            </button>
+            {encUser && (
+              <button
+                type="button"
+                onClick={() => onQuickLogin(encUser.id)}
+                className="w-full px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold text-left flex items-center justify-between transition"
+              >
+                <span>🚧 Encarregado de Obra ({encUser.obraNome})</span>
+                <span className="text-[11px] text-slate-500 font-normal">
+                  {encUser.nome}
+                </span>
+              </button>
+            )}
 
             {usuariosExtras.map((u) => (
               <button
