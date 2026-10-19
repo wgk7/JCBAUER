@@ -96,7 +96,7 @@ const DEFAULT_SETTINGS: UserSettings = {
 };
 
 const SETTINGS_STORAGE_KEY = "jc_bauer_user_settings_v2";
-const USERS_STORAGE_KEY = "jc_bauer_users_v2";
+const USERS_STORAGE_KEY = "jc_bauer_users_v3";
 const SESSION_STORAGE_KEY = "jc_bauer_current_user_v2";
 const SOLICITACOES_STORAGE_KEY = "jc_bauer_solicitacoes_v2";
 const ORDENS_STORAGE_KEY = "jc_bauer_ordens_v2";
@@ -513,21 +513,21 @@ const OBRAS_INICIAIS: Obra[] = [
     nome: "Residencial Horizon Tower",
     sigla: "RHT-01",
     endereco: "Av. Atlântica, 2450 — Balneário Camboriú / SC",
-    engenheiro: "Eng. Marcos Viana",
+    engenheiro: "A Definir",
   },
   {
     id: "obra-2",
     nome: "Edifício Comercial Atrium Bauer",
     sigla: "EAB-02",
     endereco: "Rua XV de Novembro, 1120 — Joinville / SC",
-    engenheiro: "Engª. Camila Dorneles",
+    engenheiro: "A Definir",
   },
   {
     id: "obra-3",
     nome: "Condomínio Logístico SulPark",
     sigla: "CLS-03",
     endereco: "Rod. BR-101, Km 118 — Itajaí / SC",
-    engenheiro: "Eng. Roberto Siqueira",
+    engenheiro: "A Definir",
   },
 ];
 
@@ -547,36 +547,6 @@ const USUARIOS_INICIAIS: UsuarioSistema[] = [
     obraId: "ALL",
     obraNome: "Todas as Obras (Central de Compras)",
     email: "suprimentos@jcbauer.eng.br",
-    senha: "123",
-    status: "Ativo",
-  },
-  {
-    id: "usr-eng-1",
-    nome: "Eng. Marcos Viana",
-    cargo: "Engenheiro",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    email: "marcos.viana@jcbauer.eng.br",
-    senha: "123",
-    status: "Ativo",
-  },
-  {
-    id: "usr-almox-1",
-    nome: "Carlos Silva",
-    cargo: "Almoxarife",
-    obraId: "obra-2",
-    obraNome: "Edifício Comercial Atrium Bauer",
-    email: "carlos.silva@jcbauer.eng.br",
-    senha: "123",
-    status: "Ativo",
-  },
-  {
-    id: "usr-enc-1",
-    nome: "José Santos",
-    cargo: "Encarregado",
-    obraId: "obra-3",
-    obraNome: "Condomínio Logístico SulPark",
-    email: "jose.santos@jcbauer.eng.br",
     senha: "123",
     status: "Ativo",
   },
@@ -1228,6 +1198,7 @@ export default function HomePage() {
       const OLD_V1_KEYS = [
         "jc_bauer_user_settings",
         "jc_bauer_users",
+        "jc_bauer_users_v2",
         "jc_bauer_current_user",
         "jc_bauer_solicitacoes",
         "jc_bauer_ordens",
@@ -1740,6 +1711,7 @@ export default function HomePage() {
 
     try {
       const allKeys = [
+        USERS_STORAGE_KEY,
         SOLICITACOES_STORAGE_KEY,
         ORDENS_STORAGE_KEY,
         CONTRATOS_STORAGE_KEY,
@@ -1749,6 +1721,8 @@ export default function HomePage() {
         PUXADAS_STORAGE_KEY,
         DIARIOS_STORAGE_KEY,
         FORNECEDORES_STORAGE_KEY,
+        "jc_bauer_users",
+        "jc_bauer_users_v2",
         "jc_bauer_solicitacoes",
         "jc_bauer_ordens",
         "jc_bauer_contratos",
@@ -1770,6 +1744,7 @@ export default function HomePage() {
       // ignore
     }
 
+    setUsuarios(USUARIOS_INICIAIS);
     setSolicitacoes([]);
     setOrdens([]);
     setContratos([]);
@@ -4112,7 +4087,7 @@ export default function HomePage() {
                                 </h3>
                                 <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                                   <span>👤 Eng. Responsável:</span>
-                                  <span className="font-medium text-slate-700">{ob.engenheiro}</span>
+                                  <span className="font-medium text-slate-700">{ob.engenheiro || "A Definir"}</span>
                                 </div>
                               </div>
                               <span
@@ -4217,7 +4192,7 @@ export default function HomePage() {
                               type="button"
                               onClick={() => {
                                 dispararAviso(
-                                  `Lembrete operacional emitido via sistema para ${ob.engenheiro} no canteiro ${ob.nome}!`
+                                  `Lembrete operacional emitido via sistema para ${ob.engenheiro && ob.engenheiro !== "A Definir" ? ob.engenheiro : "o canteiro"} da obra ${ob.nome}!`
                                 );
                               }}
                               className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-semibold transition"
@@ -4696,6 +4671,41 @@ export default function HomePage() {
               },
             ];
 
+            // Cálculos dinâmicos do Funil / Pipeline Financeiro de Pedidos das Obras
+            const scsTriagem = solicitacoesFiltradasFin.filter(
+              (s) => s.status === "Rascunho / Obra" || s.status === "Enviado / Aguardando Compras"
+            );
+            const valTriagem = scsTriagem.reduce(
+              (acc, s) => acc + s.itens.reduce((sum, it) => sum + (it.quantidade * (it.orcamentoUnitario || 0)), 0),
+              0
+            );
+
+            const scsCotacao = solicitacoesFiltradasFin.filter(
+              (s) => s.status === "Em Cotação"
+            );
+            const valCotacao = scsCotacao.reduce(
+              (acc, s) => acc + s.itens.reduce((sum, it) => sum + (it.quantidade * (it.orcamentoUnitario || 0)), 0),
+              0
+            );
+
+            const scsDiretoria = solicitacoesFiltradasFin.filter(
+              (s) => s.status === "Aguardando Aprovação Diretoria" || s.status === "Em Aprovação Diretoria"
+            );
+            const valDiretoria = scsDiretoria.reduce(
+              (acc, s) => acc + s.itens.reduce((sum, it) => sum + (it.quantidade * (it.orcamentoUnitario || 0)), 0),
+              0
+            );
+
+            const valContratadoOCs = ordensFiltradasFin.reduce((acc, o) => acc + o.valorTotal, 0);
+
+            const ordensEntregues = ordensFiltradasFin.filter(
+              (o) => o.status === "Entregue" || o.status === "Recebido"
+            );
+            const valEntregueNF = ordensEntregues.reduce((acc, o) => acc + o.valorTotal, 0);
+
+            const totalPipelineFluxo = valTriagem + valCotacao + valDiretoria + valContratadoOCs;
+            const maxPipelineVal = Math.max(valTriagem, valCotacao, valDiretoria, valContratadoOCs, valEntregueNF, 1);
+
             return (
               <div className="space-y-6">
                 {/* BARRA SUPERIOR DE CONTROLE EXECUTIVO */}
@@ -4769,7 +4779,9 @@ export default function HomePage() {
                       </div>
                       <div className="text-xs text-slate-600 mt-1 flex items-center justify-between">
                         <span>{solicitacoesFiltradasFin.length} pedidos abertos</span>
-                        <span className="font-semibold text-slate-700">Ticket Médio: R$ 58k</span>
+                        <span className="font-semibold text-slate-700">
+                          Ticket Médio: {solicitacoesFiltradasFin.length > 0 ? formatBRL(totalDemandadoPedidos / solicitacoesFiltradasFin.length) : "R$ 0,00"}
+                        </span>
                       </div>
                     </div>
 
@@ -5144,7 +5156,7 @@ export default function HomePage() {
                           </p>
                         </div>
                         <span className="text-xs font-bold text-slate-600">
-                          Total no Fluxo: R$ 9.615.000,00
+                          Total no Fluxo: {formatBRL(totalPipelineFluxo)}
                         </span>
                       </div>
 
@@ -5157,13 +5169,18 @@ export default function HomePage() {
                             <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
                           </div>
                           <div className="text-lg font-extrabold text-amber-950 tabular-nums">
-                            R$ 340.000
+                            {formatBRL(valTriagem)}
                           </div>
                           <div className="w-full bg-amber-200 h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-amber-600 h-full w-[15%]"></div>
+                            <div
+                              style={{
+                                width: `${valTriagem > 0 ? Math.round((valTriagem / maxPipelineVal) * 100) : 0}%`,
+                              }}
+                              className="bg-amber-600 h-full"
+                            ></div>
                           </div>
                           <span className="text-[10px] text-amber-800 block">
-                            6 pedidos aguardando abertura de cotação
+                            {scsTriagem.length} {scsTriagem.length === 1 ? "pedido aguardando cotação" : "pedidos aguardando cotação"}
                           </span>
                         </div>
 
@@ -5175,13 +5192,18 @@ export default function HomePage() {
                             <span className="w-2 h-2 rounded-full bg-blue-500"></span>
                           </div>
                           <div className="text-lg font-extrabold text-blue-950 tabular-nums">
-                            R$ 580.000
+                            {formatBRL(valCotacao)}
                           </div>
                           <div className="w-full bg-blue-200 h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-blue-600 h-full w-[35%]"></div>
+                            <div
+                              style={{
+                                width: `${valCotacao > 0 ? Math.round((valCotacao / maxPipelineVal) * 100) : 0}%`,
+                              }}
+                              className="bg-blue-600 h-full"
+                            ></div>
                           </div>
                           <span className="text-[10px] text-blue-800 block">
-                            9 processos no mapa equalizado
+                            {scsCotacao.length} {scsCotacao.length === 1 ? "processo no mapa equalizado" : "processos no mapa equalizado"}
                           </span>
                         </div>
 
@@ -5193,13 +5215,18 @@ export default function HomePage() {
                             <span className="w-2 h-2 rounded-full bg-purple-500"></span>
                           </div>
                           <div className="text-lg font-extrabold text-purple-950 tabular-nums">
-                            R$ 420.000
+                            {formatBRL(valDiretoria)}
                           </div>
                           <div className="w-full bg-purple-200 h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-purple-600 h-full w-[25%]"></div>
+                            <div
+                              style={{
+                                width: `${valDiretoria > 0 ? Math.round((valDiretoria / maxPipelineVal) * 100) : 0}%`,
+                              }}
+                              className="bg-purple-600 h-full"
+                            ></div>
                           </div>
                           <span className="text-[10px] text-purple-800 block">
-                            Compras &gt; R$ 50k p/ assinatura digital
+                            {scsDiretoria.length} {scsDiretoria.length === 1 ? "pedido em aprovação diretoria" : "pedidos em aprovação diretoria"}
                           </span>
                         </div>
 
@@ -5211,13 +5238,18 @@ export default function HomePage() {
                             <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
                           </div>
                           <div className="text-lg font-extrabold text-indigo-950 tabular-nums">
-                            {formatBRL(totalContratadoFechado)}
+                            {formatBRL(valContratadoOCs)}
                           </div>
                           <div className="w-full bg-indigo-200 h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-indigo-600 h-full w-[85%]"></div>
+                            <div
+                              style={{
+                                width: `${valContratadoOCs > 0 ? Math.round((valContratadoOCs / maxPipelineVal) * 100) : 0}%`,
+                              }}
+                              className="bg-indigo-600 h-full"
+                            ></div>
                           </div>
                           <span className="text-[10px] text-indigo-800 block">
-                            {ordensFiltradasFin.length} ordens de compra emitidas
+                            {ordensFiltradasFin.length} {ordensFiltradasFin.length === 1 ? "ordem de compra emitida" : "ordens de compra emitidas"}
                           </span>
                         </div>
 
@@ -5229,13 +5261,18 @@ export default function HomePage() {
                             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                           </div>
                           <div className="text-lg font-extrabold text-emerald-950 tabular-nums">
-                            R$ 3.820.000
+                            {formatBRL(valEntregueNF)}
                           </div>
                           <div className="w-full bg-emerald-200 h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-emerald-600 h-full w-[78%]"></div>
+                            <div
+                              style={{
+                                width: `${valEntregueNF > 0 ? Math.round((valEntregueNF / maxPipelineVal) * 100) : 0}%`,
+                              }}
+                              className="bg-emerald-600 h-full"
+                            ></div>
                           </div>
                           <span className="text-[10px] text-emerald-800 block">
-                            Conferido fisicamente pelo almoxarife
+                            {ordensEntregues.length} {ordensEntregues.length === 1 ? "entrega confirmada no almoxarifado" : "entregas confirmadas no almoxarifado"}
                           </span>
                         </div>
                       </div>
@@ -5270,7 +5307,7 @@ export default function HomePage() {
                                     {ob.nome}
                                   </h3>
                                   <span className="text-xs text-slate-500 block mt-0.5">
-                                    👤 {ob.engenheiro}
+                                    👤 {ob.engenheiro || "A Definir"}
                                   </span>
                                 </div>
                                 <span className="px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-900 text-xs font-extrabold whitespace-nowrap tabular-nums">
@@ -5411,52 +5448,59 @@ export default function HomePage() {
                           </p>
                         </div>
                         <span className="px-2.5 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-bold">
-                          Total Top 5: R$ 215.000 economizados
+                          Total Top 5: {formatBRL(topNegociacoesSaving.reduce((acc, d) => acc + d.savingReais, 0))} economizados
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {topNegociacoesSaving.map((deal, idx) => (
-                          <div
-                            key={idx}
-                            className="bg-slate-50 rounded-lg border border-slate-200 p-4 space-y-3 flex flex-col justify-between"
-                          >
-                            <div className="space-y-2">
-                              <div className="flex items-start justify-between gap-2">
-                                <span className="w-5 h-5 rounded-full bg-emerald-700 text-white text-xs font-bold flex items-center justify-center shrink-0">
-                                  {idx + 1}
-                                </span>
-                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-900 text-[11px] font-bold">
-                                  +{deal.savingPct}% Saving
-                                </span>
+                      {topNegociacoesSaving.length === 0 ? (
+                        <div className="py-12 text-center text-slate-500 bg-slate-50/60 rounded-lg border border-dashed border-slate-200">
+                          <p className="font-semibold text-sm text-slate-700">Nenhuma negociação concluída no período</p>
+                          <p className="text-xs text-slate-500 mt-1">Conforme novas ordens de compra forem homologadas a partir de cotações com economia, o ranking de saving será exibido aqui.</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {topNegociacoesSaving.map((deal, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-slate-50 rounded-lg border border-slate-200 p-4 space-y-3 flex flex-col justify-between"
+                            >
+                              <div className="space-y-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="w-5 h-5 rounded-full bg-emerald-700 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                                    {idx + 1}
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-900 text-[11px] font-bold">
+                                    +{deal.savingPct}% Saving
+                                  </span>
+                                </div>
+                                <h4 className="font-bold text-sm text-slate-900 line-clamp-2">
+                                  {deal.insumo}
+                                </h4>
+                                <div className="text-xs text-slate-600 space-y-0.5">
+                                  <div>📍 {deal.obraNome}</div>
+                                  <div>🏢 Fornecedor: <strong>{deal.fornecedor}</strong></div>
+                                  <div>💳 Condição: {deal.condicao}</div>
+                                </div>
                               </div>
-                              <h4 className="font-bold text-sm text-slate-900 line-clamp-2">
-                                {deal.insumo}
-                              </h4>
-                              <div className="text-xs text-slate-600 space-y-0.5">
-                                <div>📍 {deal.obraNome}</div>
-                                <div>🏢 Fornecedor: <strong>{deal.fornecedor}</strong></div>
-                                <div>💳 Condição: {deal.condicao}</div>
-                              </div>
-                            </div>
 
-                            <div className="pt-2 border-t border-slate-200 text-xs space-y-1">
-                              <div className="flex items-center justify-between text-slate-500">
-                                <span>Maior Cotação Inicial:</span>
-                                <span className="line-through">{formatBRL(deal.maiorCotado)}</span>
-                              </div>
-                              <div className="flex items-center justify-between font-bold text-slate-900">
-                                <span>Valor Final Fechado:</span>
-                                <span>{formatBRL(deal.fechado)}</span>
-                              </div>
-                              <div className="flex items-center justify-between font-extrabold text-emerald-700 pt-1 text-sm border-t border-slate-200/60">
-                                <span>Economia Real:</span>
-                                <span>+{formatBRL(deal.savingReais)}</span>
+                              <div className="pt-2 border-t border-slate-200 text-xs space-y-1">
+                                <div className="flex items-center justify-between text-slate-500">
+                                  <span>Maior Cotação Inicial:</span>
+                                  <span className="line-through">{formatBRL(deal.maiorCotado)}</span>
+                                </div>
+                                <div className="flex items-center justify-between font-bold text-slate-900">
+                                  <span>Valor Final Fechado:</span>
+                                  <span>{formatBRL(deal.fechado)}</span>
+                                </div>
+                                <div className="flex items-center justify-between font-extrabold text-emerald-700 pt-1 text-sm border-t border-slate-200/60">
+                                  <span>Economia Real:</span>
+                                  <span>+{formatBRL(deal.savingReais)}</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* TABELA DE CURVA POR CATEGORIA DE INSUMOS */}
@@ -5579,23 +5623,21 @@ export default function HomePage() {
                         <h4 className="font-bold text-slate-800 text-sm">
                           Resumo de liquidação programada para os próximos 30 dias:
                         </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <div className="bg-white p-3 rounded border border-slate-200 space-y-1">
-                            <span className="font-bold text-slate-800 block">Comercial Gerdau S.A.</span>
-                            <span className="text-slate-500 block">Boleto 28 ddl: R$ 184.000,00</span>
-                            <span className="text-emerald-700 font-semibold block text-[11px]">Vencimento: 28/10/2026</span>
+                        {ordensFiltradasFin.length === 0 ? (
+                          <div className="py-6 text-center text-slate-500 bg-white rounded border border-dashed border-slate-200">
+                            Nenhum título com liquidação programada para os próximos 30 dias.
                           </div>
-                          <div className="bg-white p-3 rounded border border-slate-200 space-y-1">
-                            <span className="font-bold text-slate-800 block">Supermix Concreto S.A.</span>
-                            <span className="text-slate-500 block">Faturado 21 ddl: R$ 138.000,00</span>
-                            <span className="text-emerald-700 font-semibold block text-[11px]">Vencimento: 21/10/2026</span>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            {ordensFiltradasFin.slice(0, 3).map((oc) => (
+                              <div key={oc.id} className="bg-white p-3 rounded border border-slate-200 space-y-1">
+                                <span className="font-bold text-slate-800 block truncate">{oc.fornecedorNome}</span>
+                                <span className="text-slate-500 block">{oc.prazoPagamento || "A combinar"}: {formatBRL(oc.valorTotal)}</span>
+                                <span className="text-emerald-700 font-semibold block text-[11px]">Entrega prev.: {oc.previsaoEntrega || "A definir"}</span>
+                              </div>
+                            ))}
                           </div>
-                          <div className="bg-white p-3 rounded border border-slate-200 space-y-1">
-                            <span className="font-bold text-slate-800 block">AluGlass Fachadas Ltda</span>
-                            <span className="text-slate-500 block">1ª Medição Caixilhos: R$ 105.000,00</span>
-                            <span className="text-emerald-700 font-semibold block text-[11px]">Vencimento: 05/11/2026</span>
-                          </div>
-                        </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -9000,12 +9042,10 @@ function ModalNovaSolicitacao({
   const [obraId, setObraId] = useState(obras[0]?.id || "obra-1");
   const [categoria, setCategoria] = useState<string>(CATEGORIAS_CONSTRUCAO[0]);
   const [solicitante, setSolicitante] = useState(defaultSolicitante);
-  const [descricaoItem, setDescricaoItem] = useState(
-    "Concreto Usinado Bombeável fck 35 MPa Brita 0/1"
-  );
-  const [unidade, setUnidade] = useState("m³");
-  const [quantidade, setQuantidade] = useState(120);
-  const [orcamentoUnitario, setOrcamentoUnitario] = useState(495);
+  const [descricaoItem, setDescricaoItem] = useState("");
+  const [unidade, setUnidade] = useState("un");
+  const [quantidade, setQuantidade] = useState(1);
+  const [orcamentoUnitario, setOrcamentoUnitario] = useState(0);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -9227,12 +9267,12 @@ function ModalNovoFornecedor({
   const [empresa, setEmpresa] = useState("");
   const [razaoSocial, setRazaoSocial] = useState("");
   const [cnpj, setCnpj] = useState("");
-  const [cidade, setCidade] = useState("Joinville / SC");
+  const [cidade, setCidade] = useState("");
   const [categoriaPrincipal, setCategoriaPrincipal] = useState<string>(
     CATEGORIAS_CONSTRUCAO[0]
   );
   const [vendedor, setVendedor] = useState("");
-  const [telefone, setTelefone] = useState("(47) 99911-2233");
+  const [telefone, setTelefone] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -9240,8 +9280,8 @@ function ModalNovoFornecedor({
     onSalvar({
       id: `forn-${Date.now()}`,
       empresa,
-      razaoSocial: razaoSocial || `${empresa} Comércio de Materiais Ltda`,
-      cnpj: cnpj || "19.301.440/0001-80",
+      razaoSocial: razaoSocial || empresa,
+      cnpj: cnpj || "",
       cidade,
       categoriaPrincipal,
       especialidades: [categoriaPrincipal],
@@ -9333,7 +9373,7 @@ function ModalNovoFornecedor({
               required
               value={vendedor}
               onChange={(e) => setVendedor(e.target.value)}
-              placeholder="Ex: Marcos Oliveira"
+              placeholder="Ex: Contato Comercial"
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
             />
           </div>
@@ -9531,12 +9571,8 @@ function TelaLoginCorporativa({
   usuarios: UsuarioSistema[];
 }) {
   const adminUser = usuarios.find((u) => u.cargo === "Administrador") || usuarios[0];
-  const engUser = usuarios.find((u) => u.cargo === "Engenheiro");
-  const almoxUser = usuarios.find((u) => u.cargo === "Almoxarife");
-  const encUser = usuarios.find((u) => u.cargo === "Encarregado");
-  const primaryIds = [adminUser?.id, engUser?.id, almoxUser?.id, encUser?.id].filter(Boolean);
-  const usuariosExtras = usuarios.filter(
-    (u) => !primaryIds.includes(u.id) && u.status === "Ativo"
+  const outrosUsuarios = usuarios.filter(
+    (u) => u.id !== adminUser?.id && u.status === "Ativo"
   );
 
   return (
@@ -9603,14 +9639,14 @@ function TelaLoginCorporativa({
           </button>
         </form>
 
-        {/* Área de Acesso Rápido por Perfil Corporativo */}
+        {/* Área de Acesso Rápido */}
         <div className="pt-4 border-t border-slate-200 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Acesso Rápido por Perfil
+              Acesso Rápido
             </span>
             <span className="text-[11px] text-slate-400">
-              Selecione seu perfil corporativo
+              Ambiente Oficial
             </span>
           </div>
 
@@ -9619,65 +9655,26 @@ function TelaLoginCorporativa({
               <button
                 type="button"
                 onClick={() => onQuickLogin(adminUser.id)}
-                className="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold text-left flex items-center justify-between transition"
+                className="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold text-left flex items-center justify-between transition shadow-xs"
               >
-                <span>👑 Administrador ({adminUser.nome})</span>
+                <span>👑 Administrador Geral ({adminUser.nome})</span>
                 <span className="text-[11px] text-emerald-300 font-normal">
                   Diretoria / Suprimentos
                 </span>
               </button>
             )}
 
-            {engUser && (
-              <button
-                type="button"
-                onClick={() => onQuickLogin(engUser.id)}
-                className="w-full px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold text-left flex items-center justify-between transition"
-              >
-                <span>👷 Engenheiro de Obra ({engUser.obraNome})</span>
-                <span className="text-[11px] text-slate-500 font-normal">
-                  {engUser.nome}
-                </span>
-              </button>
-            )}
-
-            {almoxUser && (
-              <button
-                type="button"
-                onClick={() => onQuickLogin(almoxUser.id)}
-                className="w-full px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold text-left flex items-center justify-between transition"
-              >
-                <span>📦 Almoxarifado ({almoxUser.obraNome})</span>
-                <span className="text-[11px] text-slate-500 font-normal">
-                  {almoxUser.nome}
-                </span>
-              </button>
-            )}
-
-            {encUser && (
-              <button
-                type="button"
-                onClick={() => onQuickLogin(encUser.id)}
-                className="w-full px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold text-left flex items-center justify-between transition"
-              >
-                <span>🚧 Encarregado de Obra ({encUser.obraNome})</span>
-                <span className="text-[11px] text-slate-500 font-normal">
-                  {encUser.nome}
-                </span>
-              </button>
-            )}
-
-            {usuariosExtras.map((u) => (
+            {outrosUsuarios.map((u) => (
               <button
                 key={u.id}
                 type="button"
                 onClick={() => onQuickLogin(u.id)}
-                className="w-full px-3.5 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-950 text-xs font-semibold text-left flex items-center justify-between transition"
+                className="w-full px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold text-left flex items-center justify-between transition"
               >
                 <span>
                   🔑 {u.cargo} ({u.obraNome})
                 </span>
-                <span className="text-[11px] text-emerald-800 font-normal">
+                <span className="text-[11px] text-slate-500 font-normal">
                   {u.nome}
                 </span>
               </button>
@@ -9909,22 +9906,18 @@ function VisaoRestritaObra({
 
   // Estados locais para a Rotina Diária do Canteiro & Checklist
   const [baixaItemEstoqueId, setBaixaItemEstoqueId] = useState<string>("");
-  const [baixaQtd, setBaixaQtd] = useState<number>(10);
-  const [baixaEtapa, setBaixaEtapa] = useState<string>("Concretagem / Estrutura");
-  const [baixaObs, setBaixaObs] = useState<string>("Aplicação regular na frente de serviço");
+  const [baixaQtd, setBaixaQtd] = useState<number>(1);
+  const [baixaEtapa, setBaixaEtapa] = useState<string>("");
+  const [baixaObs, setBaixaObs] = useState<string>("");
 
   // Estados para RDO Express
   const [rdoClima, setRdoClima] = useState<
     "Ensolarado" | "Nublado" | "Chuvoso" | "Chuva c/ Paralisação"
   >("Ensolarado");
-  const [rdoEfetivoProprio, setRdoEfetivoProprio] = useState<number>(16);
-  const [rdoEfetivoTerc, setRdoEfetivoTerc] = useState<number>(28);
-  const [rdoFrentes, setRdoFrentes] = useState<string>(
-    "Concretagem da laje superior; alvenaria nos pavimentos intermediários; passagens hidrossanitárias."
-  );
-  const [rdoOcorrencias, setRdoOcorrencias] = useState<string>(
-    "Entregas de insumos conferidas com NF pelo Almoxarifado. Ensaios de controle tecnológico realizados sem desvios."
-  );
+  const [rdoEfetivoProprio, setRdoEfetivoProprio] = useState<number>(0);
+  const [rdoEfetivoTerc, setRdoEfetivoTerc] = useState<number>(0);
+  const [rdoFrentes, setRdoFrentes] = useState<string>("");
+  const [rdoOcorrencias, setRdoOcorrencias] = useState<string>("");
 
   // Estado do formulário "Novo Pedido de Material"
   const [obraIdForm, setObraIdForm] = useState<string>(
@@ -9949,18 +9942,10 @@ function VisaoRestritaObra({
       unidade: string;
       observacaoObra: string;
     }[]
-  >([
-    {
-      id: "item-1",
-      descricao: "Cimento Portland CP-II-Z 32 (Saco 50kg)",
-      quantidade: 150,
-      unidade: "sc",
-      observacaoObra: "Descarregar no portão B (Almoxarifado Central)",
-    },
-  ]);
+  >([]);
 
   // Estado do Modal de Confirmação de Recebimento (Nota Fiscal + Condição)
-  const [notaFiscalInput, setNotaFiscalInput] = useState("NF-e 000.482.910");
+  const [notaFiscalInput, setNotaFiscalInput] = useState("");
   const [condicaoInput, setCondicaoInput] = useState(
     "Material completo e sem avarias"
   );
@@ -11452,7 +11437,7 @@ function VisaoRestritaObra({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setNotaFiscalInput("NF-e 000.482.910");
+                                  setNotaFiscalInput("");
                                   setCondicaoInput(
                                     "Material completo e sem avarias"
                                   );
@@ -11805,7 +11790,7 @@ function VisaoRestritaObra({
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        setNotaFiscalInput("NF-e 000.482.910");
+                                        setNotaFiscalInput("");
                                         setCondicaoInput("Material descarregado e sem avarias");
                                         setOcConfirmarRecebimentoModal(ocAlvo);
                                       }}
@@ -12014,7 +11999,7 @@ function VisaoRestritaObra({
                   required
                   value={notaFiscalInput}
                   onChange={(e) => setNotaFiscalInput(e.target.value)}
-                  placeholder="Ex: NF-e 000.482.910"
+                  placeholder="Ex: NF-e 123.456"
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-900"
                 />
               </div>
@@ -12106,7 +12091,7 @@ function ModalNovoContrato({
   const [obraId, setObraId] = useState(obras[0]?.id || "obra-1");
   const [objeto, setObjeto] = useState("");
   const [categoria, setCategoria] = useState<string>(CATEGORIAS_CONSTRUCAO[3]);
-  const [valorTotal, setValorTotal] = useState(150000);
+  const [valorTotal, setValorTotal] = useState(0);
   const [percentualRetencao, setPercentualRetencao] = useState(5);
   const [dataInicio, setDataInicio] = useState(
     new Date().toLocaleDateString("pt-BR")
@@ -12124,7 +12109,7 @@ function ModalNovoContrato({
       id: `con-${Date.now()}`,
       numeroContrato: numeroContrato.trim(),
       empreiteiro: empreiteiro.trim(),
-      cnpj: cnpj.trim() || "11.209.440/0001-88",
+      cnpj: cnpj.trim() || "",
       obraId,
       obraNome: obraObj?.nome || "Obra Vinculada",
       objeto: objeto.trim(),
@@ -12200,7 +12185,7 @@ function ModalNovoContrato({
             </label>
             <input
               required
-              placeholder="Ex: AluGlass Fachadas Ltda"
+              placeholder="Ex: Razão Social do Empreiteiro"
               value={empreiteiro}
               onChange={(e) => setEmpreiteiro(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900"
@@ -13001,8 +12986,8 @@ function ModalNovoOrcamento({
     obraFiltro !== "ALL" ? obraFiltro : obras[0]?.id || "obra-1"
   );
   const [categoria, setCategoria] = useState<string>(CATEGORIAS_CONSTRUCAO[0]);
-  const [valorOrcado, setValorOrcado] = useState(250000);
-  const [observacao, setObservacao] = useState("Verba executiva aprovada pelo planejamento de engenharia");
+  const [valorOrcado, setValorOrcado] = useState(0);
+  const [observacao, setObservacao] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -13156,10 +13141,8 @@ function ModalMovimentacaoEstoque({
   const [responsavel, setResponsavel] = useState<string>(
     usuarioLogado.nome || "Almoxarife"
   );
-  const [numeroDocumento, setNumeroDocumento] = useState<string>("REQ-APLIC-101");
-  const [motivoEtapa, setMotivoEtapa] = useState<string>(
-    "Armação estrutural das vigas e lajes"
-  );
+  const [numeroDocumento, setNumeroDocumento] = useState<string>("");
+  const [motivoEtapa, setMotivoEtapa] = useState<string>("");
 
   const itemSelecionado = estoque.find((it) => it.id === itemId) || estoque[0];
 
@@ -13420,16 +13403,10 @@ function ModalProgramarPuxada({
     const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
     return `${d.toLocaleDateString("pt-BR")} 07:30`;
   });
-  const [quantidade, setQuantidade] = useState<number>(32);
-  const [etapaAplicacao, setEtapaAplicacao] = useState<string>(
-    "Concretagem da Laje e Vigas do 10º Pavimento"
-  );
-  const [responsavelRecebimento, setResponsavelRecebimento] = useState<string>(
-    "Eng. Marcos Viana"
-  );
-  const [observacoes, setObservacoes] = useState<string>(
-    "4 caminhões betoneira de 8m³. Slump 12 +/- 2 com bomba posicionada."
-  );
+  const [quantidade, setQuantidade] = useState<number>(1);
+  const [etapaAplicacao, setEtapaAplicacao] = useState<string>("");
+  const [responsavelRecebimento, setResponsavelRecebimento] = useState<string>("");
+  const [observacoes, setObservacoes] = useState<string>("");
 
   const contratoAlvo =
     contratos.find((c) => c.id === contratoId) || contratos[0];
@@ -13787,7 +13764,7 @@ function ModalFichaKardex({
           <div className="text-xs text-slate-500">
             Fornecedor Homologado Habitual:{" "}
             <strong>
-              {item.fornecedorHabitual || "Gerdau / Votorantim"}
+              {item.fornecedorHabitual || "A definir"}
             </strong>
           </div>
           <div className="flex items-center gap-2">
