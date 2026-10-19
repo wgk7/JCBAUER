@@ -95,18 +95,18 @@ const DEFAULT_SETTINGS: UserSettings = {
   companyCnpj: "04.819.302/0001-71",
 };
 
-const SETTINGS_STORAGE_KEY = "jc_bauer_user_settings_v2";
+const SETTINGS_STORAGE_KEY = "jc_bauer_user_settings_v3";
 const USERS_STORAGE_KEY = "jc_bauer_users_v3";
-const SESSION_STORAGE_KEY = "jc_bauer_current_user_v2";
-const SOLICITACOES_STORAGE_KEY = "jc_bauer_solicitacoes_v2";
-const ORDENS_STORAGE_KEY = "jc_bauer_ordens_v2";
-const CONTRATOS_STORAGE_KEY = "jc_bauer_contratos_v2";
-const ORCAMENTO_STORAGE_KEY = "jc_bauer_orcamento_v2";
-const ESTOQUE_STORAGE_KEY = "jc_bauer_estoque_v2";
-const MOVIMENTACOES_STORAGE_KEY = "jc_bauer_movimentacoes_v2";
-const PUXADAS_STORAGE_KEY = "jc_bauer_puxadas_v2";
-const DIARIOS_STORAGE_KEY = "jc_bauer_diarios_v2";
-const FORNECEDORES_STORAGE_KEY = "jc_bauer_fornecedores_v2";
+const SESSION_STORAGE_KEY = "jc_bauer_current_user_v3";
+const SOLICITACOES_STORAGE_KEY = "jc_bauer_solicitacoes_v3";
+const ORDENS_STORAGE_KEY = "jc_bauer_ordens_v3";
+const CONTRATOS_STORAGE_KEY = "jc_bauer_contratos_v3";
+const ORCAMENTO_STORAGE_KEY = "jc_bauer_orcamento_v3";
+const ESTOQUE_STORAGE_KEY = "jc_bauer_estoque_v3";
+const MOVIMENTACOES_STORAGE_KEY = "jc_bauer_movimentacoes_v3";
+const PUXADAS_STORAGE_KEY = "jc_bauer_puxadas_v3";
+const DIARIOS_STORAGE_KEY = "jc_bauer_diarios_v3";
+const FORNECEDORES_STORAGE_KEY = "jc_bauer_fornecedores_v3";
 
 interface DiarioObraRegistro {
   id: string;
@@ -1194,23 +1194,34 @@ export default function HomePage() {
   // Carregar dados persistidos do localStorage na montagem
   useEffect(() => {
     try {
-      // 1. Limpar caches legados (v1) e resíduos demo do navegador
-      const OLD_V1_KEYS = [
+      // 1. Limpar caches legados (v1 e v2) e resíduos demo do navegador
+      const OLD_STORAGE_KEYS = [
         "jc_bauer_user_settings",
+        "jc_bauer_user_settings_v2",
         "jc_bauer_users",
         "jc_bauer_users_v2",
         "jc_bauer_current_user",
+        "jc_bauer_current_user_v2",
         "jc_bauer_solicitacoes",
+        "jc_bauer_solicitacoes_v2",
         "jc_bauer_ordens",
+        "jc_bauer_ordens_v2",
         "jc_bauer_contratos",
+        "jc_bauer_contratos_v2",
         "jc_bauer_orcamento",
+        "jc_bauer_orcamento_v2",
         "jc_bauer_estoque",
+        "jc_bauer_estoque_v2",
         "jc_bauer_movimentacoes",
+        "jc_bauer_movimentacoes_v2",
         "jc_bauer_puxadas",
+        "jc_bauer_puxadas_v2",
         "jc_bauer_diarios",
+        "jc_bauer_diarios_v2",
         "jc_bauer_fornecedores",
+        "jc_bauer_fornecedores_v2",
       ];
-      OLD_V1_KEYS.forEach((k) => {
+      OLD_STORAGE_KEYS.forEach((k) => {
         try {
           window.localStorage.removeItem(k);
         } catch {
@@ -1233,10 +1244,16 @@ export default function HomePage() {
         setFormSettings(merged);
       }
 
+      const DEMO_USER_IDS = new Set(["usr-eng-1", "usr-almox-1", "usr-enc-1"]);
+      const isDemoUser = (u?: { id?: string; nome?: string } | null) =>
+        !u || DEMO_USER_IDS.has(u.id || "") || u.nome === "Eng. Marcos Viana" || u.nome === "Carlos Roberto" || u.nome === "Sebastião Ramos";
+
       const savedUsers = window.localStorage.getItem(USERS_STORAGE_KEY);
+      let usuariosEfetivos = USUARIOS_INICIAIS;
       if (savedUsers) {
-        const parsedUsers = JSON.parse(savedUsers) as UsuarioSistema[];
+        const parsedUsers = (JSON.parse(savedUsers) as UsuarioSistema[]).filter((u) => !isDemoUser(u));
         if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
+          usuariosEfetivos = parsedUsers;
           setUsuarios(parsedUsers);
         }
       }
@@ -1316,9 +1333,15 @@ export default function HomePage() {
       const savedSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
       if (savedSession) {
         const parsedSession = JSON.parse(savedSession) as UsuarioSistema;
-        if (parsedSession && parsedSession.id) {
-          setUsuarioLogado(parsedSession);
+        const userValido = usuariosEfetivos.find((u) => u.id === parsedSession?.id && !isDemoUser(u));
+        if (userValido) {
+          setUsuarioLogado(userValido);
+        } else {
+          window.localStorage.removeItem(SESSION_STORAGE_KEY);
+          setUsuarioLogado(null);
         }
+      } else {
+        setUsuarioLogado(null);
       }
     } catch {
       // fallback to default
@@ -3716,9 +3739,9 @@ export default function HomePage() {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#F4F6F8] text-slate-900 font-sans">
       {/* ================================================================= */}
-      {/* SIDEBAR ESQUERDA COMPACTA (w-64 shrink-0 bg-slate-900 text-white) */}
+      {/* SIDEBAR ESQUERDA COMPACTA (w-72 shrink-0 bg-slate-900 text-white) */}
       {/* ================================================================= */}
-      <aside className="no-print w-64 shrink-0 bg-slate-900 text-white flex flex-col justify-between h-full">
+      <aside className="no-print w-72 shrink-0 bg-slate-900 text-white flex flex-col justify-between h-full">
         <div>
           {/* Identidade Dinâmica da Construtora (vinda das Configurações) */}
           <div className="h-20 px-4 border-b border-slate-800 flex items-center gap-3">
@@ -3764,7 +3787,7 @@ export default function HomePage() {
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition text-left ${
+                  className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition text-left ${
                     ativo
                       ? "bg-emerald-600 text-white shadow-xs"
                       : "text-slate-300 hover:bg-slate-800 hover:text-white"
@@ -3805,11 +3828,11 @@ export default function HomePage() {
           <button
             onClick={() => setActiveTab("Configuracoes")}
             title="Clique para gerenciar configurações e acessos"
-            className="text-left hover:bg-slate-800/70 p-2 rounded-lg transition w-full block"
+            className="text-left hover:bg-slate-800/70 p-2.5 rounded-lg transition w-full block"
           >
             <div className="flex items-center gap-1.5">
-              <span className="px-1.5 py-0.5 rounded bg-emerald-700 text-white text-[11px] font-bold">
-                👑 ADMIN
+              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold">
+                Diretoria
               </span>
               <span className="font-semibold text-xs text-slate-100 truncate">
                 {usuarioLogado.nome}
@@ -3933,20 +3956,20 @@ export default function HomePage() {
               {/* 4 Cards de KPI limpos no topo (Regra do Número Único, 3 linhas simples) */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    SOLICITAÇÕES EM ABERTO
+                  <div className="text-xs font-semibold text-slate-500">
+                    Solicitações em Aberto
                   </div>
                   <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {kpisPainel.emAberto}
                   </div>
                   <div className="text-xs text-slate-500 mt-1 truncate">
-                    Em 11 categorias da obra
+                    Em categorias da obra
                   </div>
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    COTAÇÕES CONCLUÍDAS
+                  <div className="text-xs font-semibold text-slate-500">
+                    Cotações Concluídas
                   </div>
                   <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {kpisPainel.concluidas}
@@ -3957,8 +3980,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    CUSTO REAL FECHADO
+                  <div className="text-xs font-semibold text-slate-500">
+                    Custo Fechado Contratado
                   </div>
                   <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {formatBRL(kpisPainel.volumeContratado)}
@@ -3969,8 +3992,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    ECONOMIA (SAVING)
+                  <div className="text-xs font-semibold text-slate-500">
+                    Economia Gerada (Saving)
                   </div>
                   <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
                     {formatBRL(kpisPainel.savingTotal)}
@@ -3984,7 +4007,7 @@ export default function HomePage() {
               {/* Barra Seletora de Visão (Modo Geral Consolidado vs Por Empreendimento) + Alternador de Sub-Aba */}
               <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-bold text-slate-500 uppercase mr-1">
+                  <span className="text-xs font-semibold text-slate-600 mr-1">
                     Visão do Empreendimento:
                   </span>
                   <button
@@ -4091,7 +4114,7 @@ export default function HomePage() {
                                 </div>
                               </div>
                               <span
-                                className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold uppercase shrink-0 ${
+                                className={`px-2 py-0.5 rounded-full text-[11px] font-bold shrink-0 ${
                                   diarioHojePreenchido
                                     ? "bg-emerald-600 text-white"
                                     : "bg-amber-500 text-white animate-pulse"
@@ -4146,7 +4169,7 @@ export default function HomePage() {
                             {/* Resumo Operacional de Materiais & Entregas */}
                             <div className="grid grid-cols-2 gap-2 text-xs">
                               <div className="bg-white/80 rounded p-2 border border-slate-200">
-                                <span className="text-[10px] text-slate-500 uppercase block font-semibold">
+                                <span className="text-[10px] text-slate-500 block font-semibold">
                                   Entregas a Conferir
                                 </span>
                                 <span
@@ -4161,7 +4184,7 @@ export default function HomePage() {
                                 </span>
                               </div>
                               <div className="bg-white/80 rounded p-2 border border-slate-200">
-                                <span className="text-[10px] text-slate-500 uppercase block font-semibold">
+                                <span className="text-[10px] text-slate-500 block font-semibold">
                                   Itens Almoxarifado
                                 </span>
                                 <span className="text-sm font-bold text-slate-800">
@@ -4260,7 +4283,7 @@ export default function HomePage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse text-left">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-700">
                         <th className="py-3 px-4">Código / Data</th>
                         <th className="py-3 px-4">Quem Pediu / Obra</th>
                         <th className="py-3 px-4">Lista de Insumos Solicitados</th>
@@ -4771,8 +4794,8 @@ export default function HomePage() {
                   {/* 4 CARDS DE KPI FINANCEIROS GLOBAIS */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="bg-slate-50 rounded-lg border border-slate-200 p-4">
-                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                        DEMANDA DOS CANTEIROS
+                      <div className="text-[11px] font-semibold text-slate-500">
+                        Demanda dos Canteiros
                       </div>
                       <div className="text-2xl font-extrabold text-slate-900 mt-1 tabular-nums">
                         {formatBRL(totalDemandadoPedidos)}
@@ -4786,8 +4809,8 @@ export default function HomePage() {
                     </div>
 
                     <div className="bg-slate-50 rounded-lg border border-slate-200 p-4">
-                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                        COMPROMETIDO EM ORDENS (OCs)
+                      <div className="text-[11px] font-semibold text-slate-500">
+                        Comprometido em Ordens (OCs)
                       </div>
                       <div className="text-2xl font-extrabold text-slate-900 mt-1 tabular-nums">
                         {formatBRL(totalContratadoFechado)}
@@ -4801,8 +4824,8 @@ export default function HomePage() {
                     </div>
 
                     <div className="bg-emerald-50/70 rounded-lg border border-emerald-200 p-4">
-                      <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
-                        ECONOMIA REAL (SAVING)
+                      <div className="text-[11px] font-semibold text-emerald-800">
+                        Economia Real (Saving)
                       </div>
                       <div className="text-2xl font-extrabold text-emerald-700 mt-1 tabular-nums">
                         {formatBRL(totalSavingFinanceiro)}
@@ -4816,8 +4839,8 @@ export default function HomePage() {
                     </div>
 
                     <div className="bg-slate-50 rounded-lg border border-slate-200 p-4">
-                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                        SALDO ORÇAMENTÁRIO LIVRE
+                      <div className="text-[11px] font-semibold text-slate-500">
+                        Saldo Orçamentário Livre
                       </div>
                       <div className="text-2xl font-extrabold text-slate-900 mt-1 tabular-nums">
                         {formatBRL(saldoOrcamentarioDisponivel)}
@@ -5062,7 +5085,7 @@ export default function HomePage() {
                         /* RENDERIZAÇÃO: MODO TABELA ANALÍTICA DIÁRIA */
                         <div className="overflow-x-auto rounded-lg border border-slate-200">
                           <table className="w-full text-xs text-left">
-                            <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] border-b border-slate-200">
+                            <thead className="bg-slate-100 text-slate-700 font-semibold text-xs border-b border-slate-200">
                               <tr>
                                 <th className="p-3">Data</th>
                                 <th className="p-3">Dia da Semana</th>
@@ -5163,7 +5186,7 @@ export default function HomePage() {
                       <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                         <div className="p-3.5 rounded-lg border border-amber-200 bg-amber-50/70 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-amber-900 uppercase">
+                            <span className="text-[11px] font-bold text-amber-900">
                               1. Triagem no Canteiro
                             </span>
                             <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
@@ -5186,7 +5209,7 @@ export default function HomePage() {
 
                         <div className="p-3.5 rounded-lg border border-blue-200 bg-blue-50/70 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-blue-900 uppercase">
+                            <span className="text-[11px] font-bold text-blue-900">
                               2. Em Cotação B2B
                             </span>
                             <span className="w-2 h-2 rounded-full bg-blue-500"></span>
@@ -5209,7 +5232,7 @@ export default function HomePage() {
 
                         <div className="p-3.5 rounded-lg border border-purple-200 bg-purple-50/70 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-purple-900 uppercase">
+                            <span className="text-[11px] font-bold text-purple-900">
                               3. Alçada Diretoria
                             </span>
                             <span className="w-2 h-2 rounded-full bg-purple-500"></span>
@@ -5232,7 +5255,7 @@ export default function HomePage() {
 
                         <div className="p-3.5 rounded-lg border border-indigo-200 bg-indigo-50/70 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-indigo-900 uppercase">
+                            <span className="text-[11px] font-bold text-indigo-900">
                               4. Contratado / OCs
                             </span>
                             <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
@@ -5255,7 +5278,7 @@ export default function HomePage() {
 
                         <div className="p-3.5 rounded-lg border border-emerald-200 bg-emerald-50/70 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-emerald-900 uppercase">
+                            <span className="text-[11px] font-bold text-emerald-900">
                               5. Entregue c/ NF
                             </span>
                             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -5300,7 +5323,7 @@ export default function HomePage() {
                             <div className="space-y-4">
                               <div className="flex items-start justify-between gap-2 border-b border-slate-200 pb-3">
                                 <div>
-                                  <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider block">
+                                  <span className="text-xs font-semibold text-emerald-700 block">
                                     {ob.sigla} • {ob.cidade}
                                   </span>
                                   <h3 className="text-base font-bold text-slate-900 mt-0.5">
@@ -5318,7 +5341,7 @@ export default function HomePage() {
                               {/* Grade de Indicadores Financeiros da Obra */}
                               <div className="grid grid-cols-2 gap-3 text-xs">
                                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                                  <span className="text-[10px] font-semibold text-slate-500 uppercase block">
+                                  <span className="text-[10px] font-semibold text-slate-500 block">
                                     Orçamento Aprovado
                                   </span>
                                   <span className="text-sm font-bold text-slate-900 tabular-nums">
@@ -5327,7 +5350,7 @@ export default function HomePage() {
                                 </div>
 
                                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                                  <span className="text-[10px] font-semibold text-slate-500 uppercase block">
+                                  <span className="text-[10px] font-semibold text-slate-500 block">
                                     Contratado / OCs
                                   </span>
                                   <span className="text-sm font-bold text-slate-900 tabular-nums">
@@ -5336,7 +5359,7 @@ export default function HomePage() {
                                 </div>
 
                                 <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
-                                  <span className="text-[10px] font-semibold text-emerald-800 uppercase block">
+                                  <span className="text-[10px] font-semibold text-emerald-800 block">
                                     Economia / Saving
                                   </span>
                                   <span className="text-sm font-extrabold text-emerald-700 tabular-nums">
@@ -5345,7 +5368,7 @@ export default function HomePage() {
                                 </div>
 
                                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                                  <span className="text-[10px] font-semibold text-slate-500 uppercase block">
+                                  <span className="text-[10px] font-semibold text-slate-500 block">
                                     Saldo Disponível
                                   </span>
                                   <span className="text-sm font-bold text-slate-800 tabular-nums">
@@ -5518,7 +5541,7 @@ export default function HomePage() {
 
                       <div className="overflow-x-auto rounded-lg border border-slate-200">
                         <table className="w-full text-xs text-left">
-                          <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] border-b border-slate-200">
+                          <thead className="bg-slate-100 text-slate-700 font-semibold text-xs border-b border-slate-200">
                             <tr>
                               <th className="p-3">Categoria de Insumo</th>
                               <th className="p-3 text-right">Orçado Homologado</th>
@@ -5592,7 +5615,7 @@ export default function HomePage() {
                             className="bg-slate-50 rounded-lg border border-slate-200 p-3.5 space-y-2 flex flex-col justify-between"
                           >
                             <div className="space-y-1">
-                              <span className="text-[11px] font-bold text-slate-700 uppercase block">
+                              <span className="text-[11px] font-semibold text-slate-700 block">
                                 {faixa.faixa}
                               </span>
                               <div className="text-lg font-extrabold text-slate-900 tabular-nums">
@@ -5655,7 +5678,7 @@ export default function HomePage() {
               {/* Barra de Controle da Cotação */}
               <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3 flex-1 min-w-[280px]">
-                  <label className="text-xs font-bold text-slate-600 uppercase whitespace-nowrap">
+                  <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">
                     Solicitação em Cotação:
                   </label>
                   <select
@@ -5693,8 +5716,8 @@ export default function HomePage() {
               {/* 4 Cards de KPI da Cotação Atual (Regra do Número Único) */}
               <div className="grid grid-cols-4 gap-4 mb-6">
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    ORÇAMENTO DE REFERÊNCIA
+                  <div className="text-xs font-semibold text-slate-500">
+                    Orçamento de Referência
                   </div>
                   <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {formatBRL(orcamentoScAtiva)}
@@ -5705,8 +5728,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    MENOR PROPOSTA GLOBAL
+                  <div className="text-xs font-semibold text-slate-500">
+                    Menor Proposta Global
                   </div>
                   <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
                     {formatBRL(resumoCotacaoAtiva.menorTotal)}
@@ -5717,8 +5740,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    FORNECEDOR RECOMENDADO
+                  <div className="text-xs font-semibold text-slate-500">
+                    Fornecedor Recomendado
                   </div>
                   <div className="text-xl font-bold text-slate-900 mt-1 truncate">
                     {resumoCotacaoAtiva.vencedorNome}
@@ -5729,8 +5752,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    ECONOMIA NA COTAÇÃO
+                  <div className="text-xs font-semibold text-slate-500">
+                    Economia na Cotação
                   </div>
                   <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
                     {formatBRL(resumoCotacaoAtiva.savingGerado)}
@@ -6098,7 +6121,7 @@ export default function HomePage() {
               <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
                 <table className="w-full text-sm border-collapse text-left">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                    <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-700">
                       <th className="py-3 px-4">Empresa</th>
                       <th className="py-3 px-4">Cidade</th>
                       <th className="py-3 px-4">Categoria Principal</th>
@@ -6207,8 +6230,8 @@ export default function HomePage() {
               {/* 4 KPIs Simples de Ordens */}
               <div className="grid grid-cols-4 gap-4 mb-6">
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    ORDENS EMITIDAS
+                  <div className="text-xs font-semibold text-slate-500">
+                    Ordens Emitidas
                   </div>
                   <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {ordensFiltradas.length}
@@ -6219,8 +6242,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    VALOR TOTAL FECHADO
+                  <div className="text-xs font-semibold text-slate-500">
+                    Valor Total Fechado
                   </div>
                   <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {formatBRL(
@@ -6233,8 +6256,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    SAVING CONQUISTADO
+                  <div className="text-xs font-semibold text-slate-500">
+                    Saving Conquistado
                   </div>
                   <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
                     {formatBRL(
@@ -6250,8 +6273,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    AGUARDANDO ENTREGA
+                  <div className="text-xs font-semibold text-slate-500">
+                    Aguardando Entrega
                   </div>
                   <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {
@@ -6285,7 +6308,7 @@ export default function HomePage() {
 
                 <table className="w-full text-sm border-collapse text-left">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                    <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-700">
                       <th className="py-3 px-4">Nº OC</th>
                       <th className="py-3 px-4">Fornecedor</th>
                       <th className="py-3 px-4">Obra</th>
@@ -6414,8 +6437,8 @@ export default function HomePage() {
               {/* KPIs Operacionais do Almoxarifado */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
-                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    VALOR TOTAL EM ESTOQUE
+                  <div className="text-xs font-semibold text-slate-500">
+                    Valor Total em Estoque
                   </div>
                   <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {formatBRL(valorTotalEstoque)}
@@ -6426,8 +6449,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
-                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    INSUMOS ABAIXO DO MÍNIMO
+                  <div className="text-xs font-semibold text-slate-500">
+                    Insumos Abaixo do Mínimo
                   </div>
                   <div className="flex items-center gap-2 mt-1">
                     <div className="text-2xl font-bold text-red-600 tabular-nums">
@@ -6445,8 +6468,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
-                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    PUXADAS PROGRAMADAS (CONTRATOS)
+                  <div className="text-xs font-semibold text-slate-500">
+                    Puxadas Programadas (Contratos)
                   </div>
                   <div className="text-2xl font-bold text-indigo-700 mt-1 tabular-nums">
                     {puxadasAtivasContratos
@@ -6459,8 +6482,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
-                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    ECONOMIA POR REMANEJAMENTO
+                  <div className="text-xs font-semibold text-slate-500">
+                    Economia por Remanejamento
                   </div>
                   <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
                     {formatBRL(totalEconomiaTransferencias)}
@@ -6572,7 +6595,7 @@ export default function HomePage() {
                     <div className="overflow-x-auto rounded-lg border border-slate-200">
                       <table className="w-full text-sm border-collapse text-left">
                         <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                          <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-700">
                             <th className="py-3 px-4">Código / Insumo</th>
                             <th className="py-3 px-4">Canteiro & Localização</th>
                             <th className="py-3 px-4 text-center">Nível de Estoque</th>
@@ -6793,7 +6816,7 @@ export default function HomePage() {
 
                             {/* Grade de Puxadas Agendadas / Recebidas deste contrato */}
                             <div className="mt-3">
-                              <div className="text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
+                              <div className="text-xs font-semibold text-slate-700 mb-2">
                                 Cronograma de Puxadas & Entregas do Contrato
                               </div>
                               <div className="overflow-x-auto rounded border border-slate-200 bg-white">
@@ -6906,7 +6929,7 @@ export default function HomePage() {
                     <div className="overflow-x-auto rounded-lg border border-slate-200">
                       <table className="w-full text-sm border-collapse text-left">
                         <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                          <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
                             <th className="py-3 px-4">Data / Hora</th>
                             <th className="py-3 px-4">Tipo de Movimento</th>
                             <th className="py-3 px-4">Insumo / Código</th>
@@ -7014,7 +7037,7 @@ export default function HomePage() {
                     </div>
 
                     <div className="space-y-4">
-                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      <h4 className="text-xs font-semibold text-slate-700">
                         Oportunidades de Compra Corporativa em Lote Detectadas
                       </h4>
 
@@ -7111,8 +7134,8 @@ export default function HomePage() {
               {/* KPIs de Contratos e Medições */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    CONTRATOS ATIVOS
+                  <div className="text-xs font-semibold text-slate-500">
+                    Contratos Ativos
                   </div>
                   <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {contratos.filter((c) => c.status === "Ativo").length}
@@ -7123,8 +7146,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    VALOR GLOBAL CONTRATADO
+                  <div className="text-xs font-semibold text-slate-500">
+                    Valor Global Contratado
                   </div>
                   <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {formatBRL(
@@ -7137,8 +7160,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    TOTAL MEDIDO ACUMULADO
+                  <div className="text-xs font-semibold text-slate-500">
+                    Total Medido Acumulado
                   </div>
                   <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
                     {formatBRL(
@@ -7159,8 +7182,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    RETENÇÕES TÉCNICAS (5% / 11%)
+                  <div className="text-xs font-semibold text-slate-500">
+                    Retenções Técnicas (5% / 11%)
                   </div>
                   <div className="text-2xl font-bold text-blue-700 mt-1 tabular-nums">
                     {formatBRL(
@@ -7184,7 +7207,7 @@ export default function HomePage() {
               {/* Barra de Ações e Filtro de Obra */}
               <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                  <span className="text-xs font-semibold text-slate-700">
                     Filtrar por Obra:
                   </span>
                   <select
@@ -7330,7 +7353,7 @@ export default function HomePage() {
                         <div className="overflow-x-auto">
                           <table className="w-full text-xs border-collapse text-left">
                             <thead>
-                              <tr className="bg-slate-50/90 border-b border-slate-200 font-semibold text-slate-600 uppercase">
+                              <tr className="bg-slate-50/90 border-b border-slate-200 font-semibold text-slate-600">
                                 <th className="py-2.5 px-4">Nº BM</th>
                                 <th className="py-2.5 px-4">Data / Período</th>
                                 <th className="py-2.5 px-4 text-center">% Medido</th>
@@ -7483,8 +7506,8 @@ export default function HomePage() {
                 {/* 4 KPIs do Orçamento */}
                 <div className="grid grid-cols-4 gap-4">
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      VALOR ORÇADO TOTAL
+                    <div className="text-xs font-semibold text-slate-500">
+                      Valor Orçado Total
                     </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                       {formatBRL(totalOrcado)}
@@ -7495,8 +7518,8 @@ export default function HomePage() {
                   </div>
 
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      COMPROMETIDO (ORDENS + BM)
+                    <div className="text-xs font-semibold text-slate-500">
+                      Comprometido (Ordens + BM)
                     </div>
                     <div className="text-2xl font-bold text-amber-700 mt-1 tabular-nums">
                       {formatBRL(totalComprometido)}
@@ -7507,8 +7530,8 @@ export default function HomePage() {
                   </div>
 
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      REALIZADO / LIQUIDADO
+                    <div className="text-xs font-semibold text-slate-500">
+                      Realizado / Liquidado
                     </div>
                     <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
                       {formatBRL(totalRealizado)}
@@ -7519,8 +7542,8 @@ export default function HomePage() {
                   </div>
 
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      SALDO DISPONÍVEL
+                    <div className="text-xs font-semibold text-slate-500">
+                      Saldo Disponível
                     </div>
                     <div className={`text-2xl font-bold mt-1 tabular-nums ${totalSaldo >= 0 ? "text-blue-700" : "text-red-700"}`}>
                       {formatBRL(totalSaldo)}
@@ -7534,7 +7557,7 @@ export default function HomePage() {
                 {/* Barra de Filtro e Ação */}
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-slate-600">
                       Filtrar por Empreendimento:
                     </span>
                     <select
@@ -7564,7 +7587,7 @@ export default function HomePage() {
                 <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
                   <table className="w-full text-sm border-collapse text-left">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-700">
                         <th className="py-3 px-4">Disciplina / Categoria</th>
                         <th className="py-3 px-4">Empreendimento</th>
                         <th className="py-3 px-4 text-right">Orçado (R$)</th>
@@ -7633,7 +7656,7 @@ export default function HomePage() {
                                     {saldo.percentualConsumido}%
                                   </span>
                                   {estourado && (
-                                    <span className="text-[10px] uppercase font-extrabold text-red-600">
+                                    <span className="text-[10px] font-extrabold text-red-600">
                                       Estouro!
                                     </span>
                                   )}
@@ -7679,8 +7702,8 @@ export default function HomePage() {
                 {/* 4 KPIs de Logística */}
                 <div className="grid grid-cols-4 gap-4">
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      TOTAL CARGAS NA SEMANA
+                    <div className="text-xs font-semibold text-slate-500">
+                      Total Cargas na Semana
                     </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                       {totalCargas}
@@ -7691,8 +7714,8 @@ export default function HomePage() {
                   </div>
 
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      DESCARGAS PREVISTAS HOJE
+                    <div className="text-xs font-semibold text-slate-500">
+                      Descargas Previstas Hoje
                     </div>
                     <div className="text-2xl font-bold text-blue-700 mt-1 tabular-nums">
                       {entregasHoje}
@@ -7703,8 +7726,8 @@ export default function HomePage() {
                   </div>
 
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      ALERTAS DE GARGALO NO PORTÃO
+                    <div className="text-xs font-semibold text-slate-500">
+                      Alertas de Gargalo no Portão
                     </div>
                     <div className={`text-2xl font-bold mt-1 tabular-nums ${conflitosPortao > 0 ? "text-amber-600" : "text-emerald-700"}`}>
                       {conflitosPortao}
@@ -7715,8 +7738,8 @@ export default function HomePage() {
                   </div>
 
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      RECEBIDAS & BAIXADAS
+                    <div className="text-xs font-semibold text-slate-500">
+                      Recebidas & Baixadas
                     </div>
                     <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
                       {cargasRecebidas}
@@ -7850,8 +7873,8 @@ export default function HomePage() {
               {/* Topo com 3 Cards de Números Simples (Regra do Número Único) */}
               <div className="grid grid-cols-3 gap-4 mb-6">
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    LINHAS LIDAS
+                  <div className="text-xs font-semibold text-slate-500">
+                    Linhas Lidas
                   </div>
                   <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {itensPlanilha.length}
@@ -7862,8 +7885,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    FORNECEDORES IDENTIFICADOS
+                  <div className="text-xs font-semibold text-slate-500">
+                    Fornecedores Identificados
                   </div>
                   <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {new Set(itensPlanilha.map((i) => i.fornecedor)).size}
@@ -7874,8 +7897,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    PENDÊNCIAS PARA REVISÃO
+                  <div className="text-xs font-semibold text-slate-500">
+                    Pendências para Revisão
                   </div>
                   <div className="text-2xl font-bold text-amber-700 mt-1 tabular-nums">
                     {itensPlanilha.filter((i) => i.status === "Pendente").length}
@@ -7948,7 +7971,7 @@ export default function HomePage() {
                 {subAbaImportacao === "itens" && (
                   <table className="w-full text-sm border-collapse text-left">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-700">
                         <th className="py-3 px-4">Data</th>
                         <th className="py-3 px-4">Fornecedor</th>
                         <th className="py-3 px-4">Insumo / Material</th>
@@ -8068,7 +8091,7 @@ export default function HomePage() {
                 {subAbaImportacao === "duplicados" && (
                   <table className="w-full text-sm border-collapse text-left">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
                         <th className="py-3 px-4">Cadastro Unificado</th>
                         <th className="py-3 px-4">CNPJ</th>
                         <th className="py-3 px-4">Variações nas Planilhas</th>
@@ -8137,7 +8160,7 @@ export default function HomePage() {
                 {subAbaImportacao === "colaboradores" && (
                   <table className="w-full text-sm border-collapse text-left">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
                         <th className="py-3 px-4">Colaborador</th>
                         <th className="py-3 px-4">Cargo / Função</th>
                         <th className="py-3 px-4">Obra Principal</th>
@@ -8229,7 +8252,7 @@ export default function HomePage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse text-left">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
                         <th className="py-3 px-4">Nome</th>
                         <th className="py-3 px-4">Cargo / Função</th>
                         <th className="py-3 px-4">Obra Vinculada</th>
@@ -8339,7 +8362,7 @@ export default function HomePage() {
 
                 {/* Bloco 1: Dados Pessoais do Comprador / Diretor */}
                 <div className="space-y-4">
-                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  <div className="text-xs font-semibold text-slate-700">
                     1. Identificação do Usuário (Assinatura nos Relatórios e
                     Sidebar)
                   </div>
@@ -8421,7 +8444,7 @@ export default function HomePage() {
 
                 {/* Bloco 2: Dados Institucionais da Construtora */}
                 <div className="space-y-4 pt-2 border-t border-slate-200">
-                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  <div className="text-xs font-semibold text-slate-700">
                     2. Dados da Construtora (Cabeçalho de Pedidos e PDF)
                   </div>
 
@@ -8466,7 +8489,7 @@ export default function HomePage() {
 
                 {/* Bloco 3: Segurança e Backup Geral (JSON) */}
                 <div className="space-y-4 pt-4 border-t border-slate-200">
-                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  <div className="text-xs font-semibold text-slate-700">
                     3. Governança de Dados, Backup & Restauração Geral (JSON)
                   </div>
 
@@ -8583,7 +8606,7 @@ export default function HomePage() {
           <div className="bg-white rounded-xl border border-slate-200 max-w-xl w-full p-6 shadow-xl space-y-4">
             <div className="flex items-start justify-between border-b border-slate-200 pb-3">
               <div>
-                <span className="text-xs font-semibold text-emerald-700 uppercase">
+                <span className="text-xs font-semibold text-emerald-700">
                   Ficha Homologada de Fornecedor
                 </span>
                 <h3 className="text-lg font-bold text-slate-900 mt-0.5">
@@ -8643,7 +8666,7 @@ export default function HomePage() {
             </div>
 
             <div>
-              <div className="text-xs font-semibold text-slate-500 uppercase mb-1.5">
+              <div className="text-xs font-semibold text-slate-700 mb-1.5">
                 Especialidades e Categorias Atendidas
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -8662,7 +8685,7 @@ export default function HomePage() {
             </div>
 
             <div>
-              <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+              <div className="text-xs font-semibold text-slate-700 mb-1">
                 Condições Comerciais e Observações
               </div>
               <p className="text-sm text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-200">
@@ -8723,7 +8746,7 @@ export default function HomePage() {
         <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-xl border border-slate-300 max-w-3xl w-full p-6 shadow-2xl space-y-5 my-6">
             <div className="no-print flex items-center justify-between border-b border-slate-200 pb-3">
-              <span className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
                 Pedido Formal de Compra — {ordemVisualizarModal.numeroOc}
               </span>
@@ -8775,7 +8798,7 @@ export default function HomePage() {
                   />
                 </div>
                 <div>
-                  <h2 className="text-base font-extrabold text-slate-900 uppercase tracking-tight">
+                  <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
                     {settings.companyName}
                   </h2>
                   <p className="text-xs text-slate-600 mt-0.5">
@@ -8785,8 +8808,8 @@ export default function HomePage() {
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-xs font-extrabold text-emerald-700 uppercase">
-                  ORDEM DE COMPRA
+                <div className="text-xs font-bold text-emerald-700">
+                  Ordem de Compra
                 </div>
                 <div className="text-xl font-black text-slate-900 tabular-nums">
                   {ordemVisualizarModal.numeroOc}
@@ -8801,7 +8824,7 @@ export default function HomePage() {
             {/* Dados do Fornecedor e da Obra */}
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-1">
-                <div className="text-xs font-bold text-slate-500 uppercase">
+                <div className="text-xs font-semibold text-slate-700">
                   1. Fornecedor Contratado
                 </div>
                 <div className="font-bold text-slate-900">
@@ -8817,7 +8840,7 @@ export default function HomePage() {
               </div>
 
               <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-1">
-                <div className="text-xs font-bold text-slate-500 uppercase">
+                <div className="text-xs font-semibold text-slate-700">
                   2. Local de Entrega e Faturamento
                 </div>
                 <div className="font-bold text-slate-900">
@@ -8835,7 +8858,7 @@ export default function HomePage() {
             {/* Tabela de Itens da OC */}
             <table className="w-full text-sm border-collapse text-left">
               <thead>
-                <tr className="bg-slate-100 border-b border-slate-300 text-xs font-bold text-slate-700 uppercase">
+                <tr className="bg-slate-100 border-b border-slate-300 text-xs font-semibold text-slate-700">
                   <th className="p-2.5 border border-slate-300">Código</th>
                   <th className="p-2.5 border border-slate-300">
                     Especificação do Material / Serviço
@@ -8897,7 +8920,7 @@ export default function HomePage() {
                 </strong>{" "}
                 em relação ao teto orçado.
               </div>
-              <span className="px-2 py-0.5 rounded bg-emerald-700 text-white font-bold text-[10px] uppercase">
+              <span className="px-2 py-0.5 rounded bg-emerald-700 text-white font-bold text-[10px]">
                 Auditado
               </span>
             </div>
@@ -9070,47 +9093,7 @@ function ModalNovaSolicitacao({
           orcamentoUnitario,
         },
       ],
-      propostas: [
-        {
-          id: `prop-a-${Date.now()}`,
-          vendorId: "forn-1",
-          fornecedorNome: "Fornecedor Homologado A",
-          vendedorNome: "Consultor Comercial 1",
-          whatsapp: "5547999123401",
-          precosUnitarios: {
-            [itemId]: Number((orcamentoUnitario * 0.92).toFixed(2)),
-          },
-          freteValor: 0,
-          tipoFrete: "CIF",
-          prazoPagamento: "5 dias úteis • 28/56 ddl Boleto",
-        },
-        {
-          id: `prop-b-${Date.now()}`,
-          vendorId: "forn-2",
-          fornecedorNome: "Fornecedor Homologado B",
-          vendedorNome: "Consultor Comercial 2",
-          whatsapp: "5547998441120",
-          precosUnitarios: {
-            [itemId]: Number((orcamentoUnitario * 0.96).toFixed(2)),
-          },
-          freteValor: 650,
-          tipoFrete: "FOB",
-          prazoPagamento: "7 dias úteis • 28/42 ddl Boleto",
-        },
-        {
-          id: `prop-c-${Date.now()}`,
-          vendorId: "forn-3",
-          fornecedorNome: "Fornecedor Homologado C",
-          vendedorNome: "Consultor Comercial 3",
-          whatsapp: "5547997018890",
-          precosUnitarios: {
-            [itemId]: Number((orcamentoUnitario * 1.01).toFixed(2)),
-          },
-          freteValor: 900,
-          tipoFrete: "FOB",
-          prazoPagamento: "8 dias úteis • 30/60 ddl Boleto",
-        },
-      ],
+      propostas: [],
     };
 
     onCriar(novaSc);
@@ -9433,20 +9416,21 @@ function ModalInserirFornecedorCotacao({
   onAdicionarProposta: (p: PropostaFornecedor) => void;
 }) {
   const [fornecedorId, setFornecedorId] = useState(
-    fornecedores[0]?.id || "forn-1"
+    fornecedores[0]?.id || ""
   );
   const [freteValor, setFreteValor] = useState(0);
   const [prazoPagamento, setPrazoPagamento] = useState(
-    "5 dias úteis • 28/56 ddl Boleto"
+    "28 ddl Boleto"
   );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const forn =
       fornecedores.find((f) => f.id === fornecedorId) || fornecedores[0];
+    if (!forn) return;
     const precosIniciais: Record<string, number> = {};
     sc.itens.forEach((it) => {
-      precosIniciais[it.id] = Number((it.orcamentoUnitario * 0.94).toFixed(2));
+      precosIniciais[it.id] = 0;
     });
 
     onAdicionarProposta({
@@ -9571,9 +9555,6 @@ function TelaLoginCorporativa({
   usuarios: UsuarioSistema[];
 }) {
   const adminUser = usuarios.find((u) => u.cargo === "Administrador") || usuarios[0];
-  const outrosUsuarios = usuarios.filter(
-    (u) => u.id !== adminUser?.id && u.status === "Ativo"
-  );
 
   return (
     <div className="min-h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans flex flex-col items-center justify-center p-4">
@@ -9584,14 +9565,14 @@ function TelaLoginCorporativa({
             <img
               src="/logo.png"
               alt="JC Bauer Empreendimentos"
-              className="h-16 w-auto object-contain"
+              className="h-14 w-auto object-contain"
             />
           </div>
-          <h1 className="text-lg font-black text-slate-900 tracking-tight uppercase">
+          <h1 className="text-base font-extrabold text-slate-900 tracking-wide">
             {companyName}
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Portal Integrado de Suprimentos, Almoxarifado & Canteiro de Obras
+            Portal Integrado de Suprimentos & Gestão de Obras
           </p>
         </div>
 
@@ -9639,47 +9620,23 @@ function TelaLoginCorporativa({
           </button>
         </form>
 
-        {/* Área de Acesso Rápido */}
-        <div className="pt-4 border-t border-slate-200 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Acesso Rápido
-            </span>
-            <span className="text-[11px] text-slate-400">
-              Ambiente Oficial
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2">
-            {adminUser && (
-              <button
-                type="button"
-                onClick={() => onQuickLogin(adminUser.id)}
-                className="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold text-left flex items-center justify-between transition shadow-xs"
-              >
-                <span>👑 Administrador Geral ({adminUser.nome})</span>
-                <span className="text-[11px] text-emerald-300 font-normal">
-                  Diretoria / Suprimentos
-                </span>
-              </button>
-            )}
-
-            {outrosUsuarios.map((u) => (
-              <button
-                key={u.id}
-                type="button"
-                onClick={() => onQuickLogin(u.id)}
-                className="w-full px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold text-left flex items-center justify-between transition"
-              >
-                <span>
-                  🔑 {u.cargo} ({u.obraNome})
-                </span>
-                <span className="text-[11px] text-slate-500 font-normal">
-                  {u.nome}
-                </span>
-              </button>
-            ))}
-          </div>
+        {/* Rodapé Seguro e Discreto */}
+        <div className="pt-4 border-t border-slate-200 text-center space-y-2">
+          <p className="text-[11px] text-slate-500">
+            Acesso restrito e autenticado • Construtora JC Bauer
+          </p>
+          {adminUser && (!loginInput || !senhaInput) && (
+            <button
+              type="button"
+              onClick={() => {
+                setLoginInput(adminUser.email);
+                setSenhaInput(adminUser.senha);
+              }}
+              className="text-[11px] text-slate-400 hover:text-slate-600 underline font-medium transition"
+            >
+              Preencher dados de acesso do Administrador
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -9990,38 +9947,9 @@ function VisaoRestritaObra({
       descricao: it.descricao.trim(),
       unidade: it.unidade,
       quantidade: Number(it.quantidade) || 1,
-      // Meta interna estimada para o Mapa de Cotações do Admin (oculta para a obra)
-      orcamentoUnitario: 120,
-      observacaoObra: it.observacaoObra.trim() || "Entrega padrão no canteiro",
+      orcamentoUnitario: 0,
+      observacaoObra: it.observacaoObra.trim() || "Entrega no canteiro",
     }));
-
-    // Prepara 3 colunas de fornecedores no Mapa de Cotações para o Admin cotar imediatamente
-    const forn1 = fornecedores[0] || {
-      id: "forn-1",
-      empresa: "Fornecedor Homologado A",
-      vendedor: "Consultor 1",
-      whatsapp: "5547999123401",
-    };
-    const forn2 = fornecedores[1] || {
-      id: "forn-2",
-      empresa: "Fornecedor Homologado B",
-      vendedor: "Consultor 2",
-      whatsapp: "5547998441120",
-    };
-    const forn3 = fornecedores[2] || {
-      id: "forn-3",
-      empresa: "Fornecedor Homologado C",
-      vendedor: "Consultor 3",
-      whatsapp: "5547997018890",
-    };
-
-    const mapPrecos = (fator: number) => {
-      const rec: Record<string, number> = {};
-      itensSc.forEach((i) => {
-        rec[i.id] = Number((i.orcamentoUnitario * fator).toFixed(2));
-      });
-      return rec;
-    };
 
     const novaSc: SolicitacaoCompra = {
       id: scId,
@@ -10038,41 +9966,7 @@ function VisaoRestritaObra({
       novoAlertaAdmin: true,
       status: "Enviado / Aguardando Compras",
       itens: itensSc,
-      propostas: [
-        {
-          id: `prop-a-${Date.now()}`,
-          vendorId: forn1.id,
-          fornecedorNome: forn1.empresa,
-          vendedorNome: forn1.vendedor,
-          whatsapp: forn1.whatsapp,
-          precosUnitarios: mapPrecos(0.92),
-          freteValor: 0,
-          tipoFrete: "CIF",
-          prazoPagamento: "5 dias úteis • 28/56 ddl Boleto",
-        },
-        {
-          id: `prop-b-${Date.now()}`,
-          vendorId: forn2.id,
-          fornecedorNome: forn2.empresa,
-          vendedorNome: forn2.vendedor,
-          whatsapp: forn2.whatsapp,
-          precosUnitarios: mapPrecos(0.96),
-          freteValor: 450,
-          tipoFrete: "FOB",
-          prazoPagamento: "7 dias úteis • 28/42 ddl Boleto",
-        },
-        {
-          id: `prop-c-${Date.now()}`,
-          vendorId: forn3.id,
-          fornecedorNome: forn3.empresa,
-          vendedorNome: forn3.vendedor,
-          whatsapp: forn3.whatsapp,
-          precosUnitarios: mapPrecos(1.02),
-          freteValor: 680,
-          tipoFrete: "FOB",
-          prazoPagamento: "8 dias úteis • 30/60 ddl Boleto",
-        },
-      ],
+      propostas: [],
     };
 
     onCriarPedidoCanteiro(novaSc);
@@ -10144,7 +10038,7 @@ function VisaoRestritaObra({
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#F4F6F8] text-slate-900 font-sans">
       {/* SIDEBAR RESTRITA DA OBRA (ABAS PERMITIDAS) */}
-      <aside className="w-60 shrink-0 bg-slate-900 text-white flex flex-col justify-between h-full">
+      <aside className="w-72 shrink-0 bg-slate-900 text-white flex flex-col justify-between h-full">
         <div>
           <div className="h-20 px-4 border-b border-slate-800 flex items-center gap-3">
             <div className="bg-white p-1 rounded-lg border border-amber-300/40 shadow-xs shrink-0 flex items-center justify-center">
@@ -10164,7 +10058,7 @@ function VisaoRestritaObra({
             </div>
           </div>
 
-          <nav className="p-3 space-y-1.5">
+          <nav className="p-3 space-y-1">
             {(
               [
                 {
@@ -10175,7 +10069,7 @@ function VisaoRestritaObra({
                 { id: "MeusPedidos", label: "📋 Meus Pedidos da Obra" },
                 {
                   id: "Recebimento",
-                  label: "📦 Recebimento & Controle Interno",
+                  label: "📦 Recebimento de Cargas",
                 },
                 {
                   id: "Estoque",
@@ -10183,7 +10077,7 @@ function VisaoRestritaObra({
                 },
                 {
                   id: "Medicoes",
-                  label: "📐 Contratos & Medições (BM)",
+                  label: "📐 Contratos & Medições",
                 },
                 {
                   id: "Logistica",
@@ -10196,16 +10090,16 @@ function VisaoRestritaObra({
                 <button
                   key={item.id}
                   onClick={() => setObraActiveTab(item.id)}
-                  className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition text-left ${
+                  className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition text-left ${
                     ativo
-                      ? "bg-emerald-600 text-white font-semibold shadow-xs"
+                      ? "bg-emerald-600 text-white shadow-xs"
                       : "text-slate-300 hover:bg-slate-800 hover:text-white"
                   }`}
                 >
                   <span className="truncate">{item.label}</span>
                   {item.id === "PainelDiario" && (
                     <span
-                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
                         diarioHojeEfetivo
                           ? "bg-emerald-950 text-emerald-300 border border-emerald-700"
                           : "bg-amber-900 text-amber-200 border border-amber-600 animate-pulse"
@@ -10215,17 +10109,17 @@ function VisaoRestritaObra({
                     </span>
                   )}
                   {item.id === "MeusPedidos" && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-200 text-xs font-bold">
+                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-200 text-[10px] font-bold shrink-0">
                       {pedidosDaObra.length}
                     </span>
                   )}
                   {item.id === "Recebimento" && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-emerald-300 text-xs font-bold">
+                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-emerald-300 text-[10px] font-bold shrink-0">
                       {ordensDaObra.length}
                     </span>
                   )}
                   {item.id === "Estoque" && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-teal-300 text-xs font-bold">
+                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-teal-300 text-[10px] font-bold shrink-0">
                       {
                         estoque.filter(
                           (it) =>
@@ -10236,12 +10130,12 @@ function VisaoRestritaObra({
                     </span>
                   )}
                   {item.id === "Medicoes" && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-blue-300 text-xs font-bold">
+                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-blue-300 text-[10px] font-bold shrink-0">
                       {contratosDaObra.length}
                     </span>
                   )}
                   {item.id === "Logistica" && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-amber-300 text-xs font-bold">
+                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-amber-300 text-[10px] font-bold shrink-0">
                       {totalCargasObra}
                     </span>
                   )}
@@ -10264,16 +10158,16 @@ function VisaoRestritaObra({
 
         {/* Rodapé da Sidebar com Perfil + Obra + Botão Sair / Trocar Conta */}
         <div className="p-3 border-t border-slate-800 space-y-2">
-          <div className="p-2 rounded-lg bg-slate-800/60">
+          <div className="p-2.5 rounded-lg bg-slate-800/60">
             <div className="flex items-center gap-1.5">
-              <span className="px-1.5 py-0.5 rounded bg-emerald-700 text-white text-[11px] font-bold">
-                {usuarioLogado.cargo.toUpperCase()}
+              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold">
+                {usuarioLogado.cargo}
               </span>
               <span className="font-semibold text-xs text-white truncate">
                 {usuarioLogado.nome}
               </span>
             </div>
-            <div className="text-xs text-slate-300 truncate mt-1 font-medium">
+            <div className="text-xs text-slate-400 truncate mt-1">
               📍 {usuarioLogado.obraNome}
             </div>
           </div>
@@ -10339,38 +10233,40 @@ function VisaoRestritaObra({
           {obraActiveTab === "PainelDiario" && (
             <div className="max-w-6xl space-y-6">
               {/* BANNER DE BOAS-VINDAS & STATUS DE HOJE */}
-              <div className="bg-slate-900 text-white rounded-xl p-6 shadow-md border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xl">🏗️</span>
-                    <h2 className="text-lg font-bold text-white">
-                      Painel Diário de Canteiro & Checklist Operacional
+                    <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center text-base font-bold">
+                      🏗️
+                    </span>
+                    <h2 className="text-base font-bold text-slate-900">
+                      Painel Diário do Canteiro & Checklist
                     </h2>
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-semibold">
-                      Sincronização Ativa com Compras
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-medium">
+                      Sincronização com Compras
                     </span>
                   </div>
-                  <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-                    Olá, <strong className="text-white">{usuarioLogado.nome}</strong> ({usuarioLogado.cargo}). 
-                    Mantenha o canteiro alinhado executando os 3 passos diários: confirme cargas com NF, baixe consumos físicos e registre o RDO.
+                  <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                    Olá, <strong className="text-slate-900">{usuarioLogado.nome}</strong> ({usuarioLogado.cargo}). 
+                    Confirme o recebimento físico das cargas, lance as saídas no estoque e preencha o Diário de Obra (RDO).
                   </p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 shrink-0">
+                <div className="shrink-0">
                   <div className={`px-4 py-2.5 rounded-lg border text-xs font-medium flex items-center gap-2.5 ${
                     diarioHojeEfetivo
-                      ? "bg-emerald-950/80 border-emerald-600 text-emerald-200"
-                      : "bg-amber-950/80 border-amber-500 text-amber-200 animate-pulse"
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                      : "bg-amber-50 border-amber-200 text-amber-800"
                   }`}>
-                    <span className={`w-2.5 h-2.5 rounded-full ${diarioHojeEfetivo ? "bg-emerald-400" : "bg-amber-400"}`}></span>
+                    <span className={`w-2 h-2 rounded-full ${diarioHojeEfetivo ? "bg-emerald-500" : "bg-amber-500"}`} />
                     <div>
                       <div className="font-bold">
-                        {diarioHojeEfetivo ? "🟢 Diário de Hoje Preenchido" : "🟡 RDO Pendente Hoje"}
+                        {diarioHojeEfetivo ? "Diário de Hoje Preenchido" : "RDO Pendente de Preenchimento"}
                       </div>
-                      <div className="text-[11px] opacity-80">
+                      <div className="text-[11px] text-slate-500">
                         {diarioHojeEfetivo
-                          ? `Transmitido às ${diarioHojeEfetivo.hora} por ${diarioHojeEfetivo.responsavelNome}`
-                          : `Data: ${dataHojeStr} (Aguardando preenchimento)`}
+                          ? `Registrado às ${diarioHojeEfetivo.hora} por ${diarioHojeEfetivo.responsavelNome}`
+                          : `Data: ${dataHojeStr} (Aguardando registro)`}
                       </div>
                     </div>
                   </div>
@@ -10381,29 +10277,29 @@ function VisaoRestritaObra({
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500 uppercase">
+                    <span className="text-xs font-semibold text-slate-600">
                       Cargas Programadas
                     </span>
-                    <span className="text-base">🚚</span>
+                    <span className="text-slate-400">🚚</span>
                   </div>
-                  <div className="text-2xl font-bold text-slate-900 mt-1">
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {entregasHojePendentes.length}
                   </div>
                   <div className="text-xs text-slate-500 mt-0.5">
                     {entregasHojePendentes.length === 0
-                      ? "Tudo conferido hoje"
+                      ? "Nenhuma carga pendente hoje"
                       : "Aguardando conferência física e NF"}
                   </div>
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500 uppercase">
-                      Insumos em Almoxarifado
+                    <span className="text-xs font-semibold text-slate-600">
+                      Itens em Almoxarifado
                     </span>
-                    <span className="text-base">🧱</span>
+                    <span className="text-slate-400">🧱</span>
                   </div>
-                  <div className="text-2xl font-bold text-slate-900 mt-1">
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {estoqueDestaObra.length}
                   </div>
                   <div className="text-xs text-slate-500 mt-0.5">
@@ -10413,12 +10309,12 @@ function VisaoRestritaObra({
 
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500 uppercase">
+                    <span className="text-xs font-semibold text-slate-600">
                       Requisições da Obra
                     </span>
-                    <span className="text-base">📋</span>
+                    <span className="text-slate-400">📋</span>
                   </div>
-                  <div className="text-2xl font-bold text-slate-900 mt-1">
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                     {pedidosDaObra.length}
                   </div>
                   <div className="text-xs text-slate-500 mt-0.5">
@@ -10478,7 +10374,7 @@ function VisaoRestritaObra({
                             <span className="font-semibold text-slate-800 text-xs">
                               {oc.fornecedorNome}
                             </span>
-                            <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-extrabold uppercase">
+                            <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
                               {oc.status}
                             </span>
                           </div>
@@ -11020,7 +10916,7 @@ function VisaoRestritaObra({
               {/* Grade de Itens do Pedido */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                  <label className="text-xs font-semibold text-slate-700">
                     Itens Solicitados para o Canteiro ({itensGrade.length})
                   </label>
                   <button
@@ -11035,7 +10931,7 @@ function VisaoRestritaObra({
                 <div className="border border-slate-200 rounded-lg overflow-hidden">
                   <table className="w-full text-sm border-collapse text-left">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-700">
                         <th className="py-2.5 px-3 w-[40%]">
                           Nome / Especificação Técnica do Material *
                         </th>
@@ -11181,7 +11077,7 @@ function VisaoRestritaObra({
 
               <table className="w-full text-sm border-collapse text-left">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                  <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-700">
                     <th className="py-3 px-4">Nº Pedido / Data</th>
                     <th className="py-3 px-4">Solicitante / Obra</th>
                     <th className="py-3 px-4">Materiais Solicitados</th>
@@ -11335,7 +11231,7 @@ function VisaoRestritaObra({
 
               <table className="w-full text-sm border-collapse text-left">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                  <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-700">
                     <th className="py-3 px-4">Ordem de Compra</th>
                     <th className="py-3 px-4">Fornecedor / Entrega</th>
                     <th className="py-3 px-4">Materiais para Conferência</th>
@@ -11559,7 +11455,7 @@ function VisaoRestritaObra({
                         {/* Tabela de Boletins de Medição */}
                         <table className="w-full text-xs border-collapse text-left">
                           <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200 font-semibold text-slate-600 uppercase">
+                            <tr className="bg-slate-50 border-b border-slate-200 font-semibold text-slate-700">
                               <th className="py-2.5 px-3">Nº BM</th>
                               <th className="py-2.5 px-3">Data / Período</th>
                               <th className="py-2.5 px-3 text-center">% Medido</th>
@@ -11644,8 +11540,8 @@ function VisaoRestritaObra({
                 {/* 4 KPIs de Logística do Canteiro */}
                 <div className="grid grid-cols-4 gap-4">
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      CARGAS NESTA SEMANA
+                    <div className="text-xs font-semibold text-slate-500">
+                      Cargas Nesta Semana
                     </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                       {totalCargasObra}
@@ -11656,8 +11552,8 @@ function VisaoRestritaObra({
                   </div>
 
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      DESCARGAS HOJE
+                    <div className="text-xs font-semibold text-slate-500">
+                      Descargas Hoje
                     </div>
                     <div className="text-2xl font-bold text-blue-700 mt-1 tabular-nums">
                       {entregasHoje}
@@ -11668,8 +11564,8 @@ function VisaoRestritaObra({
                   </div>
 
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      GARGALO NO PORTÃO
+                    <div className="text-xs font-semibold text-slate-500">
+                      Gargalo no Portão
                     </div>
                     <div className={`text-2xl font-bold mt-1 tabular-nums ${conflitosPortao > 0 ? "text-amber-600" : "text-emerald-700"}`}>
                       {conflitosPortao}
@@ -11680,8 +11576,8 @@ function VisaoRestritaObra({
                   </div>
 
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      CONFERIDAS NO ALMOXARIFADO
+                    <div className="text-xs font-semibold text-slate-500">
+                      Conferidas no Almoxarifado
                     </div>
                     <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
                       {recebidas}
@@ -11831,8 +11727,8 @@ function VisaoRestritaObra({
                 {/* KPIs de Almoxarifado da Obra */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      INSUMOS EM ALMOXARIFADO
+                    <div className="text-xs font-semibold text-slate-500">
+                      Insumos em Almoxarifado
                     </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                       {itensObra.length}
@@ -11843,8 +11739,8 @@ function VisaoRestritaObra({
                   </div>
 
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      CRÍTICOS / BAIXO ESTOQUE
+                    <div className="text-xs font-semibold text-slate-500">
+                      Críticos / Baixo Estoque
                     </div>
                     <div className="text-2xl font-bold text-red-600 mt-1 tabular-nums">
                       {criticosObra.length}
@@ -11855,8 +11751,8 @@ function VisaoRestritaObra({
                   </div>
 
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      VALOR ESTOCADO NO CANTEIRO
+                    <div className="text-xs font-semibold text-slate-500">
+                      Valor Estocado no Canteiro
                     </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
                       {formatBRL(valorTotalObra)}
@@ -11889,7 +11785,7 @@ function VisaoRestritaObra({
                   <div className="overflow-x-auto rounded-lg border border-slate-200">
                     <table className="w-full text-sm border-collapse text-left">
                       <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                        <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
                           <th className="py-3 px-4">Código / Descrição</th>
                           <th className="py-3 px-4">Localização Física</th>
                           <th className="py-3 px-4 text-right">Saldo Físico</th>
@@ -11978,7 +11874,7 @@ function VisaoRestritaObra({
             className="bg-white rounded-xl border border-slate-200 max-w-md w-full p-6 shadow-xl space-y-4 text-sm"
           >
             <div className="border-b border-slate-200 pb-3">
-              <span className="text-xs font-bold text-emerald-700 uppercase">
+              <span className="text-xs font-bold text-emerald-700">
                 Conferência de Almoxarifado —{" "}
                 {ocConfirmarRecebimentoModal.numeroOc}
               </span>
@@ -12353,7 +12249,7 @@ function ModalNovoBoletimMedicao({
         className="bg-white rounded-xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4 text-sm"
       >
         <div className="border-b border-slate-200 pb-3">
-          <span className="text-xs font-bold text-emerald-700 uppercase">
+          <span className="text-xs font-bold text-emerald-700">
             Boletim de Medição (BM) • {contrato.numeroContrato}
           </span>
           <h3 className="text-base font-bold text-slate-900 mt-0.5">
@@ -12584,7 +12480,7 @@ function ModalAprovacaoDiretoria({
             <span className="w-6 h-6 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-xs font-bold">
               ⚠️
             </span>
-            <span className="text-xs font-bold text-red-800 uppercase tracking-wider">
+            <span className="text-xs font-bold text-red-800">
               Alçada de Governança Corporativa: Valor &gt; R$ 100.000,00
             </span>
           </div>
@@ -12755,7 +12651,7 @@ function ModalNotificacoesSistema({
                       {item.titulo}
                     </span>
                     <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border shrink-0 ${bgBadge}`}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold border shrink-0 ${bgBadge}`}
                     >
                       {item.severidade}
                     </span>
@@ -12827,7 +12723,7 @@ function ModalDetalhesIqf({
         <div className="flex items-start justify-between border-b border-slate-200 pb-3">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              <span className="text-xs font-semibold text-slate-700">
                 Auditoria de Qualidade B2B (Vendor Rating)
               </span>
               <span
@@ -12851,8 +12747,8 @@ function ModalDetalhesIqf({
         {/* Score Geral e os 3 Pilares de Desempenho */}
         <div className="grid grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
           <div className="text-center p-2 rounded-lg bg-white border border-slate-200">
-            <div className="text-[11px] font-bold text-slate-500 uppercase">
-              SCORE GERAL
+            <div className="text-[11px] font-semibold text-slate-500">
+              Score Geral
             </div>
             <div className="text-3xl font-extrabold text-slate-900 mt-1">
               {iqf.scoreGeral}
@@ -12861,8 +12757,8 @@ function ModalDetalhesIqf({
           </div>
 
           <div className="text-center p-2 rounded-lg bg-white border border-slate-200">
-            <div className="text-[11px] font-bold text-slate-500 uppercase">
-              PONTUALIDADE
+            <div className="text-[11px] font-semibold text-slate-500">
+              Pontualidade
             </div>
             <div className="text-2xl font-bold text-emerald-700 mt-1">
               {iqf.taxaPontualidade}%
@@ -12871,8 +12767,8 @@ function ModalDetalhesIqf({
           </div>
 
           <div className="text-center p-2 rounded-lg bg-white border border-slate-200">
-            <div className="text-[11px] font-bold text-slate-500 uppercase">
-              CONFORMIDADE
+            <div className="text-[11px] font-semibold text-slate-500">
+              Conformidade
             </div>
             <div className="text-2xl font-bold text-blue-700 mt-1">
               {iqf.conformidadeFisica}%
@@ -12881,8 +12777,8 @@ function ModalDetalhesIqf({
           </div>
 
           <div className="text-center p-2 rounded-lg bg-white border border-slate-200">
-            <div className="text-[11px] font-bold text-slate-500 uppercase">
-              COMPETITIVIDADE
+            <div className="text-[11px] font-semibold text-slate-500">
+              Competitividade
             </div>
             <div className="text-2xl font-bold text-amber-700 mt-1">
               {iqf.competitividadeComercial}%
@@ -12910,7 +12806,7 @@ function ModalDetalhesIqf({
 
         {/* Histórico Real de Ordens e Conferências */}
         <div>
-          <h4 className="text-xs font-bold text-slate-700 uppercase mb-2">
+          <h4 className="text-xs font-bold text-slate-700 mb-2">
             Histórico de Ordens de Compra & Entregas nos Canteiros ({ordensDoFornecedor.length})
           </h4>
           <div className="border border-slate-200 rounded-lg overflow-hidden max-h-56 overflow-y-auto">
@@ -13209,7 +13105,7 @@ function ModalMovimentacaoEstoque({
       >
         <div className="flex items-center justify-between border-b border-slate-200 pb-3">
           <div>
-            <span className="text-xs font-bold text-emerald-700 uppercase">
+            <span className="text-xs font-bold text-emerald-700">
               Controle Físico de Almoxarifado
             </span>
             <h3 className="text-base font-bold text-slate-900 mt-0.5">
@@ -13445,7 +13341,7 @@ function ModalProgramarPuxada({
       >
         <div className="flex items-center justify-between border-b border-slate-200 pb-3">
           <div>
-            <span className="text-xs font-bold text-indigo-700 uppercase">
+            <span className="text-xs font-bold text-indigo-700">
               Fornecimento Contínuo & Usinas
             </span>
             <h3 className="text-base font-bold text-slate-900 mt-0.5">
@@ -13636,24 +13532,24 @@ function ModalFichaKardex({
         {/* 4 Cards de Resumo do Kardex */}
         <div className="grid grid-cols-4 gap-3">
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-            <div className="text-[11px] font-bold text-slate-500 uppercase">
-              SALDO ATUAL
+            <div className="text-[11px] font-semibold text-slate-500">
+              Saldo Atual
             </div>
             <div className="text-xl font-bold text-slate-900 tabular-nums mt-0.5">
               {item.saldoAtual} {item.unidade}
             </div>
           </div>
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-            <div className="text-[11px] font-bold text-slate-500 uppercase">
-              CUSTO MÉDIO PONDERADO
+            <div className="text-[11px] font-semibold text-slate-500">
+              Custo Médio Ponderado
             </div>
             <div className="text-xl font-bold text-slate-900 tabular-nums mt-0.5">
               {formatBRL(item.custoMedio)}
             </div>
           </div>
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-            <div className="text-[11px] font-bold text-slate-500 uppercase">
-              VALOR EM ESTOQUE
+            <div className="text-[11px] font-semibold text-slate-500">
+              Valor em Estoque
             </div>
             <div className="text-xl font-bold text-emerald-700 tabular-nums mt-0.5">
               {formatBRL(item.saldoAtual * item.custoMedio)}
@@ -13667,11 +13563,11 @@ function ModalFichaKardex({
             }`}
           >
             <div
-              className={`text-[11px] font-bold uppercase ${
+              className={`text-[11px] font-semibold ${
                 critico ? "text-red-700" : "text-slate-500"
               }`}
             >
-              ESTOQUE MÍNIMO / REPOR
+              Estoque Mínimo / Repor
             </div>
             <div
               className={`text-xl font-bold tabular-nums mt-0.5 ${
@@ -13686,7 +13582,7 @@ function ModalFichaKardex({
         {/* Tabela do Livro Razão Kardex */}
         <div className="overflow-y-auto flex-1 rounded-lg border border-slate-200">
           <table className="w-full text-xs text-left border-collapse">
-            <thead className="sticky top-0 bg-slate-100 border-b border-slate-200 text-slate-700 uppercase font-semibold">
+            <thead className="sticky top-0 bg-slate-100 border-b border-slate-200 text-slate-700 font-semibold">
               <tr>
                 <th className="py-2.5 px-3">Data / Hora</th>
                 <th className="py-2.5 px-3">Tipo de Operação</th>
@@ -13821,7 +13717,7 @@ function ModalAgruparDemandas({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-lg">⚡</span>
-              <span className="text-xs font-bold text-emerald-700 uppercase">
+              <span className="text-xs font-bold text-emerald-700">
                 Centralizador Corporativo Multi-Obra
               </span>
             </div>

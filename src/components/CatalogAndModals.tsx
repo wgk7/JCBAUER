@@ -312,7 +312,7 @@ export function NewPurchaseRequestModal({
   } = useProcurement();
 
   const [projectId, setProjectId] = useState(projects[0]?.id || "proj-01");
-  const [solicitante, setSolicitante] = useState("Eng. Marcos Viana");
+  const [solicitante, setSolicitante] = useState("");
   const [categoriaPrincipal, setCategoriaPrincipal] =
     useState<InsumoCategory>("Envoltória, Vidros & Esquadrias");
   const [modalidade, setModalidade] =
