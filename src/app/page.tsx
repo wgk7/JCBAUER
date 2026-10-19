@@ -5059,18 +5059,17 @@ export default function HomePage() {
   /* ----------------------------------------------------------------------- */
 
   const tituloAbaAtual: Record<TabId, string> = {
-    Painel: "Painel de Compras & Curva ABC de Suprimentos",
-    DesempenhoFinanceiro:
-      "BI Financeiro, Indicadores Diários & Desempenho Econômico das Obras",
-    Cotacoes: "Mapa de Cotações Equalizado",
-    Fornecedores: "Fornecedores, IQF & Homologação B2B",
-    Ordens: "Ordens de Compra & Entregas nos Canteiros",
-    Estoque: "Almoxarifado & Controle de Estoque dos Canteiros",
-    Medicoes: "Contratos de Subempreitada & Boletins de Medição (BM)",
-    Orcamento: "Controle Orçamentário da Obra: Orçado vs. Realizado",
-    Logistica: "Cronograma Logístico & Agendamento de Cargas no Canteiro",
-    Importacao: "Importar Planilhas Legadas (15 Anos)",
-    Configuracoes: "Configurações, Acessos e Backup do Sistema",
+    Painel: "Painel de Compras",
+    DesempenhoFinanceiro: "BI Financeiro & Obras",
+    Cotacoes: "Mapa de Cotações",
+    Fornecedores: "Fornecedores & IQF",
+    Ordens: "Ordens de Compra",
+    Estoque: "Almoxarifado & Estoque",
+    Medicoes: "Contratos & Medições",
+    Orcamento: "Orçamento da Obra",
+    Logistica: "Calendário de Cargas",
+    Importacao: "Importação de Planilhas",
+    Configuracoes: "Configurações",
   };
 
   const renderBotaoPrimarioHeader = () => {
@@ -5079,7 +5078,7 @@ export default function HomePage() {
         return (
           <button
             onClick={() => setShowNovaScModal(true)}
-            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition whitespace-nowrap"
+            className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition whitespace-nowrap shadow-xs"
           >
             + Nova Solicitação
           </button>
@@ -5088,35 +5087,20 @@ export default function HomePage() {
         return (
           <button
             onClick={() => window.print()}
-            className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold transition whitespace-nowrap flex items-center gap-2 shadow-xs"
+            className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold transition whitespace-nowrap flex items-center gap-1.5 shadow-xs"
           >
             <span>📥</span>
-            <span>Exportar Relatório BI</span>
+            <span>Exportar BI</span>
           </button>
         );
       case "Estoque":
         return (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowAgruparDemandasModal(true)}
-              className="px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold transition whitespace-nowrap flex items-center gap-1.5 shadow-xs"
-              title="Agrupar pedidos semelhantes de diferentes obras para compra corporativa com desconto"
-            >
-              <span>⚡ Agrupar Compras Corporativas</span>
-            </button>
-            <button
-              onClick={() => setShowProgramarPuxadaModal(true)}
-              className="px-3 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-semibold transition whitespace-nowrap flex items-center gap-1.5 shadow-xs"
-            >
-              <span>🚛 Programar Puxada</span>
-            </button>
-            <button
-              onClick={() => setShowNovaMovimentacaoModal(true)}
-              className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition whitespace-nowrap flex items-center gap-1.5 shadow-xs"
-            >
-              <span>+ Nova Movimentação</span>
-            </button>
-          </div>
+          <button
+            onClick={() => setShowNovaMovimentacaoModal(true)}
+            className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition whitespace-nowrap flex items-center gap-1.5 shadow-xs"
+          >
+            <span>+ Nova Movimentação</span>
+          </button>
         );
       case "Cotacoes":
         return (
@@ -5296,9 +5280,9 @@ export default function HomePage() {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#F4F6F8] text-slate-900 font-sans">
       {/* ================================================================= */}
-      {/* SIDEBAR ESQUERDA COMPACTA (w-56 shrink-0 bg-slate-900 text-white) */}
+      {/* SIDEBAR ESQUERDA COMPACTA (w-64 shrink-0 bg-slate-900 text-white) */}
       {/* ================================================================= */}
-      <aside className="no-print w-56 shrink-0 bg-slate-900 text-white flex flex-col justify-between h-full">
+      <aside className="no-print w-64 shrink-0 bg-slate-900 text-white flex flex-col justify-between h-full">
         <div>
           {/* Identidade Dinâmica da Construtora (vinda das Configurações) */}
           <div className="h-20 px-4 border-b border-slate-800 flex items-center gap-3">
@@ -5326,7 +5310,7 @@ export default function HomePage() {
                 { id: "Painel", label: "📋 Painel de Compras" },
                 {
                   id: "DesempenhoFinanceiro",
-                  label: "💰 BI Financeiro & Obras",
+                  label: "📊 BI Financeiro & Obras",
                 },
                 { id: "Cotacoes", label: "⚖️ Mapa de Cotações" },
                 { id: "Fornecedores", label: "🏢 Fornecedores & IQF" },
@@ -5344,9 +5328,9 @@ export default function HomePage() {
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm font-medium transition text-left ${
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition text-left ${
                     ativo
-                      ? "bg-emerald-600 text-white font-semibold shadow-xs"
+                      ? "bg-emerald-600 text-white shadow-xs"
                       : "text-slate-300 hover:bg-slate-800 hover:text-white"
                   }`}
                 >
@@ -5413,11 +5397,11 @@ export default function HomePage() {
       {/* ÁREA PRINCIPAL (flex-1 flex flex-col min-w-0 h-full overflow-hidden)*/}
       {/* ================================================================= */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-        {/* HEADER SUPERIOR FIXO (h-16 shrink-0) */}
-        <header className="no-print h-16 shrink-0 bg-white border-b border-slate-200 px-6 flex items-center justify-between gap-4">
+        {/* HEADER SUPERIOR FIXO (h-16 shrink-0, sticky z-20) */}
+        <header className="no-print sticky top-0 z-20 h-16 shrink-0 bg-white border-b border-slate-200 px-6 flex items-center justify-between gap-4">
           {/* Esquerda: Título da Aba Atual + Alerta de Novos Pedidos */}
           <div className="flex items-center gap-3 min-w-0">
-            <h1 className="text-lg font-bold text-slate-900 truncate">
+            <h1 className="text-base font-bold text-slate-900 whitespace-nowrap">
               {tituloAbaAtual[activeTab]}
             </h1>
             {novosPedidosCanteiroCount > 0 && (
@@ -5426,10 +5410,10 @@ export default function HomePage() {
                   setActiveTab("Painel");
                   setPainelSubView("solicitacoes");
                 }}
-                className="px-3 py-1 rounded-full bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 text-xs font-bold flex items-center gap-1.5 shrink-0 transition"
+                className="px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 text-xs font-bold flex items-center gap-1.5 shrink-0 transition"
+                title="Ver novas solicitações de compras enviadas pelos canteiros"
               >
-                <span>🔔</span> Novos Pedidos da Obra Recebidos! (
-                {novosPedidosCanteiroCount})
+                <span>🔔</span> {novosPedidosCanteiroCount} Novo(s)
               </button>
             )}
           </div>
@@ -5453,7 +5437,7 @@ export default function HomePage() {
               </button>
             </div>
 
-            <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs">
+            <div className="hidden 2xl:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs">
               <span className="font-bold text-emerald-800">
                 👑 {usuarioLogado.cargo}:
               </span>
@@ -5465,7 +5449,7 @@ export default function HomePage() {
             <select
               value={obraFiltro}
               onChange={(e) => setObraFiltro(e.target.value)}
-              className="bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-900"
+              className="bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-slate-900"
             >
               <option value="ALL">Todas as Obras ({obras.length})</option>
               {obras.map((o) => (
@@ -5479,10 +5463,10 @@ export default function HomePage() {
 
             <button
               onClick={handleLogout}
-              className="px-3 py-2 rounded-lg bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-700 border border-slate-300 text-xs font-semibold transition whitespace-nowrap"
+              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-700 border border-slate-300 text-xs font-semibold transition whitespace-nowrap"
               title="Encerrar sessão ou trocar de perfil"
             >
-              Sair / Trocar Conta
+              🚪 Sair
             </button>
           </div>
         </header>
@@ -5511,7 +5495,7 @@ export default function HomePage() {
           {activeTab === "Painel" && (
             <div className="space-y-6">
               {/* 4 Cards de KPI limpos no topo (Regra do Número Único, 3 linhas simples) */}
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
                   <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
                     SOLICITAÇÕES EM ABERTO
@@ -5699,8 +5683,8 @@ export default function HomePage() {
                                   </div>
                                   <div className="flex items-center justify-between">
                                     <span className="text-slate-500">Efetivo de Campo:</span>
-                                    <span className="font-semibold text-emerald-800">
-                                      {ultimoDiario.efetivoProprio + ultimoDiario.efetivoTerceirizado} trabalhadores ({ultimoDiario.efetivoProprio} próprios + {ultimoDiario.efetivoTerceirizado} terc.)
+                                    <span className="font-semibold text-emerald-800 text-xs">
+                                      {ultimoDiario.efetivoProprio + ultimoDiario.efetivoTerceirizado} trab. ({ultimoDiario.efetivoProprio} própr. / {ultimoDiario.efetivoTerceirizado} terc.)
                                     </span>
                                   </div>
                                   <div className="flex items-center justify-between">
@@ -5786,30 +5770,6 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* BANNER DE ACESSO AO NOVO BI FINANCEIRO & DESEMPENHO DAS OBRAS */}
-              <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 text-white rounded-xl p-5 shadow-sm border border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">💰</span>
-                    <h3 className="font-bold text-base text-white">
-                      BI Financeiro, Indicadores Diários & Economia das Obras
-                    </h3>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold">
-                      Novo Painel Separado
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-                    Acesse o novo dashboard financeiro dedicado: gráfico de compras e saving atualizado diariamente (dia a dia de outubro), comparativo orçamentário por empreendimento (Horizon, Atrium e SulPark), demandas de canteiro em R$ e previsão de fluxo de caixa por vencimento.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("DesempenhoFinanceiro")}
-                  className="px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-2 shadow-sm whitespace-nowrap shrink-0"
-                >
-                  <span>📊 Acessar Dashboard Financeiro Completo &rarr;</span>
-                </button>
-              </div>
 
               {/* Banner de Alerta de Novos Pedidos vindos do Canteiro */}
               {novosPedidosCanteiroCount > 0 && (
@@ -5918,40 +5878,35 @@ export default function HomePage() {
                             </td>
 
                             <td className="py-3.5 px-4 align-top">
-                              <div className="font-bold text-slate-900">
+                              <div className="font-semibold text-sm text-slate-900">
                                 {sc.solicitante}
-                                {sc.solicitanteCargo ? (
-                                  <span className="ml-1.5 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700">
-                                    {sc.solicitanteCargo}
-                                  </span>
-                                ) : null}
                               </div>
-                              <div className="text-xs font-semibold text-emerald-800 mt-0.5">
-                                📍 {obra?.nome}
-                              </div>
-                              <div className="text-xs text-slate-500 mt-0.5">
-                                {sc.categoria}
+                              <div className="text-xs text-slate-600 flex items-center gap-1.5 mt-0.5">
+                                <span className="font-medium text-emerald-800">📍 {obra?.nome}</span>
+                                <span className="text-slate-300">•</span>
+                                <span className="text-slate-500">{sc.categoria}</span>
                               </div>
                             </td>
 
-                            <td className="py-3.5 px-4 align-top max-w-md">
+                            <td className="py-3.5 px-4 align-top max-w-sm">
                               <div className="space-y-1">
-                                {sc.itens.map((it) => (
+                                {sc.itens.slice(0, 2).map((it) => (
                                   <div
                                     key={it.id}
-                                    className="text-xs text-slate-800 leading-snug"
+                                    className="text-xs text-slate-700 leading-snug truncate"
+                                    title={`${it.quantidade} ${it.unidade} — ${it.descricao}`}
                                   >
-                                    <span className="font-bold text-slate-900 tabular-nums">
+                                    <span className="font-semibold text-slate-900 tabular-nums">
                                       • {it.quantidade} {it.unidade}
                                     </span>{" "}
                                     — {it.descricao}
-                                    {it.observacaoObra ? (
-                                      <span className="block text-slate-500 italic pl-2">
-                                        Obs. Obra: {it.observacaoObra}
-                                      </span>
-                                    ) : null}
                                   </div>
                                 ))}
+                                {sc.itens.length > 2 && (
+                                  <div className="text-[11px] font-medium text-emerald-700">
+                                    + {sc.itens.length - 2} outro(s) insumo(s) na cotação
+                                  </div>
+                                )}
                               </div>
                             </td>
 
@@ -6467,23 +6422,23 @@ export default function HomePage() {
                   </div>
 
                   {/* BARRA DE NAVEGAÇÃO INTERNA DO DASHBOARD */}
-                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-3 border-t border-slate-200">
                     {[
                       {
                         id: "visaoGeral",
-                        label: "📈 Gráficos Diários de Outubro & Funil Financeiro",
+                        label: "📈 Visão Diária & Funil",
                       },
                       {
                         id: "obras",
-                        label: "🏢 Desempenho Detalhado por Obra (Horizon, Atrium, SulPark)",
+                        label: "🏢 Desempenho por Obra",
                       },
                       {
                         id: "categorias",
-                        label: "🏷️ Economia por Categoria & Maiores Negociações",
+                        label: "🏷️ Categorias & Negociações",
                       },
                       {
                         id: "fluxoCaixa",
-                        label: "💵 Fluxo de Caixa & Cronograma de Desembolso",
+                        label: "💵 Fluxo de Caixa",
                       },
                     ].map((tab) => (
                       <button
@@ -6498,7 +6453,7 @@ export default function HomePage() {
                               | "fluxoCaixa"
                           )
                         }
-                        className={`px-3.5 py-2 rounded-lg text-xs font-bold transition ${
+                        className={`w-full py-2.5 px-3 rounded-lg text-xs font-semibold text-center transition flex items-center justify-center gap-1.5 ${
                           subAbaFinanceiro === tab.id
                             ? "bg-slate-900 text-white shadow-xs"
                             : "bg-slate-100 hover:bg-slate-200 text-slate-700"
@@ -8113,54 +8068,56 @@ export default function HomePage() {
                               return (
                                 <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                                   <td className="py-3 px-4">
-                                    <div className="font-bold text-slate-900">{item.descricao}</div>
+                                    <div className="font-semibold text-sm text-slate-900 leading-snug">{item.descricao}</div>
                                     <div className="text-xs text-slate-500 font-mono mt-0.5">
                                       {item.codigo} • {item.categoria}
                                     </div>
                                   </td>
                                   <td className="py-3 px-4 text-xs">
-                                    <div className="font-semibold text-slate-800">{item.obraNome}</div>
-                                    <div className="text-slate-500 mt-0.5">📍 {item.localizacaoFisica}</div>
+                                    <div className="font-semibold text-slate-800 whitespace-nowrap">{item.obraNome}</div>
+                                    <div className="text-slate-500 mt-0.5 text-[11px]">📍 {item.localizacaoFisica}</div>
                                   </td>
-                                  <td className="py-3 px-4 text-center min-w-[140px]">
-                                    <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
-                                      <span>Mín: {item.estoqueMinimo}</span>
-                                      <span>Repor: {item.pontoReposicao}</span>
-                                    </div>
-                                    <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-                                      <div
-                                        className={`h-full rounded-full transition-all ${
-                                          critico
-                                            ? "bg-red-500"
-                                            : atencao
-                                            ? "bg-amber-500"
-                                            : "bg-emerald-500"
-                                        }`}
-                                        style={{ width: `${Math.max(5, percentualSeguranca)}%` }}
-                                      />
+                                  <td className="py-3 px-4 text-center">
+                                    <div className="w-32 mx-auto">
+                                      <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1 font-medium">
+                                        <span>Mín: {item.estoqueMinimo}</span>
+                                        <span>Repor: {item.pontoReposicao}</span>
+                                      </div>
+                                      <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                        <div
+                                          className={`h-full rounded-full transition-all ${
+                                            critico
+                                              ? "bg-red-500"
+                                              : atencao
+                                              ? "bg-amber-500"
+                                              : "bg-emerald-500"
+                                          }`}
+                                          style={{ width: `${Math.max(8, percentualSeguranca)}%` }}
+                                        />
+                                      </div>
                                     </div>
                                   </td>
-                                  <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums">
-                                    <span className="text-base">{item.saldoAtual}</span>{" "}
+                                  <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums text-sm">
+                                    <span>{item.saldoAtual.toLocaleString("pt-BR")}</span>{" "}
                                     <span className="text-xs font-normal text-slate-500">{item.unidade}</span>
                                   </td>
                                   <td className="py-3 px-4 text-right text-slate-700 whitespace-nowrap tabular-nums text-xs">
                                     {formatBRL(item.custoMedio)} / {item.unidade}
                                   </td>
-                                  <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums">
+                                  <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums text-sm">
                                     {formatBRL(item.saldoAtual * item.custoMedio)}
                                   </td>
-                                  <td className="py-3 px-4 text-center">
+                                  <td className="py-3 px-4 text-center whitespace-nowrap">
                                     {critico ? (
-                                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200 inline-block">
+                                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200 inline-block">
                                         🚨 Crítico
                                       </span>
                                     ) : atencao ? (
-                                      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200 inline-block">
+                                      <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200 inline-block">
                                         ⚠️ Repor
                                       </span>
                                     ) : (
-                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200 inline-block">
+                                      <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200 inline-block">
                                         ✅ Adequado
                                       </span>
                                     )}
@@ -8183,13 +8140,6 @@ export default function HomePage() {
                                           ⚡ Repor
                                         </button>
                                       )}
-                                      <button
-                                        onClick={() => setShowNovaMovimentacaoModal(true)}
-                                        className="px-2.5 py-1 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
-                                        title="Registrar saída para aplicação ou transferência entre canteiros"
-                                      >
-                                        ⇄ Mover
-                                      </button>
                                     </div>
                                   </td>
                                 </tr>
