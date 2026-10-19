@@ -1,0 +1,14880 @@
+"use client";
+
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import * as XLSX from "xlsx";
+
+/* ========================================================================= */
+/* TIPOS E ESTRUTURA DE DADOS                                                */
+/* ========================================================================= */
+
+type TabId =
+  | "Painel"
+  | "DesempenhoFinanceiro"
+  | "Cotacoes"
+  | "Fornecedores"
+  | "Ordens"
+  | "Estoque"
+  | "Medicoes"
+  | "Orcamento"
+  | "Logistica"
+  | "Importacao"
+  | "Configuracoes";
+
+type ObraTabId =
+  | "PainelDiario"
+  | "NovoPedido"
+  | "MeusPedidos"
+  | "Recebimento"
+  | "Estoque"
+  | "Medicoes"
+  | "Logistica";
+
+type PerfilAcesso =
+  | "Administrador"
+  | "Engenheiro"
+  | "Almoxarife"
+  | "Encarregado";
+
+type UrgenciaPedido = "Normal" | "Alta" | "Crítica - Obra Parada";
+
+type ClasseAbc = "Classe A" | "Classe B" | "Classe C";
+
+type NivelAlcada =
+  | "Comprador Autorizado"
+  | "Gerência de Obras"
+  | "Diretoria Executiva / CFO";
+
+interface MensagemPedido {
+  id: string;
+  autorNome: string;
+  autorCargo: PerfilAcesso;
+  dataHora: string;
+  texto: string;
+}
+
+interface UsuarioSistema {
+  id: string;
+  nome: string;
+  cargo: PerfilAcesso;
+  obraId: string; // "ALL" para Administrador ou id da obra
+  obraNome: string;
+  email: string;
+  senha: string;
+  status: "Ativo" | "Bloqueado";
+}
+
+const CATEGORIAS_CONSTRUCAO = [
+  "Fundações & Terraplenagem",
+  "Estrutura (Aço & Concreto)",
+  "Alvenaria & Vedações",
+  "Esquadrias & Fachadas de Vidro",
+  "Elevadores & Equipamentos",
+  "Instalações Hidrossanitárias",
+  "Instalações Elétricas & Dados",
+  "Impermeabilização & Isolamento",
+  "Revestimentos, Louças & Metais",
+  "Pintura & Texturas",
+  "EPIs, Ferramentas & Canteiro",
+] as const;
+
+interface UserSettings {
+  userName: string;
+  userRole: string;
+  userEmail: string;
+  userPhone: string;
+  companyName: string;
+  companyCnpj: string;
+}
+
+const DEFAULT_SETTINGS: UserSettings = {
+  userName: "João Carlos Bauer",
+  userRole: "Diretoria & Coordenação de Suprimentos",
+  userEmail: "suprimentos@jcbauer.eng.br",
+  userPhone: "(47) 99910-2030",
+  companyName: "JC Bauer Engenharia e Incorporações S.A.",
+  companyCnpj: "04.819.302/0001-71",
+};
+
+const SETTINGS_STORAGE_KEY = "jc_bauer_user_settings_v1";
+const USERS_STORAGE_KEY = "jc_bauer_users_v1";
+const SESSION_STORAGE_KEY = "jc_bauer_current_user_v1";
+const SOLICITACOES_STORAGE_KEY = "jc_bauer_solicitacoes_v1";
+const ORDENS_STORAGE_KEY = "jc_bauer_ordens_v1";
+const CONTRATOS_STORAGE_KEY = "jc_bauer_contratos_v1";
+const ORCAMENTO_STORAGE_KEY = "jc_bauer_orcamento_v1";
+const ESTOQUE_STORAGE_KEY = "jc_bauer_estoque_v1";
+const MOVIMENTACOES_STORAGE_KEY = "jc_bauer_movimentacoes_v1";
+const PUXADAS_STORAGE_KEY = "jc_bauer_puxadas_v1";
+const DIARIOS_STORAGE_KEY = "jc_bauer_diarios_v1";
+
+interface DiarioObraRegistro {
+  id: string;
+  obraId: string;
+  obraNome: string;
+  data: string; // Ex: "18/10/2026"
+  hora: string; // Ex: "17:15"
+  responsavelNome: string;
+  responsavelCargo: PerfilAcesso;
+  clima: "Ensolarado" | "Nublado" | "Chuvoso" | "Chuva c/ Paralisação";
+  efetivoProprio: number;
+  efetivoTerceirizado: number;
+  frentesServico: string;
+  ocorrencias?: string;
+}
+
+interface RegistroDiarioFinanceiro {
+  data: string;
+  diaSemana: string;
+  volumeContratado: number;
+  savingEconomizado: number;
+  pedidosFechados: number;
+  destaqueObra: string;
+  destaqueInsumo: string;
+}
+
+interface Obra {
+  id: string;
+  nome: string;
+  sigla: string;
+  endereco: string;
+  engenheiro: string;
+}
+
+interface ItemSolicitacao {
+  id: string;
+  codigo: string;
+  descricao: string;
+  unidade: string;
+  quantidade: number;
+  orcamentoUnitario: number;
+  observacaoObra?: string;
+}
+
+interface PropostaFornecedor {
+  id: string;
+  vendorId: string;
+  fornecedorNome: string;
+  vendedorNome: string;
+  whatsapp: string;
+  precosUnitarios: Record<string, number>; // itemId -> precoUnitario
+  freteValor: number;
+  tipoFrete: "CIF" | "FOB";
+  prazoPagamento: string;
+}
+
+interface SolicitacaoCompra {
+  id: string;
+  codigo: string;
+  obraId: string;
+  categoria: string;
+  solicitante: string;
+  solicitanteCargo?: PerfilAcesso;
+  urgencia?: UrgenciaPedido;
+  dataNecessaria?: string;
+  dataAbertura: string;
+  horarioPedido?: string;
+  origemCanteiro?: boolean;
+  novoAlertaAdmin?: boolean;
+  status:
+    | "Enviado / Aguardando Compras"
+    | "Em Cotação"
+    | "Aprovada"
+    | "Comprada"
+    | "Entregue na Obra";
+  dataPrevistaEntrega?: string;
+  notaFiscalRecebida?: string;
+  condicaoRecebimento?: string;
+  recebidoPor?: string;
+  dataHoraRecebimento?: string;
+  mensagens?: MensagemPedido[];
+  itens: ItemSolicitacao[];
+  propostas: PropostaFornecedor[];
+}
+
+interface FornecedorCadastro {
+  id: string;
+  empresa: string;
+  razaoSocial: string;
+  cnpj: string;
+  cidade: string;
+  categoriaPrincipal: string;
+  especialidades: string[];
+  vendedor: string;
+  telefone: string;
+  whatsapp: string;
+  email: string;
+  chavePix: string;
+  condicaoPadrao: string;
+  observacoes: string;
+}
+
+interface OrdemCompra {
+  id: string;
+  numeroOc: string;
+  scId: string;
+  scCodigo: string;
+  obraId: string;
+  obraNome: string;
+  obraEndereco: string;
+  obraEngenheiro: string;
+  categoria: string;
+  fornecedorNome: string;
+  fornecedorRazao: string;
+  fornecedorCnpj: string;
+  vendedorNome: string;
+  whatsapp: string;
+  chavePix: string;
+  dataEmissao: string;
+  dataPrevistaEntrega?: string;
+  prazoPagamento: string;
+  tipoFrete: "CIF" | "FOB";
+  freteValor: number;
+  valorTotal: number;
+  savingGerado: number;
+  alcadaAprovacao?: NivelAlcada;
+  aprovadoPorDiretoria?: boolean;
+  assinaturaDiretoria?: string;
+  status:
+    | "Emitida"
+    | "Aguardando Entrega"
+    | "Entregue"
+    | "Entregue na Obra (Confirmado pelo Almoxarifado)";
+  notaFiscalRecebida?: string;
+  condicaoRecebimento?: string;
+  recebidoPor?: string;
+  dataHoraRecebimento?: string;
+  itens: {
+    codigo: string;
+    descricao: string;
+    unidade: string;
+    quantidade: number;
+    precoUnitario: number;
+    subtotal: number;
+    observacaoObra?: string;
+  }[];
+}
+
+interface BoletimMedicao {
+  id: string;
+  numeroBm: string;
+  dataMedicao: string;
+  periodoReferencia: string;
+  percentualMedidoPeriodo: number;
+  percentualAcumulado: number;
+  valorBruto: number;
+  valorRetencao: number;
+  valorLiquido: number;
+  engenheiroResponsavel: string;
+  observacoes: string;
+  status: "Pendente Aprovação" | "Aprovado para Pagamento" | "Pago";
+  notaFiscal?: string;
+}
+
+interface ContratoSubempreitada {
+  id: string;
+  numeroContrato: string;
+  empreiteiro: string;
+  cnpj: string;
+  obraId: string;
+  obraNome: string;
+  objeto: string;
+  categoria: string;
+  valorTotal: number;
+  percentualRetencao: number; // ex: 5% ou 11%
+  dataInicio: string;
+  previsaoFim: string;
+  status: "Ativo" | "Concluído" | "Suspenso";
+  medicoes: BoletimMedicao[];
+}
+
+interface ItemEconomiaInsumo {
+  id: string;
+  insumo: string;
+  categoria: string;
+  obraId: string;
+  obraNome: string;
+  fornecedorVencedor: string;
+  valorMaiorCotado: number;
+  valorFechado: number;
+}
+
+interface ItemPlanilhaImportada {
+  id: string;
+  data: string;
+  fornecedor: string;
+  cnpj: string;
+  insumo: string;
+  categoria: string;
+  quantidade: number;
+  unidade: string;
+  precoUnitario: number;
+  status: "Pendente" | "Aprovado";
+}
+
+interface DuplicidadeFornecedor {
+  id: string;
+  nomeSugerido: string;
+  cnpj: string;
+  variacoesPlanilha: string;
+  similaridade: string;
+  status: "Pendente" | "Unificado";
+}
+
+interface ColaboradorMapeado {
+  id: string;
+  nome: string;
+  cargo: string;
+  obraPrincipal: string;
+  pedidosHistoricos: number;
+  status: "Validado" | "Pendente";
+}
+
+interface IqfFornecedor {
+  scoreGeral: number; // 0 a 100
+  taxaPontualidade: number;
+  pontualidadeScore: number;
+  conformidadeFisica: number;
+  conformidadeScore: number;
+  competitividadeComercial: number;
+  competitividadeScore: number;
+  totalFornecimentos: number;
+  entregasNoPrazo: number;
+  entregasSemRessalvas: number;
+  classificacao:
+    | "Fornecedor Ouro"
+    | "Fornecedor Prata"
+    | "Fornecedor Monitorado"
+    | "Risco Crítico"
+    | "Ouro"
+    | "Prata"
+    | "Monitorado";
+  corBadge: string;
+}
+
+interface ItemOrcamentoObra {
+  id: string;
+  obraId: string;
+  obraNome?: string;
+  categoria: string;
+  valorOrcado: number;
+  observacao?: string;
+}
+
+interface NotificacaoItem {
+  id: string;
+  tipo:
+    | "critico"
+    | "entrega"
+    | "medicao"
+    | "chat"
+    | "governanca"
+    | "URGENTE_OBRA"
+    | "FRETE_ATRASADO"
+    | "MEDICAO_PENDENTE"
+    | "MENSAGEM_NOVA";
+  titulo: string;
+  descricao: string;
+  dataHora: string;
+  linkTab?: TabId;
+  targetId?: string;
+  lida: boolean;
+  severidade?: "Critica" | "Alerta" | "Info";
+  horario?: string;
+  destinoAba?: TabId;
+  refId?: string;
+}
+
+interface CargaItemLogistica {
+  id: string;
+  ordemId: string;
+  numeroOc: string;
+  obraId: string;
+  obraNome: string;
+  fornecedorNome: string;
+  insumoDescricao: string;
+  horarioJanela: string;
+  tipoVeiculo: string;
+  tipoFrete: string;
+  status: "Hoje" | "Agendado" | "Entregue" | "Atrasado";
+}
+
+interface DiaLogisticaSemana {
+  diaSemana: string;
+  dataLabel: string;
+  conflitoPortao: boolean;
+  cargas: CargaItemLogistica[];
+}
+
+type CargaLogistica = DiaLogisticaSemana;
+
+/* ------------------------------------------------------------------------- */
+/* TIPOS DE ESTOQUE, ALMOXARIFADO E PUXADAS PROGRAMADAS                      */
+/* ------------------------------------------------------------------------- */
+
+type TipoMovimentacaoEstoque =
+  | "ENTRADA_COMPRA"
+  | "SAIDA_APLICACAO"
+  | "TRANSFERENCIA_OBRA"
+  | "PERDA_AVARIA"
+  | "AJUSTE_INVENTARIO";
+
+interface ItemEstoque {
+  id: string;
+  obraId: string; // "obra-1", "obra-2", "obra-3" ou "central"
+  obraNome: string;
+  codigo: string;
+  descricao: string;
+  categoria: string;
+  unidade: string;
+  saldoAtual: number;
+  estoqueMinimo: number;
+  pontoReposicao: number;
+  custoMedio: number; // Custo Médio Ponderado Unitário em R$
+  localizacaoFisica: string;
+  ultimaMovimentacao: string;
+  fornecedorHabitual?: string;
+}
+
+interface MovimentacaoEstoque {
+  id: string;
+  itemId: string;
+  codigoInsumo: string;
+  descricaoInsumo: string;
+  unidade: string;
+  tipo: TipoMovimentacaoEstoque;
+  quantidade: number;
+  saldoAnterior: number;
+  saldoPosterior: number;
+  custoUnitario: number;
+  valorTotal: number;
+  dataHora: string;
+  responsavel: string;
+  obraOrigemId: string;
+  obraOrigemNome: string;
+  obraDestinoId?: string;
+  obraDestinoNome?: string;
+  numeroDocumento?: string; // NF-e, OC ou Ordem de Aplicação
+  motivoEtapa?: string;
+}
+
+interface ProgramacaoPuxada {
+  id: string;
+  contratoId: string;
+  dataHoraAgendada: string;
+  quantidade: number;
+  unidade: string;
+  status: "Agendada" | "Em Rota" | "Recebida" | "Cancelada";
+  etapaAplicacao: string;
+  notaFiscal?: string;
+  responsavelRecebimento: string;
+  observacoes?: string;
+}
+
+interface ContratoPuxadaFornecimento {
+  id: string;
+  numeroContrato: string;
+  numeroOC: string;
+  obraId: string;
+  obraNome: string;
+  fornecedorNome: string;
+  insumo: string;
+  unidade: string;
+  quantidadeContratada: number;
+  quantidadeEntregue: number;
+  valorUnitario: number;
+  valorTotalContrato: number;
+  dataInicio: string;
+  dataPrevisaoTermino: string;
+  status: "Ativo" | "Encerrado" | "Suspenso";
+  programacoes: ProgramacaoPuxada[];
+}
+
+/* ========================================================================= */
+/* FORMATADORES                                                              */
+/* ========================================================================= */
+
+function formatBRL(valor: number): string {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(valor) ? valor : 0);
+}
+
+/* ========================================================================= */
+/* DADOS INICIAIS REALISTAS DE CONSTRUTORA                                   */
+/* ========================================================================= */
+
+const OBRAS_INICIAIS: Obra[] = [
+  {
+    id: "obra-1",
+    nome: "Residencial Horizon Tower",
+    sigla: "RHT-01",
+    endereco: "Av. Atlântica, 2450 — Balneário Camboriú / SC",
+    engenheiro: "Eng. Marcos Viana",
+  },
+  {
+    id: "obra-2",
+    nome: "Edifício Comercial Atrium Bauer",
+    sigla: "EAB-02",
+    endereco: "Rua XV de Novembro, 1120 — Joinville / SC",
+    engenheiro: "Engª. Camila Dorneles",
+  },
+  {
+    id: "obra-3",
+    nome: "Condomínio Logístico SulPark",
+    sigla: "CLS-03",
+    endereco: "Rod. BR-101, Km 118 — Itajaí / SC",
+    engenheiro: "Eng. Roberto Siqueira",
+  },
+];
+
+const ECONOMIA_INSUMOS_HISTORICO: ItemEconomiaInsumo[] = [
+  {
+    id: "eco-1",
+    insumo: "Concreto Usinado Bombeável FCK 35/40 MPa",
+    categoria: "Fundações & Terraplenagem",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    fornecedorVencedor: "Supermix Concreto S.A.",
+    valorMaiorCotado: 95600.0,
+    valorFechado: 84200.0,
+  },
+  {
+    id: "eco-2",
+    insumo: "Aço CA-50 / CA-60 (Ø 10mm, 12.5mm e 16mm)",
+    categoria: "Estrutura (Aço & Concreto)",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    fornecedorVencedor: "SulAço Distribuidora",
+    valorMaiorCotado: 89396.0,
+    valorFechado: 75522.0,
+  },
+  {
+    id: "eco-3",
+    insumo: "Esquadrias de Alumínio Linha Gold + Pele de Vidro",
+    categoria: "Esquadrias & Fachadas de Vidro",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    fornecedorVencedor: "AluGlass Fachadas & Esquadrias",
+    valorMaiorCotado: 472100.0,
+    valorFechado: 431800.0,
+  },
+  {
+    id: "eco-4",
+    insumo: "Elevadores Regenerativos Inox (2 Unidades + Montagem)",
+    categoria: "Elevadores & Equipamentos",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    fornecedorVencedor: "Atlas Schindler Elevadores",
+    valorMaiorCotado: 475000.0,
+    valorFechado: 438000.0,
+  },
+  {
+    id: "eco-5",
+    insumo: "Porcelanato Técnico Retificado 90x90cm + Argamassa AC-III",
+    categoria: "Revestimentos, Louças & Metais",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    fornecedorVencedor: "Portobello Corporate B2B",
+    valorMaiorCotado: 82400.0,
+    valorFechado: 66940.0,
+  },
+  {
+    id: "eco-6",
+    insumo: "Tubulações PPR, PVC Série R e Bombas de Recalque",
+    categoria: "Instalações Hidrossanitárias",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    fornecedorVencedor: "Tigre Engenharia B2B",
+    valorMaiorCotado: 64800.0,
+    valorFechado: 55100.0,
+  },
+  {
+    id: "eco-7",
+    insumo: "Manta Asfáltica Polimérica 4mm + Impermeabilizante Flexível",
+    categoria: "Impermeabilização & Isolamento",
+    obraId: "obra-3",
+    obraNome: "Condomínio Logístico SulPark",
+    valorMaiorCotado: 41510.0,
+    valorFechado: 37735.0,
+    fornecedorVencedor: "ImperSul Químicos & Tintas",
+  },
+  {
+    id: "eco-8",
+    insumo: "Tintas Acrílicas Premium Fachada + Selador Acrílico (Latas 18L)",
+    categoria: "Pintura & Texturas",
+    obraId: "obra-3",
+    obraNome: "Condomínio Logístico SulPark",
+    fornecedorVencedor: "ImperSul Químicos & Tintas",
+    valorMaiorCotado: 52900.0,
+    valorFechado: 44600.0,
+  },
+];
+
+const FORNECEDORES_INICIAIS: FornecedorCadastro[] = [
+  {
+    id: "forn-1",
+    empresa: "SulAço Distribuidora",
+    razaoSocial: "SulAço Comércio e Beneficiamento de Aços S.A.",
+    cnpj: "83.412.901/0001-54",
+    cidade: "Joinville / SC",
+    categoriaPrincipal: "Estrutura (Aço & Concreto)",
+    especialidades: ["Aço CA-50 / CA-60", "Telas Soldadas", "Corte e Dobra"],
+    vendedor: "Carlos Eduardo Rocha",
+    telefone: "(47) 99912-3401",
+    whatsapp: "5547999123401",
+    email: "carlos.rocha@sulaco.com.br",
+    chavePix: "83.412.901/0001-54",
+    condicaoPadrao: "28/56/84 ddl Boleto",
+    observacoes: "Frete CIF para cargas acima de 8 toneladas no litoral SC.",
+  },
+  {
+    id: "forn-2",
+    empresa: "Gerdau Comercial Aços",
+    razaoSocial: "Comercial Gerdau S.A. Filial Sul",
+    cnpj: "33.611.500/0114-22",
+    cidade: "Araquari / SC",
+    categoriaPrincipal: "Estrutura (Aço & Concreto)",
+    especialidades: [
+      "Vergalhões CA-50",
+      "Arames Recozidos",
+      "Perfis Estruturais",
+    ],
+    vendedor: "Roberto Alencar",
+    telefone: "(47) 99844-1120",
+    whatsapp: "5547998441120",
+    email: "roberto.alencar@gerdau.com.br",
+    chavePix: "33.611.500/0114-22",
+    condicaoPadrao: "28/42 ddl Boleto",
+    observacoes: "Entrega programada com caminhão munck próprio.",
+  },
+  {
+    id: "forn-3",
+    empresa: "ArcelorMittal Sul",
+    razaoSocial: "ArcelorMittal Brasil S.A. Distribuição",
+    cnpj: "17.469.701/0044-10",
+    cidade: "Itajaí / SC",
+    categoriaPrincipal: "Estrutura (Aço & Concreto)",
+    especialidades: ["Aço Cortado e Dobrado", "Trefilados", "Espaçadores"],
+    vendedor: "Fernanda Tavares",
+    telefone: "(47) 99701-8890",
+    whatsapp: "5547997018890",
+    email: "fernanda.tavares@arcelormittal.com.br",
+    chavePix: "17.469.701/0044-10",
+    condicaoPadrao: "30/60 ddl Boleto",
+    observacoes: "Certificado de qualidade por lote enviado junto com a NF.",
+  },
+  {
+    id: "forn-4",
+    empresa: "AluGlass Fachadas & Esquadrias",
+    razaoSocial: "AluGlass Engenharia de Fachadas e Alumínio Ltda",
+    cnpj: "11.209.440/0001-88",
+    cidade: "Itajaí / SC",
+    categoriaPrincipal: "Esquadrias & Fachadas de Vidro",
+    especialidades: ["Esquadrias Linha Gold", "Pele de Vidro", "Guarda-Corpo"],
+    vendedor: "Eng. Leandro Mattos",
+    telefone: "(47) 99988-7711",
+    whatsapp: "5547999887711",
+    email: "leandro@aluglass.eng.br",
+    chavePix: "11.209.440/0001-88",
+    condicaoPadrao: "20% Sinal + 4x Medição",
+    observacoes:
+      "Inclui projeto executivo, ensaio acústico e ART de instalação.",
+  },
+  {
+    id: "forn-5",
+    empresa: "VetroSul Esquadrias",
+    razaoSocial: "VetroSul Indústria de Esquadrias e Vidros Especiais S.A.",
+    cnpj: "14.882.310/0001-19",
+    cidade: "Blumenau / SC",
+    categoriaPrincipal: "Esquadrias & Fachadas de Vidro",
+    especialidades: [
+      "Esquadrias Minimalistas",
+      "Vidros Laminados",
+      "Brises",
+    ],
+    vendedor: "Patrícia Klein",
+    telefone: "(47) 99123-4500",
+    whatsapp: "5547991234500",
+    email: "patricia@vetrosul.com.br",
+    chavePix: "14.882.310/0001-19",
+    condicaoPadrao: "30/60/90 ddl Medição",
+    observacoes: "Fábrica automatizada com garantia de 5 anos na anodização.",
+  },
+  {
+    id: "forn-6",
+    empresa: "Atlas Schindler Elevadores",
+    razaoSocial: "Elevadores Atlas Schindler Ltda",
+    cnpj: "00.028.986/0019-04",
+    cidade: "Florianópolis / SC",
+    categoriaPrincipal: "Elevadores & Equipamentos",
+    especialidades: [
+      "Elevadores Sem Casa de Máquinas",
+      "Monta-Cargas",
+      "Manutenção",
+    ],
+    vendedor: "Eng. Gustavo Hering",
+    telefone: "(48) 99941-2020",
+    whatsapp: "5548999412020",
+    email: "gustavo.hering@schindler.com",
+    chavePix: "00.028.986/0019-04",
+    condicaoPadrao: "15% Assinatura + 6x Cronograma",
+    observacoes:
+      "Assistência técnica 24h com base própria em Balneário Camboriú.",
+  },
+  {
+    id: "forn-7",
+    empresa: "ImperSul Químicos & Tintas",
+    razaoSocial: "ImperSul Distribuidora Técnica para Construção Ltda",
+    cnpj: "21.904.118/0001-60",
+    cidade: "Joinville / SC",
+    categoriaPrincipal: "Impermeabilização & Isolamento",
+    especialidades: [
+      "Manta Asfáltica 4mm",
+      "Argamassa Polimérica",
+      "Tintas Acrílicas",
+    ],
+    vendedor: "Diego Fontes",
+    telefone: "(47) 99655-3210",
+    whatsapp: "5547996553210",
+    email: "diego@impersul.com.br",
+    chavePix: "21.904.118/0001-60",
+    condicaoPadrao: "28/56 ddl Boleto",
+    observacoes: "Distribuidor Viapol e Suvinil Linha Profissional.",
+  },
+  {
+    id: "forn-8",
+    empresa: "Portobello Corporate B2B",
+    razaoSocial: "Portobello S.A. Divisão Engenharia",
+    cnpj: "83.475.913/0001-91",
+    cidade: "Tijucas / SC",
+    categoriaPrincipal: "Revestimentos, Louças & Metais",
+    especialidades: [
+      "Porcelanatos Técnicos",
+      "Grandes Formatos",
+      "Louças e Metais",
+    ],
+    vendedor: "Mariana Borges",
+    telefone: "(48) 99104-5566",
+    whatsapp: "5548991045566",
+    email: "mariana.borges@portobello.com.br",
+    chavePix: "83.475.913/0001-91",
+    condicaoPadrao: "28/56/84 ddl Faturado",
+    observacoes: "Entrega paletizada direto da fábrica em Tijucas.",
+  },
+];
+
+const SOLICITACOES_INICIAIS: SolicitacaoCompra[] = [
+  {
+    id: "sc-1",
+    codigo: "SC-2026-0142",
+    obraId: "obra-1",
+    categoria: "Estrutura (Aço & Concreto)",
+    solicitante: "Eng. Marcos Viana",
+    dataAbertura: "14/10/2026",
+    status: "Em Cotação",
+    itens: [
+      {
+        id: "it-101",
+        codigo: "SINAPI-00000034",
+        descricao: "Aço CA-50 Ø 10,0 mm (3/8\") — Barra 12m",
+        unidade: "barra",
+        quantidade: 380,
+        orcamentoUnitario: 62.8,
+      },
+      {
+        id: "it-102",
+        codigo: "SINAPI-00000035",
+        descricao: "Aço CA-50 Ø 12,5 mm (1/2\") — Barra 12m",
+        unidade: "barra",
+        quantidade: 290,
+        orcamentoUnitario: 96.5,
+      },
+      {
+        id: "it-103",
+        codigo: "SINAPI-00000037",
+        descricao: "Aço CA-50 Ø 16,0 mm (5/8\") — Barra 12m",
+        unidade: "barra",
+        quantidade: 140,
+        orcamentoUnitario: 158.9,
+      },
+      {
+        id: "it-104",
+        codigo: "SINAPI-00000040",
+        descricao: "Aço CA-60 Ø 5,0 mm Estribos — Barra 12m",
+        unidade: "barra",
+        quantidade: 420,
+        orcamentoUnitario: 18.4,
+      },
+    ],
+    propostas: [
+      {
+        id: "prop-1",
+        vendorId: "forn-1",
+        fornecedorNome: "SulAço Distribuidora",
+        vendedorNome: "Carlos Eduardo Rocha",
+        whatsapp: "5547999123401",
+        precosUnitarios: {
+          "it-101": 57.9,
+          "it-102": 89.4,
+          "it-103": 146.5,
+          "it-104": 16.9,
+        },
+        freteValor: 0,
+        tipoFrete: "CIF",
+        prazoPagamento: "4 dias úteis • 28/56/84 ddl Boleto",
+      },
+      {
+        id: "prop-2",
+        vendorId: "forn-2",
+        fornecedorNome: "Gerdau Comercial Aços",
+        vendedorNome: "Roberto Alencar",
+        whatsapp: "5547998441120",
+        precosUnitarios: {
+          "it-101": 60.2,
+          "it-102": 91.8,
+          "it-103": 149.0,
+          "it-104": 17.5,
+        },
+        freteValor: 1150,
+        tipoFrete: "FOB",
+        prazoPagamento: "5 dias úteis • 28/42 ddl Boleto",
+      },
+      {
+        id: "prop-3",
+        vendorId: "forn-3",
+        fornecedorNome: "ArcelorMittal Sul",
+        vendedorNome: "Fernanda Tavares",
+        whatsapp: "5547997018890",
+        precosUnitarios: {
+          "it-101": 61.5,
+          "it-102": 93.9,
+          "it-103": 152.0,
+          "it-104": 17.9,
+        },
+        freteValor: 900,
+        tipoFrete: "FOB",
+        prazoPagamento: "6 dias úteis • 30/60 ddl Boleto",
+      },
+    ],
+  },
+  {
+    id: "sc-2",
+    codigo: "SC-2026-0148",
+    obraId: "obra-1",
+    categoria: "Esquadrias & Fachadas de Vidro",
+    solicitante: "Eng. Marcos Viana",
+    dataAbertura: "15/10/2026",
+    status: "Em Cotação",
+    itens: [
+      {
+        id: "it-201",
+        codigo: "ESQ-GOLD-01",
+        descricao:
+          "Fornecimento de Esquadrias de Alumínio Linha Gold + Vidro Laminado 10mm",
+        unidade: "m²",
+        quantidade: 420,
+        orcamentoUnitario: 980.0,
+      },
+      {
+        id: "it-202",
+        codigo: "ESQ-INST-02",
+        descricao:
+          "Mão de Obra de Instalação, Vedação Estrutural e Emissão de ART",
+        unidade: "vb",
+        quantidade: 1,
+        orcamentoUnitario: 68000.0,
+      },
+    ],
+    propostas: [
+      {
+        id: "prop-201",
+        vendorId: "forn-4",
+        fornecedorNome: "AluGlass Fachadas & Esquadrias",
+        vendedorNome: "Eng. Leandro Mattos",
+        whatsapp: "5547999887711",
+        precosUnitarios: {
+          "it-201": 890.0,
+          "it-202": 58000.0,
+        },
+        freteValor: 0,
+        tipoFrete: "CIF",
+        prazoPagamento: "35 dias • 20% Sinal + 4x Medição",
+      },
+      {
+        id: "prop-202",
+        vendorId: "forn-5",
+        fornecedorNome: "VetroSul Esquadrias",
+        vendedorNome: "Patrícia Klein",
+        whatsapp: "5547991234500",
+        precosUnitarios: {
+          "it-201": 945.0,
+          "it-202": 62000.0,
+        },
+        freteValor: 2400,
+        tipoFrete: "FOB",
+        prazoPagamento: "45 dias • 30/60/90 ddl Medição",
+      },
+      {
+        id: "prop-203",
+        vendorId: "forn-4",
+        fornecedorNome: "Catarinense Glazing Sistemas",
+        vendedorNome: "Eduardo Zimmermann",
+        whatsapp: "5547998112200",
+        precosUnitarios: {
+          "it-201": 965.0,
+          "it-202": 65000.0,
+        },
+        freteValor: 1800,
+        tipoFrete: "FOB",
+        prazoPagamento: "40 dias • 30/60 ddl Boleto",
+      },
+    ],
+  },
+  {
+    id: "sc-3",
+    codigo: "SC-2026-0149",
+    obraId: "obra-2",
+    categoria: "Elevadores & Equipamentos",
+    solicitante: "Engª. Camila Dorneles",
+    dataAbertura: "16/10/2026",
+    status: "Em Cotação",
+    itens: [
+      {
+        id: "it-301",
+        codigo: "ELEV-REG-01",
+        descricao:
+          "Elevador Social Sem Casa de Máquinas 12 Passageiros Inox Escovado (15 Paradas)",
+        unidade: "un",
+        quantidade: 2,
+        orcamentoUnitario: 215000.0,
+      },
+      {
+        id: "it-302",
+        codigo: "ELEV-MONT-02",
+        descricao:
+          "Montagem Eletromecânica, Comissionamento e ART de Instalação",
+        unidade: "vb",
+        quantidade: 1,
+        orcamentoUnitario: 48000.0,
+      },
+    ],
+    propostas: [
+      {
+        id: "prop-301",
+        vendorId: "forn-6",
+        fornecedorNome: "Atlas Schindler Elevadores",
+        vendedorNome: "Eng. Gustavo Hering",
+        whatsapp: "5548999412020",
+        precosUnitarios: {
+          "it-301": 198000.0,
+          "it-302": 42000.0,
+        },
+        freteValor: 0,
+        tipoFrete: "CIF",
+        prazoPagamento: "90 dias • 15% Sinal + 6x Medição",
+      },
+      {
+        id: "prop-302",
+        vendorId: "forn-6",
+        fornecedorNome: "TKE Elevadores Sul",
+        vendedorNome: "Marcelo Stein",
+        whatsapp: "5548998221010",
+        precosUnitarios: {
+          "it-301": 206000.0,
+          "it-302": 45000.0,
+        },
+        freteValor: 0,
+        tipoFrete: "CIF",
+        prazoPagamento: "100 dias • 20% Sinal + 5x Medição",
+      },
+      {
+        id: "prop-303",
+        vendorId: "forn-6",
+        fornecedorNome: "Otis Elevadores Brasil",
+        vendedorNome: "Renato Cardoso",
+        whatsapp: "5548997113030",
+        precosUnitarios: {
+          "it-301": 212000.0,
+          "it-302": 47500.0,
+        },
+        freteValor: 3500,
+        tipoFrete: "FOB",
+        prazoPagamento: "110 dias • 6x Boleto Faturado",
+      },
+    ],
+  },
+  {
+    id: "sc-4",
+    codigo: "SC-2026-0150",
+    obraId: "obra-3",
+    categoria: "Impermeabilização & Isolamento",
+    solicitante: "Eng. Roberto Siqueira",
+    dataAbertura: "16/10/2026",
+    status: "Em Cotação",
+    itens: [
+      {
+        id: "it-401",
+        codigo: "SINAPI-00038110",
+        descricao: "Manta Asfáltica Polimérica Tipo III 4mm — Rolo 10m²",
+        unidade: "rl",
+        quantidade: 85,
+        orcamentoUnitario: 365.0,
+      },
+      {
+        id: "it-402",
+        codigo: "SINAPI-00038142",
+        descricao:
+          "Argamassa Polimérica Impermeabilizante Flexível — Caixa 18kg",
+        unidade: "cx",
+        quantidade: 110,
+        orcamentoUnitario: 98.0,
+      },
+    ],
+    propostas: [
+      {
+        id: "prop-401",
+        vendorId: "forn-7",
+        fornecedorNome: "ImperSul Químicos & Tintas",
+        vendedorNome: "Diego Fontes",
+        whatsapp: "5547996553210",
+        precosUnitarios: {
+          "it-401": 332.0,
+          "it-402": 86.5,
+        },
+        freteValor: 0,
+        tipoFrete: "CIF",
+        prazoPagamento: "3 dias úteis • 28/56 ddl Boleto",
+      },
+      {
+        id: "prop-402",
+        vendorId: "forn-7",
+        fornecedorNome: "Viapol Distribuidora Sul",
+        vendedorNome: "Lucas Andrade",
+        whatsapp: "5547994102299",
+        precosUnitarios: {
+          "it-401": 348.0,
+          "it-402": 91.0,
+        },
+        freteValor: 450,
+        tipoFrete: "FOB",
+        prazoPagamento: "5 dias úteis • 28 ddl Boleto",
+      },
+      {
+        id: "prop-403",
+        vendorId: "forn-7",
+        fornecedorNome: "Quartzolit & Weber Técnica",
+        vendedorNome: "Andréia Ramos",
+        whatsapp: "5547993001188",
+        precosUnitarios: {
+          "it-401": 359.0,
+          "it-402": 94.5,
+        },
+        freteValor: 600,
+        tipoFrete: "FOB",
+        prazoPagamento: "6 dias úteis • 30/60 ddl Boleto",
+      },
+    ],
+  },
+];
+
+const ORDENS_INICIAIS: OrdemCompra[] = [
+  {
+    id: "oc-1",
+    numeroOc: "OC-2026-0089",
+    scId: "sc-hist-1",
+    scCodigo: "SC-2026-0135",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    obraEndereco: "Av. Atlântica, 2450 — Balneário Camboriú / SC",
+    obraEngenheiro: "Eng. Marcos Viana",
+    categoria: "Fundações & Terraplenagem",
+    fornecedorNome: "Supermix Concreto S.A.",
+    fornecedorRazao: "Supermix Concreto e Bombeamento S.A.",
+    fornecedorCnpj: "16.509.210/0008-40",
+    vendedorNome: "Henrique Bastos",
+    whatsapp: "5547999014455",
+    chavePix: "16.509.210/0008-40",
+    dataEmissao: "10/10/2026",
+    dataPrevistaEntrega: "20/10/2026",
+    prazoPagamento: "28/56 ddl Boleto",
+    tipoFrete: "CIF",
+    freteValor: 0,
+    valorTotal: 84200.0,
+    savingGerado: 11400.0,
+    status: "Aguardando Entrega",
+    itens: [
+      {
+        codigo: "SINAPI-00001524",
+        descricao:
+          "Concreto Usinado Bombeável fck 40 MPa Brita 0/1 Slump 12+-2",
+        unidade: "m³",
+        quantidade: 160,
+        precoUnitario: 526.25,
+        subtotal: 84200.0,
+        observacaoObra: "Programar caminhão betoneira a cada 40 min no portão A",
+      },
+    ],
+  },
+  {
+    id: "oc-2",
+    numeroOc: "OC-2026-0090",
+    scId: "sc-hist-2",
+    scCodigo: "SC-2026-0138",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    obraEndereco: "Rua XV de Novembro, 1120 — Joinville / SC",
+    obraEngenheiro: "Engª. Camila Dorneles",
+    categoria: "Revestimentos, Louças & Metais",
+    fornecedorNome: "Portobello Corporate B2B",
+    fornecedorRazao: "Portobello S.A. Divisão Engenharia",
+    fornecedorCnpj: "83.475.913/0001-91",
+    vendedorNome: "Mariana Borges",
+    whatsapp: "5548991045566",
+    chavePix: "83.475.913/0001-91",
+    dataEmissao: "12/10/2026",
+    dataPrevistaEntrega: "21/10/2026",
+    prazoPagamento: "28/56/84 ddl Faturado",
+    tipoFrete: "CIF",
+    freteValor: 0,
+    valorTotal: 66940.0,
+    savingGerado: 15460.0,
+    status: "Emitida",
+    itens: [
+      {
+        codigo: "POR-9090-TEC",
+        descricao:
+          "Porcelanato Técnico Polido 90x90cm Retificado Tráfego Intenso",
+        unidade: "m²",
+        quantidade: 680,
+        precoUnitario: 98.44,
+        subtotal: 66940.0,
+        observacaoObra: "Descarregar paletes com empilhadeira na doca térrea",
+      },
+    ],
+  },
+  {
+    id: "oc-3",
+    numeroOc: "OC-2026-0091",
+    scId: "sc-hist-3",
+    scCodigo: "SC-2026-0140",
+    obraId: "obra-3",
+    obraNome: "Condomínio Logístico SulPark",
+    obraEndereco: "Rod. BR-101, Km 118 — Itajaí / SC",
+    obraEngenheiro: "Eng. Roberto Siqueira",
+    categoria: "Pintura & Texturas",
+    fornecedorNome: "ImperSul Químicos & Tintas",
+    fornecedorRazao: "ImperSul Distribuidora Técnica para Construção Ltda",
+    fornecedorCnpj: "21.904.118/0001-60",
+    vendedorNome: "Diego Fontes",
+    whatsapp: "5547996553210",
+    chavePix: "21.904.118/0001-60",
+    dataEmissao: "14/10/2026",
+    dataPrevistaEntrega: "22/10/2026",
+    prazoPagamento: "28/56 ddl Boleto",
+    tipoFrete: "CIF",
+    freteValor: 0,
+    valorTotal: 44600.0,
+    savingGerado: 8300.0,
+    status: "Aguardando Entrega",
+    itens: [
+      {
+        codigo: "TIN-ACR-18L",
+        descricao:
+          "Tinta Acrílica Premium Fachada Fosca Cinza Urbano (Lata 18L)",
+        unidade: "un",
+        quantidade: 120,
+        precoUnitario: 371.67,
+        subtotal: 44600.0,
+        observacaoObra: "Entregar no Galpão B — Almoxarifado Central",
+      },
+    ],
+  },
+];
+
+const USUARIOS_INICIAIS: UsuarioSistema[] = [
+  {
+    id: "usr-admin-1",
+    nome: "João Carlos Bauer",
+    cargo: "Administrador",
+    obraId: "ALL",
+    obraNome: "Todas as Obras (Central de Compras)",
+    email: "suprimentos@jcbauer.eng.br",
+    senha: "123",
+    status: "Ativo",
+  },
+  {
+    id: "usr-eng-1",
+    nome: "Eng. Marcos Viana",
+    cargo: "Engenheiro",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    email: "marcos.viana@jcbauer.eng.br",
+    senha: "123",
+    status: "Ativo",
+  },
+  {
+    id: "usr-almox-1",
+    nome: "Carlos Silva",
+    cargo: "Almoxarife",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    email: "carlos.silva@jcbauer.eng.br",
+    senha: "123",
+    status: "Ativo",
+  },
+  {
+    id: "usr-enc-1",
+    nome: "José Santos",
+    cargo: "Encarregado",
+    obraId: "obra-3",
+    obraNome: "Condomínio Logístico SulPark",
+    email: "jose.santos@jcbauer.eng.br",
+    senha: "123",
+    status: "Ativo",
+  },
+];
+
+const ITENS_PLANILHA_INICIAIS: ItemPlanilhaImportada[] = [
+  {
+    id: "imp-1",
+    data: "14/08/2024",
+    fornecedor: "SulAço Distribuidora",
+    cnpj: "83.412.901/0001-54",
+    insumo: "Aço CA-50 Ø 10,0 mm (3/8\") Barra 12m",
+    categoria: "Estrutura (Aço & Concreto)",
+    quantidade: 400,
+    unidade: "barra",
+    precoUnitario: 56.8,
+    status: "Pendente",
+  },
+  {
+    id: "imp-2",
+    data: "22/09/2024",
+    fornecedor: "AluGlass Fachadas & Esquadrias",
+    cnpj: "11.209.440/0001-88",
+    insumo: "Esquadria de Alumínio Linha Suprema Cor Preta Anodizada",
+    categoria: "Esquadrias & Fachadas de Vidro",
+    quantidade: 185,
+    unidade: "m²",
+    precoUnitario: 875.0,
+    status: "Pendente",
+  },
+  {
+    id: "imp-3",
+    data: "03/11/2024",
+    fornecedor: "ImperSul Químicos & Tintas",
+    cnpj: "21.904.118/0001-60",
+    insumo: "Manta Asfáltica Polimérica 4mm Tipo III Viapol",
+    categoria: "Impermeabilização & Isolamento",
+    quantidade: 90,
+    unidade: "rl",
+    precoUnitario: 329.0,
+    status: "Pendente",
+  },
+  {
+    id: "imp-4",
+    data: "19/01/2025",
+    fornecedor: "Portobello Corporate B2B",
+    cnpj: "83.475.913/0001-91",
+    insumo: "Porcelanato Técnico Retificado 90x90cm Acetinado",
+    categoria: "Revestimentos, Louças & Metais",
+    quantidade: 520,
+    unidade: "m²",
+    precoUnitario: 96.5,
+    status: "Aprovado",
+  },
+  {
+    id: "imp-5",
+    data: "08/03/2025",
+    fornecedor: "Atlas Schindler Elevadores",
+    cnpj: "00.028.986/0019-04",
+    insumo: "Elevador Social Sem Casa de Máquinas 12 Passageiros",
+    categoria: "Elevadores & Equipamentos",
+    quantidade: 2,
+    unidade: "un",
+    precoUnitario: 196500.0,
+    status: "Aprovado",
+  },
+];
+
+const DUPLICIDADES_INICIAIS: DuplicidadeFornecedor[] = [
+  {
+    id: "dup-1",
+    nomeSugerido: "Comercial Gerdau S.A.",
+    cnpj: "33.611.500/0114-22",
+    variacoesPlanilha:
+      "Gerdau Aços Sul (18x) • Comercial Gerdau Joinville (9x)",
+    similaridade: "96%",
+    status: "Pendente",
+  },
+  {
+    id: "dup-2",
+    nomeSugerido: "Votorantim Cimentos S.A.",
+    cnpj: "01.637.895/0001-32",
+    variacoesPlanilha:
+      "Votoran Cimentos (24x) • Cimento Obras Votorantim (7x)",
+    similaridade: "94%",
+    status: "Pendente",
+  },
+  {
+    id: "dup-3",
+    nomeSugerido: "AluGlass Fachadas & Esquadrias",
+    cnpj: "11.209.440/0001-88",
+    variacoesPlanilha:
+      "Aluglass Esquadrias (11x) • AluGlass Engenharia Vidros (5x)",
+    similaridade: "92%",
+    status: "Pendente",
+  },
+];
+
+const COLABORADORES_INICIAIS: ColaboradorMapeado[] = [
+  {
+    id: "col-1",
+    nome: "Eng. Marcos Viana",
+    cargo: "Engenheiro Residente Sênior",
+    obraPrincipal: "Residencial Horizon Tower",
+    pedidosHistoricos: 184,
+    status: "Validado",
+  },
+  {
+    id: "col-2",
+    nome: "Engª. Camila Dorneles",
+    cargo: "Gestora de Obras Comerciais",
+    obraPrincipal: "Edifício Comercial Atrium Bauer",
+    pedidosHistoricos: 142,
+    status: "Validado",
+  },
+  {
+    id: "col-3",
+    nome: "João Carlos Bauer",
+    cargo: "Diretoria & Coordenação de Suprimentos",
+    obraPrincipal: "Central de Compras JC Bauer",
+    pedidosHistoricos: 618,
+    status: "Validado",
+  },
+  {
+    id: "col-4",
+    nome: "Eng. Roberto Siqueira",
+    cargo: "Engenheiro de Produção",
+    obraPrincipal: "Condomínio Logístico SulPark",
+    pedidosHistoricos: 96,
+    status: "Pendente",
+  },
+];
+
+const CONTRATOS_INICIAIS: ContratoSubempreitada[] = [
+  {
+    id: "con-1",
+    numeroContrato: "CT-2026-001",
+    empreiteiro: "AluGlass Engenharia de Fachadas Ltda",
+    cnpj: "11.209.440/0001-88",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    objeto:
+      "Fornecimento e Instalação de Peles de Vidro Structural Glazing e Esquadrias Linha Gold",
+    categoria: "Esquadrias & Fachadas de Vidro",
+    valorTotal: 430000,
+    percentualRetencao: 5,
+    dataInicio: "01/03/2026",
+    previsaoFim: "30/11/2026",
+    status: "Ativo",
+    medicoes: [
+      {
+        id: "bm-1-1",
+        numeroBm: "BM-01",
+        dataMedicao: "05/08/2026",
+        periodoReferencia: "01/07/2026 a 31/07/2026",
+        percentualMedidoPeriodo: 30,
+        percentualAcumulado: 30,
+        valorBruto: 129000,
+        valorRetencao: 6450,
+        valorLiquido: 122550,
+        engenheiroResponsavel: "Eng. Marcos Viana",
+        observacoes:
+          "Instalação dos perfis de ancoragem e contramarcas nos pavimentos 1 a 6.",
+        status: "Pago",
+        notaFiscal: "NF-e 001.204",
+      },
+      {
+        id: "bm-1-2",
+        numeroBm: "BM-02",
+        dataMedicao: "10/09/2026",
+        periodoReferencia: "01/08/2026 a 31/08/2026",
+        percentualMedidoPeriodo: 25,
+        percentualAcumulado: 55,
+        valorBruto: 107500,
+        valorRetencao: 5375,
+        valorLiquido: 102125,
+        engenheiroResponsavel: "Eng. Marcos Viana",
+        observacoes:
+          "Fixação dos vidros laminados nos pavimentos 1 a 6 e ancoragem dos pavimentos 7 a 12.",
+        status: "Aprovado para Pagamento",
+        notaFiscal: "NF-e 001.319",
+      },
+    ],
+  },
+  {
+    id: "con-2",
+    numeroContrato: "CT-2026-002",
+    empreiteiro: "HidroElétrica Instalações Prediais Ltda",
+    cnpj: "22.341.802/0001-44",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    objeto:
+      "Execução de Instalações Hidrossanitárias, Prumadas de Incêndio e Barrilete",
+    categoria: "Instalações Hidrossanitárias",
+    valorTotal: 280000,
+    percentualRetencao: 5,
+    dataInicio: "15/04/2026",
+    previsaoFim: "15/12/2026",
+    status: "Ativo",
+    medicoes: [
+      {
+        id: "bm-2-1",
+        numeroBm: "BM-01",
+        dataMedicao: "12/09/2026",
+        periodoReferencia: "01/08/2026 a 31/08/2026",
+        percentualMedidoPeriodo: 20,
+        percentualAcumulado: 20,
+        valorBruto: 56000,
+        valorRetencao: 2800,
+        valorLiquido: 53200,
+        engenheiroResponsavel: "Engª. Camila Dorneles",
+        observacoes:
+          "Montagem do barrilete superior e prumadas de esgoto até 5º pavimento.",
+        status: "Pago",
+        notaFiscal: "NF-e 000.892",
+      },
+    ],
+  },
+  {
+    id: "con-3",
+    numeroContrato: "CT-2026-003",
+    empreiteiro: "Alvenaria & Estruturas Catarinense Ltda",
+    cnpj: "18.420.110/0001-90",
+    obraId: "obra-3",
+    obraNome: "Condomínio Logístico SulPark",
+    objeto:
+      "Mão de Obra de Alvenaria Estrutural e Fechamento em Blocos de Concreto",
+    categoria: "Alvenaria & Vedações",
+    valorTotal: 350000,
+    percentualRetencao: 5,
+    dataInicio: "01/06/2026",
+    previsaoFim: "28/02/2027",
+    status: "Ativo",
+    medicoes: [
+      {
+        id: "bm-3-1",
+        numeroBm: "BM-01",
+        dataMedicao: "02/10/2026",
+        periodoReferencia: "01/09/2026 a 30/09/2026",
+        percentualMedidoPeriodo: 40,
+        percentualAcumulado: 40,
+        valorBruto: 140000,
+        valorRetencao: 7000,
+        valorLiquido: 133000,
+        engenheiroResponsavel: "Eng. Roberto Siqueira",
+        observacoes:
+          "Elevação de alvenaria dos Galpões A e B com grauteamento de cintas.",
+        status: "Pago",
+        notaFiscal: "NF-e 003.411",
+      },
+    ],
+  },
+];
+
+const ORCAMENTOS_INICIAIS: ItemOrcamentoObra[] = [
+  // Residencial Horizon Tower (obra-1)
+  {
+    id: "orc-1-1",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    categoria: "Estrutura (Aço & Concreto)",
+    valorOrcado: 2400000,
+  },
+  {
+    id: "orc-1-2",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    categoria: "Esquadrias & Fachadas de Vidro",
+    valorOrcado: 950000,
+  },
+  {
+    id: "orc-1-3",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    categoria: "Alvenaria & Vedações",
+    valorOrcado: 680000,
+  },
+  {
+    id: "orc-1-4",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    categoria: "Instalações Hidrossanitárias",
+    valorOrcado: 540000,
+  },
+  {
+    id: "orc-1-5",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    categoria: "Instalações Elétricas & Dados",
+    valorOrcado: 620000,
+  },
+  {
+    id: "orc-1-6",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    categoria: "Revestimentos, Louças & Metais",
+    valorOrcado: 850000,
+  },
+  {
+    id: "orc-1-7",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    categoria: "Elevadores & Equipamentos",
+    valorOrcado: 480000,
+  },
+  {
+    id: "orc-1-8",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    categoria: "Impermeabilização & Isolamento",
+    valorOrcado: 320000,
+  },
+
+  // Edifício Comercial Atrium Bauer (obra-2)
+  {
+    id: "orc-2-1",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    categoria: "Estrutura (Aço & Concreto)",
+    valorOrcado: 1900000,
+  },
+  {
+    id: "orc-2-2",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    categoria: "Esquadrias & Fachadas de Vidro",
+    valorOrcado: 820000,
+  },
+  {
+    id: "orc-2-3",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    categoria: "Alvenaria & Vedações",
+    valorOrcado: 450000,
+  },
+  {
+    id: "orc-2-4",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    categoria: "Instalações Hidrossanitárias",
+    valorOrcado: 420000,
+  },
+  {
+    id: "orc-2-5",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    categoria: "Instalações Elétricas & Dados",
+    valorOrcado: 580000,
+  },
+  {
+    id: "orc-2-6",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    categoria: "Elevadores & Equipamentos",
+    valorOrcado: 650000,
+  },
+
+  // Condomínio Logístico SulPark (obra-3)
+  {
+    id: "orc-3-1",
+    obraId: "obra-3",
+    obraNome: "Condomínio Logístico SulPark",
+    categoria: "Fundações & Terraplenagem",
+    valorOrcado: 1600000,
+  },
+  {
+    id: "orc-3-2",
+    obraId: "obra-3",
+    obraNome: "Condomínio Logístico SulPark",
+    categoria: "Estrutura (Aço & Concreto)",
+    valorOrcado: 3200000,
+  },
+  {
+    id: "orc-3-3",
+    obraId: "obra-3",
+    obraNome: "Condomínio Logístico SulPark",
+    categoria: "Alvenaria & Vedações",
+    valorOrcado: 890000,
+  },
+  {
+    id: "orc-3-4",
+    obraId: "obra-3",
+    obraNome: "Condomínio Logístico SulPark",
+    categoria: "Impermeabilização & Isolamento",
+    valorOrcado: 410000,
+  },
+  {
+    id: "orc-3-5",
+    obraId: "obra-3",
+    obraNome: "Condomínio Logístico SulPark",
+    categoria: "Instalações Elétricas & Dados",
+    valorOrcado: 750000,
+  },
+];
+
+/* ------------------------------------------------------------------------- */
+/* DADOS INICIAIS DE ESTOQUE, ALMOXARIFADO E PUXADAS PROGRAMADAS             */
+/* ------------------------------------------------------------------------- */
+
+const ESTOQUE_INICIAIS: ItemEstoque[] = [
+  {
+    id: "est-1",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    codigo: "ACO-CA50-125",
+    descricao: "Aço CA-50 Barra Reta 12.5mm (1/2 pol)",
+    categoria: "Aço & Armaduras",
+    unidade: "kg",
+    saldoAtual: 4200,
+    estoqueMinimo: 3000,
+    pontoReposicao: 4500,
+    custoMedio: 6.85,
+    localizacaoFisica: "Pátio de Ferro 01 - Baia A",
+    ultimaMovimentacao: "18/10/2026 10:15",
+    fornecedorHabitual: "Gerdau Aços Longos S.A.",
+  },
+  {
+    id: "est-2",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    codigo: "CIM-CPII-F32",
+    descricao: "Cimento Portland CP II-F-32 (Saco 50kg)",
+    categoria: "Cimento & Argamassa",
+    unidade: "saco",
+    saldoAtual: 45,
+    estoqueMinimo: 100,
+    pontoReposicao: 150,
+    custoMedio: 34.5,
+    localizacaoFisica: "Galpão Fechado - Palete 03",
+    ultimaMovimentacao: "18/10/2026 08:40",
+    fornecedorHabitual: "Votorantim Cimentos S.A.",
+  },
+  {
+    id: "est-3",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    codigo: "ARE-MED-LAV",
+    descricao: "Areia Média Lavada Rio Itajaí",
+    categoria: "Agregados",
+    unidade: "m³",
+    saldoAtual: 18,
+    estoqueMinimo: 15,
+    pontoReposicao: 25,
+    custoMedio: 95.0,
+    localizacaoFisica: "Baia de Agregados 02",
+    ultimaMovimentacao: "17/10/2026 16:30",
+    fornecedorHabitual: "Extrativa Areias e Minerais",
+  },
+  {
+    id: "est-4",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    codigo: "BLO-CER-141929",
+    descricao: "Bloco Cerâmico 8 Furos 14x19x29cm",
+    categoria: "Alvenaria & Vedações",
+    unidade: "milheiro",
+    saldoAtual: 1.2,
+    estoqueMinimo: 2.0,
+    pontoReposicao: 3.5,
+    custoMedio: 1450.0,
+    localizacaoFisica: "Pátio Externo - Quadra C",
+    ultimaMovimentacao: "16/10/2026 14:00",
+    fornecedorHabitual: "Cerâmica Vale do Tijolo",
+  },
+  {
+    id: "est-5",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    codigo: "TUB-PVC-ESG100",
+    descricao: "Tubo PVC Esgoto Série Normal 100mm (Barra 6m)",
+    categoria: "Instalações Hidrossanitárias",
+    unidade: "un",
+    saldoAtual: 38,
+    estoqueMinimo: 20,
+    pontoReposicao: 30,
+    custoMedio: 68.2,
+    localizacaoFisica: "Almoxarifado Hidráulico - Rack 04",
+    ultimaMovimentacao: "15/10/2026 11:20",
+    fornecedorHabitual: "Tigre Tubos e Conexões",
+  },
+  {
+    id: "est-6",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    codigo: "CIM-CPII-F32",
+    descricao: "Cimento Portland CP II-F-32 (Saco 50kg)",
+    categoria: "Cimento & Argamassa",
+    unidade: "saco",
+    saldoAtual: 310,
+    estoqueMinimo: 120,
+    pontoReposicao: 180,
+    custoMedio: 33.9,
+    localizacaoFisica: "Galpão Central - Paletes 01 a 04",
+    ultimaMovimentacao: "18/10/2026 09:10",
+    fornecedorHabitual: "Votorantim Cimentos S.A.",
+  },
+  {
+    id: "est-7",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    codigo: "CAB-FLEX-25AZ",
+    descricao: "Cabo Flexível 2,5mm² 750V Antichama Azul",
+    categoria: "Instalações Elétricas & Dados",
+    unidade: "rolo",
+    saldoAtual: 14,
+    estoqueMinimo: 10,
+    pontoReposicao: 16,
+    custoMedio: 215.0,
+    localizacaoFisica: "Almoxarifado Elétrico - Prateleira B1",
+    ultimaMovimentacao: "17/10/2026 15:45",
+    fornecedorHabitual: "Prysmian Cabos e Sistemas",
+  },
+  {
+    id: "est-8",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    codigo: "TIN-ACR-BR18L",
+    descricao: "Tinta Acrílica Premium Fosco Branco Neve 18L",
+    categoria: "Pintura & Acabamentos",
+    unidade: "lata",
+    saldoAtual: 6,
+    estoqueMinimo: 15,
+    pontoReposicao: 25,
+    custoMedio: 389.0,
+    localizacaoFisica: "Almoxarifado Acabamentos - Setor T",
+    ultimaMovimentacao: "16/10/2026 17:00",
+    fornecedorHabitual: "Suvinil Tintas S.A.",
+  },
+  {
+    id: "est-9",
+    obraId: "obra-3",
+    obraNome: "Condomínio Logístico SulPark",
+    codigo: "TEL-ELE-Q196",
+    descricao: "Tela Eletrosoldada Q-196 (Painel 2,45 x 6,00m)",
+    categoria: "Aço & Armaduras",
+    unidade: "painel",
+    saldoAtual: 92,
+    estoqueMinimo: 40,
+    pontoReposicao: 60,
+    custoMedio: 245.0,
+    localizacaoFisica: "Pátio Pavimentação - Pilha 02",
+    ultimaMovimentacao: "18/10/2026 08:00",
+    fornecedorHabitual: "Gerdau Aços Longos S.A.",
+  },
+  {
+    id: "est-10",
+    obraId: "obra-3",
+    obraNome: "Condomínio Logístico SulPark",
+    codigo: "LUM-LED-150W",
+    descricao: "Luminária Industrial LED High Bay 150W 6500K",
+    categoria: "Instalações Elétricas & Dados",
+    unidade: "un",
+    saldoAtual: 4,
+    estoqueMinimo: 20,
+    pontoReposicao: 35,
+    custoMedio: 290.0,
+    localizacaoFisica: "Galpão Logístico - Armário 01",
+    ultimaMovimentacao: "14/10/2026 10:30",
+    fornecedorHabitual: "Philips Iluminação Ilumax",
+  },
+  {
+    id: "est-11",
+    obraId: "central",
+    obraNome: "Almoxarifado Central Matriz",
+    codigo: "EPI-CAP-JUG",
+    descricao: "Capacete de Segurança Classe B com Jugular Azul",
+    categoria: "EPI & Segurança do Trabalho",
+    unidade: "un",
+    saldoAtual: 85,
+    estoqueMinimo: 30,
+    pontoReposicao: 50,
+    custoMedio: 28.5,
+    localizacaoFisica: "Prateleira EPI-01",
+    ultimaMovimentacao: "18/10/2026 11:00",
+    fornecedorHabitual: "MSA do Brasil Equipamentos",
+  },
+  {
+    id: "est-12",
+    obraId: "central",
+    obraNome: "Almoxarifado Central Matriz",
+    codigo: "DIS-DIA-115",
+    descricao: "Disco de Corte Diamantado Turbo 115mm x 22.2mm",
+    categoria: "Ferramental & Consumíveis",
+    unidade: "un",
+    saldoAtual: 68,
+    estoqueMinimo: 25,
+    pontoReposicao: 40,
+    custoMedio: 38.0,
+    localizacaoFisica: "Gaveteiro de Ferramentas G-04",
+    ultimaMovimentacao: "17/10/2026 14:15",
+    fornecedorHabitual: "Bosch Ferramentas",
+  },
+];
+
+const MOVIMENTACOES_INICIAIS: MovimentacaoEstoque[] = [
+  {
+    id: "mov-1",
+    itemId: "est-6",
+    codigoInsumo: "CIM-CPII-F32",
+    descricaoInsumo: "Cimento Portland CP II-F-32 (Saco 50kg)",
+    unidade: "saco",
+    tipo: "ENTRADA_COMPRA",
+    quantidade: 400,
+    saldoAnterior: 60,
+    saldoPosterior: 460,
+    custoUnitario: 33.9,
+    valorTotal: 13560,
+    dataHora: "17/10/2026 08:30",
+    responsavel: "Almoxarife Carlos (Atrium)",
+    obraOrigemId: "obra-2",
+    obraOrigemNome: "Edifício Comercial Atrium Bauer",
+    numeroDocumento: "NF-e 88.450 / OC-2026-031",
+    motivoEtapa: "Recebimento Fornecimento Votorantim",
+  },
+  {
+    id: "mov-2",
+    itemId: "est-6",
+    codigoInsumo: "CIM-CPII-F32",
+    descricaoInsumo: "Cimento Portland CP II-F-32 (Saco 50kg)",
+    unidade: "saco",
+    tipo: "TRANSFERENCIA_OBRA",
+    quantidade: 150,
+    saldoAnterior: 460,
+    saldoPosterior: 310,
+    custoUnitario: 33.9,
+    valorTotal: 5085,
+    dataHora: "18/10/2026 09:10",
+    responsavel: "Coord. Logística Rogério",
+    obraOrigemId: "obra-2",
+    obraOrigemNome: "Edifício Comercial Atrium Bauer",
+    obraDestinoId: "obra-1",
+    obraDestinoNome: "Residencial Horizon Tower",
+    numeroDocumento: "TRF-CANTEIRO-2026-012",
+    motivoEtapa: "Remanejamento para suprir urgência de concretagem sem nova compra externa",
+  },
+  {
+    id: "mov-3",
+    itemId: "est-1",
+    codigoInsumo: "ACO-CA50-125",
+    descricaoInsumo: "Aço CA-50 Barra Reta 12.5mm (1/2 pol)",
+    unidade: "kg",
+    tipo: "SAIDA_APLICACAO",
+    quantidade: 1800,
+    saldoAnterior: 6000,
+    saldoPosterior: 4200,
+    custoUnitario: 6.85,
+    valorTotal: 12330,
+    dataHora: "18/10/2026 10:15",
+    responsavel: "Mestre Sebastião",
+    obraOrigemId: "obra-1",
+    obraOrigemNome: "Residencial Horizon Tower",
+    numeroDocumento: "REQ-APLIC-094",
+    motivoEtapa: "Armação estrutural das vigas e pilares do 8º pavimento",
+  },
+  {
+    id: "mov-4",
+    itemId: "est-2",
+    codigoInsumo: "CIM-CPII-F32",
+    descricaoInsumo: "Cimento Portland CP II-F-32 (Saco 50kg)",
+    unidade: "saco",
+    tipo: "PERDA_AVARIA",
+    quantidade: 5,
+    saldoAnterior: 50,
+    saldoPosterior: 45,
+    custoUnitario: 34.5,
+    valorTotal: 172.5,
+    dataHora: "18/10/2026 08:40",
+    responsavel: "Eng. Marcos Viana",
+    obraOrigemId: "obra-1",
+    obraOrigemNome: "Residencial Horizon Tower",
+    numeroDocumento: "LDO-AVARIA-008",
+    motivoEtapa: "Sacos rasgados na descarga e umedecidos por infiltração lateral no palete",
+  },
+  {
+    id: "mov-5",
+    itemId: "est-11",
+    codigoInsumo: "EPI-CAP-JUG",
+    descricaoInsumo: "Capacete de Segurança Classe B com Jugular Azul",
+    unidade: "un",
+    tipo: "SAIDA_APLICACAO",
+    quantidade: 15,
+    saldoAnterior: 100,
+    saldoPosterior: 85,
+    custoUnitario: 28.5,
+    valorTotal: 427.5,
+    dataHora: "18/10/2026 11:00",
+    responsavel: "Téc. Segurança Juliana",
+    obraOrigemId: "central",
+    obraOrigemNome: "Almoxarifado Central Matriz",
+    numeroDocumento: "ENT-EPI-2026-088",
+    motivoEtapa: "Distribuição para nova frente de armadores terceirizados",
+  },
+];
+
+const PUXADAS_INICIAIS: ContratoPuxadaFornecimento[] = [
+  {
+    id: "ctr-pux-1",
+    numeroContrato: "CTR-2026-CONC-01",
+    numeroOC: "OC-2026-004",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    fornecedorNome: "Polimix Concreto Ltda",
+    insumo: "Concreto Usinado Fck 35 MPa c/ Brita 1 e Bomba Lança 36m",
+    unidade: "m³",
+    quantidadeContratada: 1200,
+    quantidadeEntregue: 780,
+    valorUnitario: 445.0,
+    valorTotalContrato: 534000,
+    dataInicio: "15/06/2026",
+    dataPrevisaoTermino: "30/11/2026",
+    status: "Ativo",
+    programacoes: [
+      {
+        id: "prg-1",
+        contratoId: "ctr-pux-1",
+        dataHoraAgendada: "19/10/2026 07:30",
+        quantidade: 32,
+        unidade: "m³",
+        status: "Agendada",
+        etapaAplicacao: "Concretagem da Laje e Vigas do 9º Pavimento",
+        notaFiscal: "Aguardando NF Usina",
+        responsavelRecebimento: "Eng. Marcos Viana",
+        observacoes: "4 caminhões betoneira de 8m³. Início pontual às 07:30 com bomba lança posicionada.",
+      },
+      {
+        id: "prg-2",
+        contratoId: "ctr-pux-1",
+        dataHoraAgendada: "24/10/2026 08:00",
+        quantidade: 40,
+        unidade: "m³",
+        status: "Agendada",
+        etapaAplicacao: "Pilares e Vigas de Transição do 10º Pavimento",
+        responsavelRecebimento: "Mestre Sebastião",
+        observacoes: "Previsão de 5 viagens. Slump 12 +/- 2.",
+      },
+      {
+        id: "prg-3",
+        contratoId: "ctr-pux-1",
+        dataHoraAgendada: "15/10/2026 08:00",
+        quantidade: 32,
+        unidade: "m³",
+        status: "Recebida",
+        etapaAplicacao: "Laje do 8º Pavimento",
+        notaFiscal: "NF-e 119.820",
+        responsavelRecebimento: "Eng. Marcos Viana",
+        observacoes: "Concretagem concluída sem desvios. CP moldados para 7 e 28 dias.",
+      },
+    ],
+  },
+  {
+    id: "ctr-pux-2",
+    numeroContrato: "CTR-2026-ACO-02",
+    numeroOC: "OC-2026-002",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    fornecedorNome: "Gerdau Aços Longos S.A.",
+    insumo: "Aço CA-50 Cortado e Dobrado Conforme Projeto Estrutural",
+    unidade: "kg",
+    quantidadeContratada: 45000,
+    quantidadeEntregue: 32500,
+    valorUnitario: 7.2,
+    valorTotalContrato: 324000,
+    dataInicio: "10/05/2026",
+    dataPrevisaoTermino: "15/12/2026",
+    status: "Ativo",
+    programacoes: [
+      {
+        id: "prg-4",
+        contratoId: "ctr-pux-2",
+        dataHoraAgendada: "22/10/2026 13:30",
+        quantidade: 6000,
+        unidade: "kg",
+        status: "Agendada",
+        etapaAplicacao: "Armaduras de Laje 9º e 10º Pavimentos",
+        responsavelRecebimento: "Almoxarife Horizon",
+        observacoes: "Carreta Prancha. Descarregamento com grua da torre.",
+      },
+    ],
+  },
+  {
+    id: "ctr-pux-3",
+    numeroContrato: "CTR-2026-CONC-02",
+    numeroOC: "OC-2026-015",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    fornecedorNome: "Supermix Concreto S.A.",
+    insumo: "Concreto Usinado Fck 40 MPa c/ Sílica Ativa",
+    unidade: "m³",
+    quantidadeContratada: 850,
+    quantidadeEntregue: 610,
+    valorUnitario: 470.0,
+    valorTotalContrato: 399500,
+    dataInicio: "01/07/2026",
+    dataPrevisaoTermino: "20/12/2026",
+    status: "Ativo",
+    programacoes: [
+      {
+        id: "prg-5",
+        contratoId: "ctr-pux-3",
+        dataHoraAgendada: "20/10/2026 08:30",
+        quantidade: 24,
+        unidade: "m³",
+        status: "Agendada",
+        etapaAplicacao: "Vigas de Transição Pavimento Técnico",
+        responsavelRecebimento: "Enga. Beatriz Mendes",
+        observacoes: "Concreto auto-adensável com aditivo retardador de pega.",
+      },
+    ],
+  },
+];
+
+const DIARIOS_INICIAIS: DiarioObraRegistro[] = [
+  {
+    id: "rdo-1",
+    obraId: "obra-1",
+    obraNome: "Horizon Tower",
+    data: "18/10/2026",
+    hora: "17:30",
+    responsavelNome: "Eng. Henrique Fontana",
+    responsavelCargo: "Engenheiro",
+    clima: "Ensolarado",
+    efetivoProprio: 18,
+    efetivoTerceirizado: 34,
+    frentesServico:
+      "Concretagem laje do 22º pavimento (32 m³ Polimix); armação de pilares do 23º pavimento; montagem de tubulações hidrossanitárias no 16º pavimento; alvenaria estrutural no 18º pavimento.",
+    ocorrencias:
+      "Carga de aço CA-50 Gerdau e concreto Polimix recebidos no horário agendado com NF registrada pelo Almoxarife. Slump test e corpos de prova coletados rigorosamente.",
+  },
+  {
+    id: "rdo-2",
+    obraId: "obra-2",
+    obraNome: "Atrium Bauer",
+    data: "18/10/2026",
+    hora: "16:45",
+    responsavelNome: "Enga. Beatriz Mendes",
+    responsavelCargo: "Engenheiro",
+    clima: "Nublado",
+    efetivoProprio: 12,
+    efetivoTerceirizado: 26,
+    frentesServico:
+      "Montagem de esquadrias Linha Gold e pele de vidro na fachada Norte (AluGlass); impermeabilização com manta asfáltica no terraço e jardineiras; pintura interna e forro de gesso do 8º ao 10º pav.",
+    ocorrencias:
+      "Liberada medição técnica BM-002 da AluGlass com 100% de conformidade. Não houve ocorrências de acidentes ou desvios de materiais.",
+  },
+  {
+    id: "rdo-3",
+    obraId: "obra-3",
+    obraNome: "SulPark Logístico",
+    data: "17/10/2026",
+    hora: "17:00",
+    responsavelNome: "Mestre Valdir Santos",
+    responsavelCargo: "Encarregado",
+    clima: "Ensolarado",
+    efetivoProprio: 8,
+    efetivoTerceirizado: 19,
+    frentesServico:
+      "Nivelamento a laser do piso de alta resistência Módulo B; fixação de terças metálicas na cobertura do galpão; terraplenagem e compactação do pátio externo de carretas.",
+    ocorrencias:
+      "Entrega de diesel e lubrificantes conferida no almoxarifado. Revisão preventiva do maquinário pesado agendada para amanhã cedo.",
+  },
+];
+
+const DADOS_FINANCEIROS_DIARIOS_OUTUBRO: RegistroDiarioFinanceiro[] = [
+  {
+    data: "01/10",
+    diaSemana: "Qui",
+    volumeContratado: 385000,
+    savingEconomizado: 48500,
+    pedidosFechados: 4,
+    destaqueObra: "Horizon Tower",
+    destaqueInsumo: "Aço CA-50 Gerdau",
+  },
+  {
+    data: "02/10",
+    diaSemana: "Sex",
+    volumeContratado: 220000,
+    savingEconomizado: 29000,
+    pedidosFechados: 3,
+    destaqueObra: "Atrium Bauer",
+    destaqueInsumo: "Concreto Usinado Fck 40",
+  },
+  {
+    data: "03/10",
+    diaSemana: "Sáb",
+    volumeContratado: 95000,
+    savingEconomizado: 11200,
+    pedidosFechados: 1,
+    destaqueObra: "SulPark Logístico",
+    destaqueInsumo: "Piso Alta Resistência",
+  },
+  {
+    data: "05/10",
+    diaSemana: "Seg",
+    volumeContratado: 410000,
+    savingEconomizado: 56000,
+    pedidosFechados: 5,
+    destaqueObra: "Atrium Bauer",
+    destaqueInsumo: "Esquadrias AluGlass Linha Gold",
+  },
+  {
+    data: "06/10",
+    diaSemana: "Ter",
+    volumeContratado: 290000,
+    savingEconomizado: 38000,
+    pedidosFechados: 3,
+    destaqueObra: "Horizon Tower",
+    destaqueInsumo: "Tubulações PPR & PVC Tigre",
+  },
+  {
+    data: "07/10",
+    diaSemana: "Qua",
+    volumeContratado: 195000,
+    savingEconomizado: 26000,
+    pedidosFechados: 2,
+    destaqueObra: "SulPark Logístico",
+    destaqueInsumo: "Telhas Termoacústicas PIR",
+  },
+  {
+    data: "08/10",
+    diaSemana: "Qui",
+    volumeContratado: 340000,
+    savingEconomizado: 44000,
+    pedidosFechados: 4,
+    destaqueObra: "Horizon Tower",
+    destaqueInsumo: "Quadros e Barramentos Schneider",
+  },
+  {
+    data: "09/10",
+    diaSemana: "Sex",
+    volumeContratado: 280000,
+    savingEconomizado: 35000,
+    pedidosFechados: 3,
+    destaqueObra: "Atrium Bauer",
+    destaqueInsumo: "Porcelanatos Retificados Portobello",
+  },
+  {
+    data: "10/10",
+    diaSemana: "Sáb",
+    volumeContratado: 85000,
+    savingEconomizado: 9800,
+    pedidosFechados: 1,
+    destaqueObra: "SulPark Logístico",
+    destaqueInsumo: "Manta Asfáltica 4mm Impermeabilização",
+  },
+  {
+    data: "12/10",
+    diaSemana: "Seg",
+    volumeContratado: 140000,
+    savingEconomizado: 18000,
+    pedidosFechados: 2,
+    destaqueObra: "Horizon Tower",
+    destaqueInsumo: "Cimento CP-II Votoran (Carreta)",
+  },
+  {
+    data: "13/10",
+    diaSemana: "Ter",
+    volumeContratado: 310000,
+    savingEconomizado: 41000,
+    pedidosFechados: 4,
+    destaqueObra: "Atrium Bauer",
+    destaqueInsumo: "Climatização VRF Central Daikin",
+  },
+  {
+    data: "14/10",
+    diaSemana: "Qua",
+    volumeContratado: 460000,
+    savingEconomizado: 62000,
+    pedidosFechados: 5,
+    destaqueObra: "Horizon Tower",
+    destaqueInsumo: "Elevadores Regenerativos Atlas Schindler",
+  },
+  {
+    data: "15/10",
+    diaSemana: "Qui",
+    volumeContratado: 275000,
+    savingEconomizado: 34000,
+    pedidosFechados: 3,
+    destaqueObra: "SulPark Logístico",
+    destaqueInsumo: "Estruturas e Terças Metálicas",
+  },
+  {
+    data: "16/10",
+    diaSemana: "Sex",
+    volumeContratado: 390000,
+    savingEconomizado: 51000,
+    pedidosFechados: 4,
+    destaqueObra: "Atrium Bauer",
+    destaqueInsumo: "Pele de Vidro Fachada Norte",
+  },
+  {
+    data: "17/10",
+    diaSemana: "Sáb",
+    volumeContratado: 215000,
+    savingEconomizado: 27500,
+    pedidosFechados: 2,
+    destaqueObra: "SulPark Logístico",
+    destaqueInsumo: "Portas Seccionadas e Niveladoras de Doca",
+  },
+  {
+    data: "18/10",
+    diaSemana: "Dom (Hoje)",
+    volumeContratado: 295000,
+    savingEconomizado: 39000,
+    pedidosFechados: 3,
+    destaqueObra: "Horizon Tower",
+    destaqueInsumo: "Bombas de Recalque & Pressurização",
+  },
+];
+
+/* ------------------------------------------------------------------------- */
+/* HELPERS DE INTELIGÊNCIA DE COMPRAS, CURVA ABC, ALÇADAS E EXCEL            */
+/* ------------------------------------------------------------------------- */
+
+function calcularClassificacaoAbc(
+  solicitacoes: SolicitacaoCompra[],
+  ordens: OrdemCompra[]
+): Map<string, { classe: ClasseAbc; totalGeral: number; percentual: number }> {
+  const mapa = new Map<string, number>();
+
+  ordens.forEach((o) => {
+    o.itens.forEach((it) => {
+      const desc = it.descricao.trim();
+      mapa.set(desc, (mapa.get(desc) || 0) + it.subtotal);
+    });
+  });
+
+  solicitacoes.forEach((s) => {
+    s.itens.forEach((it) => {
+      const desc = it.descricao.trim();
+      const val = it.quantidade * it.orcamentoUnitario;
+      mapa.set(desc, (mapa.get(desc) || 0) + val);
+    });
+  });
+
+  const lista = Array.from(mapa.entries()).sort((a, b) => b[1] - a[1]);
+  const somaTotal = lista.reduce((acc, [, val]) => acc + val, 0);
+
+  const resultado = new Map<
+    string,
+    { classe: ClasseAbc; totalGeral: number; percentual: number }
+  >();
+
+  let acumulado = 0;
+  lista.forEach(([desc, val]) => {
+    acumulado += val;
+    const pct = somaTotal > 0 ? (acumulado / somaTotal) * 100 : 0;
+    let classe: ClasseAbc = "Classe C";
+    if (pct <= 80) classe = "Classe A";
+    else if (pct <= 95) classe = "Classe B";
+    resultado.set(desc, { classe, totalGeral: val, percentual: pct });
+  });
+
+  return resultado;
+}
+
+function buscarHistoricoInsumo(
+  descricaoItem: string,
+  ordens: OrdemCompra[],
+  historicoEconomia: ItemEconomiaInsumo[]
+): {
+  ultimoPreco: number;
+  dataUltima: string;
+  fornecedor: string;
+  precoMedio: number;
+} | null {
+  const descLimpa = descricaoItem.toLowerCase().trim();
+  const comprasMatching: { preco: number; data: string; forn: string }[] = [];
+
+  ordens.forEach((oc) => {
+    oc.itens.forEach((it) => {
+      if (
+        it.descricao.toLowerCase().includes(descLimpa) ||
+        descLimpa.includes(it.descricao.toLowerCase())
+      ) {
+        comprasMatching.push({
+          preco: it.precoUnitario,
+          data: oc.dataEmissao,
+          forn: oc.fornecedorNome,
+        });
+      }
+    });
+  });
+
+  if (comprasMatching.length > 0) {
+    const soma = comprasMatching.reduce((acc, c) => acc + c.preco, 0);
+    const media = soma / comprasMatching.length;
+    const ultima = comprasMatching[comprasMatching.length - 1];
+    return {
+      ultimoPreco: ultima.preco,
+      dataUltima: ultima.data,
+      fornecedor: ultima.forn,
+      precoMedio: media,
+    };
+  }
+
+  const ecoItem = historicoEconomia.find(
+    (e) =>
+      e.insumo.toLowerCase().includes(descLimpa) ||
+      descLimpa.includes(e.insumo.toLowerCase())
+  );
+  if (ecoItem) {
+    return {
+      ultimoPreco: ecoItem.valorFechado,
+      dataUltima: "Histórico 2026",
+      fornecedor: ecoItem.fornecedorVencedor,
+      precoMedio: (ecoItem.valorMaiorCotado + ecoItem.valorFechado) / 2,
+    };
+  }
+
+  return null;
+}
+
+function obterAlcadaAprovacao(valor: number): {
+  nivel: NivelAlcada;
+  requerDiretoria: boolean;
+  requerGerencia: boolean;
+  badgeClass: string;
+} {
+  if (valor > 100000) {
+    return {
+      nivel: "Diretoria Executiva / CFO",
+      requerDiretoria: true,
+      requerGerencia: true,
+      badgeClass: "bg-red-100 text-red-900 border-red-300",
+    };
+  }
+  if (valor > 20000) {
+    return {
+      nivel: "Gerência de Obras",
+      requerDiretoria: false,
+      requerGerencia: true,
+      badgeClass: "bg-amber-100 text-amber-900 border-amber-300",
+    };
+  }
+  return {
+    nivel: "Comprador Autorizado",
+    requerDiretoria: false,
+    requerGerencia: false,
+    badgeClass: "bg-emerald-100 text-emerald-900 border-emerald-300",
+  };
+}
+
+function exportarCotacaoExcel(
+  sc: SolicitacaoCompra,
+  obraNome: string
+) {
+  const dadosPlanilha: Record<string, unknown>[] = [];
+
+  sc.itens.forEach((it) => {
+    const row: Record<string, unknown> = {
+      "Código Insumo": it.codigo,
+      "Descrição do Material / Serviço": it.descricao,
+      Unidade: it.unidade,
+      Quantidade: it.quantidade,
+      "Orçamento Unit. (R$)": it.orcamentoUnitario,
+      "Orçamento Total (R$)": it.quantidade * it.orcamentoUnitario,
+    };
+
+    sc.propostas.forEach((prop) => {
+      const unit = prop.precosUnitarios[it.id] || 0;
+      row[`${prop.fornecedorNome} (Unit R$)`] = unit;
+      row[`${prop.fornecedorNome} (Subtotal R$)`] = it.quantidade * unit;
+    });
+
+    dadosPlanilha.push(row);
+  });
+
+  const ws = XLSX.utils.json_to_sheet(dadosPlanilha);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Mapa de Cotação");
+
+  const fileName = `JC_BAUER_${sc.codigo}_${obraNome.replace(/\s+/g, "_")}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+}
+
+function exportarOrdensExcel(ordens: OrdemCompra[]) {
+  const dados = ordens.map((o) => ({
+    "Nº OC": o.numeroOc,
+    "Código SC": o.scCodigo,
+    Obra: o.obraNome,
+    Fornecedor: o.fornecedorNome,
+    CNPJ: o.fornecedorCnpj,
+    "Data Emissão": o.dataEmissao,
+    "Previsão Entrega": o.dataPrevistaEntrega || "A definir",
+    "Valor Total (R$)": o.valorTotal,
+    "Saving Gerado (R$)": o.savingGerado,
+    "Alçada de Aprovação": o.alcadaAprovacao || "Comprador Autorizado",
+    Frete: o.tipoFrete,
+    Status: o.status,
+    "Nota Fiscal": o.notaFiscalRecebida || "Pendente",
+    "Condição Recebimento": o.condicaoRecebimento || "Aguardando",
+    "Recebido Por": o.recebidoPor || "Pendente",
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(dados);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Ordens de Compra");
+  XLSX.writeFile(
+    wb,
+    `JC_BAUER_Ordens_de_Compra_${new Date().toISOString().slice(0, 10)}.xlsx`
+  );
+}
+
+/* ------------------------------------------------------------------------- */
+/* HELPERS DE IQF (VENDOR RATING), ORÇAMENTO, LOGÍSTICA E NOTIFICAÇÕES       */
+/* ------------------------------------------------------------------------- */
+
+function calcularIqfFornecedor(
+  fornecedorNome: string,
+  ordens: OrdemCompra[]
+): IqfFornecedor {
+  const fNomeNorm = fornecedorNome.toLowerCase().trim();
+  const ordensDoForn = ordens.filter(
+    (o) =>
+      o.fornecedorNome.toLowerCase().trim() === fNomeNorm ||
+      o.fornecedorRazao.toLowerCase().includes(fNomeNorm) ||
+      fNomeNorm.includes(o.fornecedorNome.toLowerCase().trim())
+  );
+
+  const total = ordensDoForn.length;
+  if (total === 0) {
+    return {
+      scoreGeral: 88,
+      taxaPontualidade: 90,
+      pontualidadeScore: 90,
+      conformidadeFisica: 92,
+      conformidadeScore: 92,
+      competitividadeComercial: 82,
+      competitividadeScore: 82,
+      totalFornecimentos: 0,
+      entregasNoPrazo: 0,
+      entregasSemRessalvas: 0,
+      classificacao: "Fornecedor Prata",
+      corBadge: "bg-blue-100 text-blue-900 border-blue-300",
+    };
+  }
+
+  let entregasSemRessalvas = 0;
+  let entregasNoPrazo = 0;
+  let savingsTotais = 0;
+
+  ordensDoForn.forEach((o) => {
+    const cond = (o.condicaoRecebimento || "").toLowerCase();
+    const temAvaria =
+      cond.includes("parcial") ||
+      cond.includes("ressalva") ||
+      cond.includes("avaria");
+    if (!temAvaria) entregasSemRessalvas++;
+
+    entregasNoPrazo++;
+    savingsTotais += o.savingGerado || 0;
+  });
+
+  const pontualidadeScore = Math.round((entregasNoPrazo / total) * 100);
+  const conformidadeScore = Math.round((entregasSemRessalvas / total) * 100);
+  const competitividadeScore = Math.min(
+    100,
+    Math.round(75 + (savingsTotais > 0 ? 20 : 5))
+  );
+
+  const scoreGeral = Math.round(
+    pontualidadeScore * 0.4 +
+      conformidadeScore * 0.4 +
+      competitividadeScore * 0.2
+  );
+
+  let classificacao: IqfFornecedor["classificacao"] = "Fornecedor Monitorado";
+  let corBadge = "bg-amber-100 text-amber-900 border-amber-300";
+
+  if (scoreGeral >= 90) {
+    classificacao = "Fornecedor Ouro";
+    corBadge = "bg-emerald-100 text-emerald-900 border-emerald-300";
+  } else if (scoreGeral >= 75) {
+    classificacao = "Fornecedor Prata";
+    corBadge = "bg-blue-100 text-blue-900 border-blue-300";
+  } else if (scoreGeral < 60) {
+    classificacao = "Risco Crítico";
+    corBadge = "bg-red-100 text-red-900 border-red-300";
+  }
+
+  return {
+    scoreGeral,
+    taxaPontualidade: pontualidadeScore,
+    pontualidadeScore,
+    conformidadeFisica: conformidadeScore,
+    conformidadeScore,
+    competitividadeComercial: competitividadeScore,
+    competitividadeScore,
+    totalFornecimentos: total,
+    entregasNoPrazo,
+    entregasSemRessalvas,
+    classificacao,
+    corBadge,
+  };
+}
+
+function calcularSaldoOrcamentario(
+  obraId: string,
+  categoria: string,
+  orcamentos: ItemOrcamentoObra[],
+  ordens: OrdemCompra[],
+  contratos: ContratoSubempreitada[]
+): {
+  valorOrcado: number;
+  comprometido: number;
+  valorComprometido: number;
+  realizado: number;
+  valorRealizado: number;
+  saldoDisponivel: number;
+  percentualConsumido: number;
+} {
+  const catNorm = categoria.toLowerCase().trim();
+  const itensOrc = orcamentos.filter(
+    (o) =>
+      (obraId === "ALL" || o.obraId === obraId) &&
+      (o.categoria.toLowerCase().includes(catNorm) ||
+        catNorm.includes(o.categoria.toLowerCase()))
+  );
+
+  const valorOrcado =
+    itensOrc.length > 0
+      ? itensOrc.reduce((acc, i) => acc + i.valorOrcado, 0)
+      : 800000;
+
+  const ordensCat = ordens.filter(
+    (o) =>
+      (obraId === "ALL" || o.obraId === obraId) &&
+      (o.categoria.toLowerCase().includes(catNorm) ||
+        catNorm.includes(o.categoria.toLowerCase()))
+  );
+  const totalOrdens = ordensCat.reduce((acc, o) => acc + o.valorTotal, 0);
+
+  const contratosCat = contratos.filter(
+    (c) =>
+      (obraId === "ALL" || c.obraId === obraId) &&
+      (c.categoria.toLowerCase().includes(catNorm) ||
+        catNorm.includes(c.categoria.toLowerCase()))
+  );
+  const totalContratos = contratosCat.reduce((acc, c) => acc + c.valorTotal, 0);
+
+  const comprometido = totalOrdens + totalContratos;
+
+  const ordensPagas = ordensCat
+    .filter(
+      (o) =>
+        o.status === "Entregue na Obra (Confirmado pelo Almoxarifado)" ||
+        o.status === "Entregue"
+    )
+    .reduce((acc, o) => acc + o.valorTotal, 0);
+
+  const bmsPagos = contratosCat.reduce(
+    (acc, c) =>
+      acc +
+      c.medicoes
+        .filter((m) => m.status === "Pago")
+        .reduce((bAcc, bm) => bAcc + bm.valorLiquido, 0),
+    0
+  );
+
+  const realizado = ordensPagas + bmsPagos;
+  const saldoDisponivel = Math.max(0, valorOrcado - comprometido);
+  const percentualConsumido =
+    valorOrcado > 0 ? (comprometido / valorOrcado) * 100 : 0;
+
+  return {
+    valorOrcado,
+    comprometido,
+    valorComprometido: comprometido,
+    realizado,
+    valorRealizado: realizado,
+    saldoDisponivel,
+    percentualConsumido: Math.round(percentualConsumido),
+  };
+}
+
+function gerarNotificacoesDoSistema(
+  solicitacoes: SolicitacaoCompra[],
+  ordens: OrdemCompra[],
+  contratos: ContratoSubempreitada[]
+): NotificacaoItem[] {
+  const lista: NotificacaoItem[] = [];
+
+  // 1. Pedidos Críticos (Obra Parada)
+  solicitacoes
+    .filter(
+      (s) =>
+        s.urgencia === "Crítica - Obra Parada" && s.status !== "Entregue na Obra"
+    )
+    .forEach((s) => {
+      lista.push({
+        id: `notif-crit-${s.id}`,
+        tipo: "URGENTE_OBRA",
+        severidade: "Critica",
+        titulo: `🚨 URGÊNCIA CRÍTICA: ${s.codigo}`,
+        descricao: `${s.solicitante} marcou o pedido de ${s.categoria} como "Obra Parada".`,
+        dataHora: s.horarioPedido || s.dataAbertura,
+        horario: s.horarioPedido || s.dataAbertura,
+        linkTab: "Cotacoes",
+        destinoAba: "Cotacoes",
+        targetId: s.id,
+        refId: s.id,
+        lida: false,
+      });
+    });
+
+  // 2. Medições Pendentes de Aprovação
+  contratos.forEach((c) => {
+    c.medicoes
+      .filter((m) => m.status === "Pendente Aprovação")
+      .forEach((m) => {
+        lista.push({
+          id: `notif-bm-${m.id}`,
+          tipo: "MEDICAO_PENDENTE",
+          severidade: "Alerta",
+          titulo: `📐 Medição Pendente: ${m.numeroBm} (${c.empreiteiro})`,
+          descricao: `Avanço de ${m.percentualMedidoPeriodo}% (${formatBRL(
+            m.valorLiquido
+          )}) aguardando liberação para faturamento.`,
+          dataHora: m.dataMedicao,
+          horario: m.dataMedicao,
+          linkTab: "Medicoes",
+          destinoAba: "Medicoes",
+          targetId: c.id,
+          refId: c.id,
+          lida: false,
+        });
+      });
+  });
+
+  // 3. Entregas Programadas / A Caminho
+  ordens
+    .filter((o) => o.status !== "Entregue na Obra (Confirmado pelo Almoxarifado)")
+    .slice(0, 3)
+    .forEach((o) => {
+      lista.push({
+        id: `notif-ent-${o.id}`,
+        tipo: "FRETE_ATRASADO",
+        severidade: "Alerta",
+        titulo: `🚚 Carga a Caminho: ${o.numeroOc}`,
+        descricao: `${o.fornecedorNome} entregando em ${o.obraNome}. Previsão: ${
+          o.dataPrevistaEntrega || o.dataEmissao
+        }.`,
+        dataHora: o.dataEmissao,
+        horario: o.dataPrevistaEntrega || o.dataEmissao,
+        linkTab: "Logistica",
+        destinoAba: "Logistica",
+        targetId: o.id,
+        refId: o.id,
+        lida: false,
+      });
+    });
+
+  // 4. Mensagens Não Respondidas
+  solicitacoes
+    .filter((s) => s.mensagens && s.mensagens.length > 0)
+    .slice(0, 3)
+    .forEach((s) => {
+      const ultima = s.mensagens![s.mensagens!.length - 1];
+      lista.push({
+        id: `notif-msg-${s.id}`,
+        tipo: "MENSAGEM_NOVA",
+        severidade: "Info",
+        titulo: `💬 Nova Mensagem em ${s.codigo}`,
+        descricao: `${ultima.autorNome}: "${ultima.texto}"`,
+        dataHora: ultima.dataHora,
+        horario: ultima.dataHora,
+        linkTab: "Painel",
+        destinoAba: "Painel",
+        targetId: s.id,
+        refId: s.id,
+        lida: false,
+      });
+    });
+
+  return lista;
+}
+
+function agruparCargasLogistica(
+  ordens: OrdemCompra[],
+  obraFiltro: string
+): DiaLogisticaSemana[] {
+  const ordensAlvo = ordens.filter(
+    (o) => obraFiltro === "ALL" || o.obraId === obraFiltro
+  );
+
+  const diasInfo = [
+    { diaSemana: "Segunda-feira", dataLabel: "20/10/2026" },
+    { diaSemana: "Terça-feira", dataLabel: "21/10/2026" },
+    { diaSemana: "Quarta-feira", dataLabel: "22/10/2026" },
+    { diaSemana: "Quinta-feira", dataLabel: "23/10/2026" },
+    { diaSemana: "Sexta-feira", dataLabel: "24/10/2026" },
+    { diaSemana: "Sábado", dataLabel: "25/10/2026" },
+  ];
+
+  const janelas = [
+    "08:00 - 10:00",
+    "10:30 - 12:00",
+    "13:30 - 15:30",
+    "16:00 - 17:30",
+  ];
+  const veiculos = [
+    "Carreta Articulada (Vanderleia)",
+    "Caminhão Betoneira 8m³",
+    "Truck Baú Fechado",
+    "Carreta Prancha com Munck",
+  ];
+
+  return diasInfo.map((d, dIdx) => {
+    const ordensDoDia = ordensAlvo.filter(
+      (_, idx) => idx % diasInfo.length === dIdx
+    );
+
+    const cargas: CargaItemLogistica[] = ordensDoDia.map((o, cIdx) => {
+      const entregue =
+        o.status === "Entregue na Obra (Confirmado pelo Almoxarifado)" ||
+        o.status === "Entregue";
+
+      return {
+        id: `carga-${o.id}-${dIdx}-${cIdx}`,
+        ordemId: o.id,
+        numeroOc: o.numeroOc,
+        obraId: o.obraId,
+        obraNome: o.obraNome,
+        fornecedorNome: o.fornecedorNome,
+        insumoDescricao: o.itens[0]?.descricao || o.categoria,
+        horarioJanela: janelas[cIdx % janelas.length],
+        tipoVeiculo: veiculos[(dIdx + cIdx) % veiculos.length],
+        tipoFrete: o.tipoFrete,
+        status: entregue ? "Entregue" : dIdx === 0 ? "Hoje" : "Agendado",
+      };
+    });
+
+    const conflitoPortao = cargas.length >= 2;
+
+    return {
+      diaSemana: d.diaSemana,
+      dataLabel: d.dataLabel,
+      conflitoPortao,
+      cargas,
+    };
+  });
+}
+
+/* ========================================================================= */
+/* COMPONENTE PRINCIPAL DA APLICAÇÃO (`page.tsx`)                            */
+/* ========================================================================= */
+
+export default function HomePage() {
+  // Autenticação e Controle de Acesso (RBAC)
+  const [usuarios, setUsuarios] = useState<UsuarioSistema[]>(USUARIOS_INICIAIS);
+  const [usuarioLogado, setUsuarioLogado] = useState<UsuarioSistema | null>(
+    null
+  );
+  const [loginInput, setLoginInput] = useState<string>("");
+  const [senhaInput, setSenhaInput] = useState<string>("");
+  const [erroLogin, setErroLogin] = useState<string | null>(null);
+
+  // Navegação de Abas do Administrador (6 Abas Independentes)
+  const [activeTab, setActiveTab] = useState<TabId>("Painel");
+
+  // Navegação de Abas Restritas da Obra (3 Abas Exclusivas para Engenheiro/Almoxarife/Encarregado)
+  const [obraActiveTab, setObraActiveTab] = useState<ObraTabId>("NovoPedido");
+
+  // Sub-aba visual dentro do Painel de Compras (Solicitações vs Infográfico de Custos & Saving)
+  const [painelSubView, setPainelSubView] = useState<
+    "infografico" | "solicitacoes"
+  >("infografico");
+
+  // Estados do Dashboard Financeiro & BI das Obras
+  const [periodoFinanceiro, setPeriodoFinanceiro] = useState<
+    "outubro2026" | "ultimos30dias" | "ano2026"
+  >("outubro2026");
+  const [subAbaFinanceiro, setSubAbaFinanceiro] = useState<
+    "visaoGeral" | "obras" | "categorias" | "fluxoCaixa"
+  >("visaoGeral");
+  const [modoGraficoDiario, setModoGraficoDiario] = useState<
+    "grafico" | "tabela"
+  >("grafico");
+
+  // Filtro Global de Obra (Sincronizado entre o Header e o Seletor de Visão do Infográfico)
+  const [obraFiltro, setObraFiltro] = useState<string>("ALL");
+
+  // Configurações Dinâmicas do Usuário e da Construtora (Salvas no localStorage)
+  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const [formSettings, setFormSettings] =
+    useState<UserSettings>(DEFAULT_SETTINGS);
+
+  // Estados Principais (Persistidos no localStorage para sincronizar Obra <-> Admin)
+  const [obras] = useState<Obra[]>(OBRAS_INICIAIS);
+  const [solicitacoes, setSolicitacoes] =
+    useState<SolicitacaoCompra[]>(SOLICITACOES_INICIAIS);
+  const [fornecedores, setFornecedores] =
+    useState<FornecedorCadastro[]>(FORNECEDORES_INICIAIS);
+  const [ordens, setOrdens] = useState<OrdemCompra[]>(ORDENS_INICIAIS);
+  const [contratos, setContratos] =
+    useState<ContratoSubempreitada[]>(CONTRATOS_INICIAIS);
+  const [orcamentos, setOrcamentos] =
+    useState<ItemOrcamentoObra[]>(ORCAMENTOS_INICIAIS);
+  const [estoque, setEstoque] = useState<ItemEstoque[]>(ESTOQUE_INICIAIS);
+  const [movimentacoesEstoque, setMovimentacoesEstoque] =
+    useState<MovimentacaoEstoque[]>(MOVIMENTACOES_INICIAIS);
+  const [puxadasFornecimento, setPuxadasFornecimento] =
+    useState<ContratoPuxadaFornecimento[]>(PUXADAS_INICIAIS);
+  const [diariosObra, setDiariosObra] =
+    useState<DiarioObraRegistro[]>(DIARIOS_INICIAIS);
+  const [subAbaEstoque, setSubAbaEstoque] = useState<
+    "saldos" | "puxadas" | "movimentacoes" | "agrupamento"
+  >("saldos");
+  const [filtroCategoriaEstoque, setFiltroCategoriaEstoque] =
+    useState<string>("ALL");
+  const [buscaEstoque, setBuscaEstoque] = useState<string>("");
+  const [showNovaMovimentacaoModal, setShowNovaMovimentacaoModal] =
+    useState<boolean>(false);
+  const [showProgramarPuxadaModal, setShowProgramarPuxadaModal] =
+    useState<boolean>(false);
+  const [kardexModalItem, setKardexModalItem] = useState<ItemEstoque | null>(
+    null
+  );
+  const [showAgruparDemandasModal, setShowAgruparDemandasModal] =
+    useState<boolean>(false);
+  const [fornecedorIqfModal, setFornecedorIqfModal] =
+    useState<string | null>(null);
+  const [showNotificacoesModal, setShowNotificacoesModal] =
+    useState<boolean>(false);
+  const [showNovoOrcamentoModal, setShowNovoOrcamentoModal] =
+    useState<boolean>(false);
+  const [storageCarregado, setStorageCarregado] = useState<boolean>(false);
+
+  // Carregar dados persistidos do localStorage na montagem
+  useEffect(() => {
+    try {
+      const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (savedSettings) {
+        const parsed = JSON.parse(savedSettings) as Partial<UserSettings>;
+        const merged: UserSettings = {
+          userName: parsed.userName || DEFAULT_SETTINGS.userName,
+          userRole: parsed.userRole || DEFAULT_SETTINGS.userRole,
+          userEmail: parsed.userEmail || DEFAULT_SETTINGS.userEmail,
+          userPhone: parsed.userPhone || DEFAULT_SETTINGS.userPhone,
+          companyName: parsed.companyName || DEFAULT_SETTINGS.companyName,
+          companyCnpj: parsed.companyCnpj || DEFAULT_SETTINGS.companyCnpj,
+        };
+        setSettings(merged);
+        setFormSettings(merged);
+      }
+
+      const savedUsers = window.localStorage.getItem(USERS_STORAGE_KEY);
+      if (savedUsers) {
+        const parsedUsers = JSON.parse(savedUsers) as UsuarioSistema[];
+        if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
+          setUsuarios(parsedUsers);
+        }
+      }
+
+      const savedSc = window.localStorage.getItem(SOLICITACOES_STORAGE_KEY);
+      if (savedSc) {
+        const parsedSc = JSON.parse(savedSc) as SolicitacaoCompra[];
+        if (Array.isArray(parsedSc) && parsedSc.length > 0) {
+          setSolicitacoes(parsedSc);
+        }
+      }
+
+      const savedOc = window.localStorage.getItem(ORDENS_STORAGE_KEY);
+      if (savedOc) {
+        const parsedOc = JSON.parse(savedOc) as OrdemCompra[];
+        if (Array.isArray(parsedOc) && parsedOc.length > 0) {
+          setOrdens(parsedOc);
+        }
+      }
+
+      const savedCt = window.localStorage.getItem(CONTRATOS_STORAGE_KEY);
+      if (savedCt) {
+        const parsedCt = JSON.parse(savedCt) as ContratoSubempreitada[];
+        if (Array.isArray(parsedCt) && parsedCt.length > 0) {
+          setContratos(parsedCt);
+        }
+      }
+
+      const savedOrc = window.localStorage.getItem(ORCAMENTO_STORAGE_KEY);
+      if (savedOrc) {
+        const parsedOrc = JSON.parse(savedOrc) as ItemOrcamentoObra[];
+        if (Array.isArray(parsedOrc) && parsedOrc.length > 0) {
+          setOrcamentos(parsedOrc);
+        }
+      }
+
+      const savedEst = window.localStorage.getItem(ESTOQUE_STORAGE_KEY);
+      if (savedEst) {
+        const parsedEst = JSON.parse(savedEst) as ItemEstoque[];
+        if (Array.isArray(parsedEst) && parsedEst.length > 0) {
+          setEstoque(parsedEst);
+        }
+      }
+
+      const savedMov = window.localStorage.getItem(MOVIMENTACOES_STORAGE_KEY);
+      if (savedMov) {
+        const parsedMov = JSON.parse(savedMov) as MovimentacaoEstoque[];
+        if (Array.isArray(parsedMov) && parsedMov.length > 0) {
+          setMovimentacoesEstoque(parsedMov);
+        }
+      }
+
+      const savedPux = window.localStorage.getItem(PUXADAS_STORAGE_KEY);
+      if (savedPux) {
+        const parsedPux = JSON.parse(savedPux) as ContratoPuxadaFornecimento[];
+        if (Array.isArray(parsedPux) && parsedPux.length > 0) {
+          setPuxadasFornecimento(parsedPux);
+        }
+      }
+
+      const savedDiarios = window.localStorage.getItem(DIARIOS_STORAGE_KEY);
+      if (savedDiarios) {
+        const parsedDiarios = JSON.parse(savedDiarios) as DiarioObraRegistro[];
+        if (Array.isArray(parsedDiarios) && parsedDiarios.length > 0) {
+          setDiariosObra(parsedDiarios);
+        }
+      }
+
+      const savedSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
+      if (savedSession) {
+        const parsedSession = JSON.parse(savedSession) as UsuarioSistema;
+        if (parsedSession && parsedSession.id) {
+          setUsuarioLogado(parsedSession);
+        }
+      }
+    } catch {
+      // fallback to default
+    } finally {
+      setStorageCarregado(true);
+    }
+  }, []);
+
+  // Salvar automaticamente usuários, solicitações, ordens, contratos e orçamentos no localStorage
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(usuarios));
+    } catch {
+      // ignore
+    }
+  }, [usuarios, storageCarregado]);
+
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      window.localStorage.setItem(
+        SOLICITACOES_STORAGE_KEY,
+        JSON.stringify(solicitacoes)
+      );
+    } catch {
+      // ignore
+    }
+  }, [solicitacoes, storageCarregado]);
+
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      window.localStorage.setItem(ORDENS_STORAGE_KEY, JSON.stringify(ordens));
+    } catch {
+      // ignore
+    }
+  }, [ordens, storageCarregado]);
+
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      window.localStorage.setItem(
+        CONTRATOS_STORAGE_KEY,
+        JSON.stringify(contratos)
+      );
+    } catch {
+      // ignore
+    }
+  }, [contratos, storageCarregado]);
+
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      window.localStorage.setItem(
+        ORCAMENTO_STORAGE_KEY,
+        JSON.stringify(orcamentos)
+      );
+    } catch {
+      // ignore
+    }
+  }, [orcamentos, storageCarregado]);
+
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      window.localStorage.setItem(ESTOQUE_STORAGE_KEY, JSON.stringify(estoque));
+    } catch {
+      // ignore
+    }
+  }, [estoque, storageCarregado]);
+
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      window.localStorage.setItem(
+        MOVIMENTACOES_STORAGE_KEY,
+        JSON.stringify(movimentacoesEstoque)
+      );
+    } catch {
+      // ignore
+    }
+  }, [movimentacoesEstoque, storageCarregado]);
+
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      window.localStorage.setItem(
+        PUXADAS_STORAGE_KEY,
+        JSON.stringify(puxadasFornecimento)
+      );
+    } catch {
+      // ignore
+    }
+  }, [puxadasFornecimento, storageCarregado]);
+
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      window.localStorage.setItem(
+        DIARIOS_STORAGE_KEY,
+        JSON.stringify(diariosObra)
+      );
+    } catch {
+      // ignore
+    }
+  }, [diariosObra, storageCarregado]);
+
+  // Notificações e Alertas do Sistema em Tempo Real
+  const notificacoesSistema = useMemo(
+    () => gerarNotificacoesDoSistema(solicitacoes, ordens, contratos),
+    [solicitacoes, ordens, contratos]
+  );
+
+  // Cargas Logísticas Programadas para os Canteiros
+  const cargasLogistica = useMemo(
+    () => agruparCargasLogistica(ordens, obraFiltro),
+    [ordens, obraFiltro]
+  );
+
+  // Curva ABC Dinâmica de todos os insumos (80% / 15% / 5%)
+  const curvaAbcMap = useMemo(
+    () => calcularClassificacaoAbc(solicitacoes, ordens),
+    [solicitacoes, ordens]
+  );
+  const [filtroClasseAbc, setFiltroClasseAbc] = useState<"ALL" | ClasseAbc>(
+    "ALL"
+  );
+
+  // Cotação ativa na Aba 2
+  const [selectedScId, setSelectedScId] = useState<string>("sc-1");
+
+  // Busca e Filtros na Aba 3 (Fornecedores)
+  const [buscaFornecedor, setBuscaFornecedor] = useState<string>("");
+  const [filtroCatFornecedor, setFiltroCatFornecedor] = useState<string>("ALL");
+  const [fornecedorFichaModal, setFornecedorFichaModal] =
+    useState<FornecedorCadastro | null>(null);
+
+  // Ordem de Compra selecionada para Modal na Aba 4
+  const [ordemVisualizarModal, setOrdemVisualizarModal] =
+    useState<OrdemCompra | null>(null);
+
+  // Filtro de Obra para a Aba de Contratos & Medições
+  const [filtroObraContratos, setFiltroObraContratos] =
+    useState<string>("ALL");
+
+  // Estados da Aba 5 (Importar Planilhas)
+  const [subAbaImportacao, setSubAbaImportacao] = useState<
+    "itens" | "duplicados" | "colaboradores"
+  >("itens");
+  const [itensPlanilha, setItensPlanilha] = useState<ItemPlanilhaImportada[]>(
+    ITENS_PLANILHA_INICIAIS
+  );
+  const [duplicidades, setDuplicidades] = useState<DuplicidadeFornecedor[]>(
+    DUPLICIDADES_INICIAIS
+  );
+  const [colaboradores, setColaboradores] = useState<ColaboradorMapeado[]>(
+    COLABORADORES_INICIAIS
+  );
+  const [editingImportRowId, setEditingImportRowId] = useState<string | null>(
+    null
+  );
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const backupInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Modais de Ação e Governança
+  const [showNovaScModal, setShowNovaScModal] = useState<boolean>(false);
+  const [showNovoFornecedorModal, setShowNovoFornecedorModal] =
+    useState<boolean>(false);
+  const [showInserirPrecoModal, setShowInserirPrecoModal] =
+    useState<boolean>(false);
+  const [showNovoUsuarioModal, setShowNovoUsuarioModal] =
+    useState<boolean>(false);
+  const [showNovoContratoModal, setShowNovoContratoModal] =
+    useState<boolean>(false);
+  const [showNovoBmModalContrato, setShowNovoBmModalContrato] =
+    useState<ContratoSubempreitada | null>(null);
+  const [scMensagensModal, setScMensagensModal] =
+    useState<SolicitacaoCompra | null>(null);
+  const [diretoriaAprovacaoModal, setDiretoriaAprovacaoModal] = useState<{
+    novaOc: OrdemCompra;
+    prop: PropostaFornecedor;
+  } | null>(null);
+  const [ocConfirmarRecebimentoModal, setOcConfirmarRecebimentoModal] =
+    useState<OrdemCompra | null>(null);
+
+  // Notificação rápida (Banner discreto)
+  const [notificacao, setNotificacao] = useState<string | null>(null);
+  const dispararAviso = (msg: string) => {
+    setNotificacao(msg);
+    setTimeout(() => {
+      setNotificacao((prev) => (prev === msg ? null : prev));
+    }, 4000);
+  };
+
+  // Handlers de Contratos & Medições
+  const handleCriarContrato = (novoCt: ContratoSubempreitada) => {
+    setContratos((prev) => [novoCt, ...prev]);
+    setShowNovoContratoModal(false);
+    dispararAviso(
+      `Contrato ${novoCt.numeroContrato} (${novoCt.empreiteiro}) cadastrado com sucesso!`
+    );
+  };
+
+  const handleCriarBoletimMedicao = (
+    contratoId: string,
+    novoBm: BoletimMedicao
+  ) => {
+    setContratos((prev) =>
+      prev.map((c) =>
+        c.id === contratoId
+          ? {
+              ...c,
+              medicoes: [...c.medicoes, novoBm],
+            }
+          : c
+      )
+    );
+    setShowNovoBmModalContrato(null);
+    dispararAviso(
+      `Boletim de Medição ${novoBm.numeroBm} registrado com sucesso!`
+    );
+  };
+
+  const handleAprovarPagarBm = (
+    contratoId: string,
+    bmId: string,
+    novoStatus: "Aprovado para Pagamento" | "Pago"
+  ) => {
+    setContratos((prev) =>
+      prev.map((c) =>
+        c.id === contratoId
+          ? {
+              ...c,
+              medicoes: c.medicoes.map((bm) =>
+                bm.id === bmId ? { ...bm, status: novoStatus } : bm
+              ),
+            }
+          : c
+      )
+    );
+    dispararAviso(
+      `Boletim de Medição atualizado para "${novoStatus}" com sucesso!`
+    );
+  };
+
+  // Handler de Mensagens Canteiro ⇄ Compras
+  const handleEnviarMensagemSC = (scId: string, texto: string) => {
+    if (!texto.trim() || !usuarioLogado) return;
+    const novaMsg: MensagemPedido = {
+      id: `msg-${Date.now()}`,
+      autorNome: usuarioLogado.nome,
+      autorCargo: usuarioLogado.cargo,
+      dataHora: `${new Date().toLocaleDateString(
+        "pt-BR"
+      )} às ${new Date().toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}`,
+      texto: texto.trim(),
+    };
+
+    setSolicitacoes((prev) =>
+      prev.map((s) =>
+        s.id === scId
+          ? {
+              ...s,
+              mensagens: [...(s.mensagens || []), novaMsg],
+            }
+          : s
+      )
+    );
+
+    setScMensagensModal((prev) =>
+      prev && prev.id === scId
+        ? {
+            ...prev,
+            mensagens: [...(prev.mensagens || []), novaMsg],
+          }
+        : prev
+    );
+
+    dispararAviso("Mensagem enviada na linha do tempo do pedido!");
+  };
+
+  // Handlers de Backup e Restauração em JSON
+  const handleExportarBackupCompleto = () => {
+    const backupData = {
+      version: "2.0",
+      sistema: "JC BAUER • Sistema de Suprimentos & Canteiro B2B",
+      dataBackup: new Date().toISOString(),
+      settings,
+      usuarios,
+      solicitacoes,
+      ordens,
+      fornecedores,
+      contratos,
+    };
+    const dataStr =
+      "data:text/json;charset=utf-8," +
+      encodeURIComponent(JSON.stringify(backupData, null, 2));
+    const a = document.createElement("a");
+    a.setAttribute("href", dataStr);
+    a.setAttribute(
+      "download",
+      `JC_BAUER_Backup_Completo_${new Date()
+        .toISOString()
+        .slice(0, 10)}.json`
+    );
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    dispararAviso("Backup completo do sistema gerado em JSON com sucesso!");
+  };
+
+  const handleRestaurarBackupCompleto = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const data = JSON.parse(content);
+        if (data.settings) {
+          setSettings(data.settings);
+          setFormSettings(data.settings);
+          window.localStorage.setItem(
+            SETTINGS_STORAGE_KEY,
+            JSON.stringify(data.settings)
+          );
+        }
+        if (Array.isArray(data.usuarios)) {
+          setUsuarios(data.usuarios);
+          window.localStorage.setItem(
+            USERS_STORAGE_KEY,
+            JSON.stringify(data.usuarios)
+          );
+        }
+        if (Array.isArray(data.solicitacoes)) {
+          setSolicitacoes(data.solicitacoes);
+          window.localStorage.setItem(
+            SOLICITACOES_STORAGE_KEY,
+            JSON.stringify(data.solicitacoes)
+          );
+        }
+        if (Array.isArray(data.ordens)) {
+          setOrdens(data.ordens);
+          window.localStorage.setItem(
+            ORDENS_STORAGE_KEY,
+            JSON.stringify(data.ordens)
+          );
+        }
+        if (Array.isArray(data.contratos)) {
+          setContratos(data.contratos);
+          window.localStorage.setItem(
+            CONTRATOS_STORAGE_KEY,
+            JSON.stringify(data.contratos)
+          );
+        }
+        if (Array.isArray(data.fornecedores)) {
+          setFornecedores(data.fornecedores);
+        }
+        dispararAviso(
+          `Backup "${file.name}" restaurado com sucesso! Base de dados sincronizada.`
+        );
+      } catch {
+        dispararAviso("Erro ao ler arquivo de backup. Formato JSON inválido.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  /* ----------------------------------------------------------------------- */
+  /* DADOS FILTRADOS E CÁLCULOS AUTOMÁTICOS                                  */
+  /* ----------------------------------------------------------------------- */
+
+  const solicitacoesFiltradas = useMemo(() => {
+    if (obraFiltro === "ALL") return solicitacoes;
+    return solicitacoes.filter((sc) => sc.obraId === obraFiltro);
+  }, [solicitacoes, obraFiltro]);
+
+  const ordensFiltradas = useMemo(() => {
+    if (obraFiltro === "ALL") return ordens;
+    return ordens.filter((oc) => oc.obraId === obraFiltro);
+  }, [ordens, obraFiltro]);
+
+  // Solicitação ativa na Aba 2 (Mapa de Cotações)
+  const scAtiva = useMemo(() => {
+    return (
+      solicitacoes.find((s) => s.id === selectedScId) || solicitacoes[0]
+    );
+  }, [solicitacoes, selectedScId]);
+
+  const obraScAtiva = useMemo(() => {
+    return obras.find((o) => o.id === scAtiva?.obraId) || obras[0];
+  }, [obras, scAtiva]);
+
+  // Cálculo do Orçamento de Referência da SC ativa
+  const orcamentoScAtiva = useMemo(() => {
+    if (!scAtiva) return 0;
+    return scAtiva.itens.reduce(
+      (acc, it) => acc + it.quantidade * it.orcamentoUnitario,
+      0
+    );
+  }, [scAtiva]);
+
+  // Cálculo dos Totais por Fornecedor na SC ativa
+  const totaisPorProposta = useMemo(() => {
+    const mapa: Record<
+      string,
+      { subtotalItens: number; frete: number; totalGeral: number }
+    > = {};
+    if (!scAtiva) return mapa;
+
+    scAtiva.propostas.forEach((prop) => {
+      const subtotalItens = scAtiva.itens.reduce((acc, item) => {
+        const unit = prop.precosUnitarios[item.id] ?? 0;
+        return acc + item.quantidade * unit;
+      }, 0);
+      const totalGeral = subtotalItens + (prop.freteValor || 0);
+      mapa[prop.id] = {
+        subtotalItens,
+        frete: prop.freteValor || 0,
+        totalGeral,
+      };
+    });
+    return mapa;
+  }, [scAtiva]);
+
+  // Identificação automática do Fornecedor Vencedor (Menor Preço Global)
+  const resumoCotacaoAtiva = useMemo(() => {
+    if (!scAtiva || scAtiva.propostas.length === 0) {
+      return {
+        vencedorId: "",
+        vencedorNome: "Em apuração",
+        menorTotal: 0,
+        maiorTotal: 0,
+        savingGerado: 0,
+      };
+    }
+
+    let vencedorId = scAtiva.propostas[0].id;
+    let vencedorNome = scAtiva.propostas[0].fornecedorNome;
+    let menorTotal = totaisPorProposta[vencedorId]?.totalGeral ?? Infinity;
+    let maiorTotal = 0;
+
+    scAtiva.propostas.forEach((p) => {
+      const tot = totaisPorProposta[p.id]?.totalGeral ?? 0;
+      if (tot > 0 && tot < menorTotal) {
+        menorTotal = tot;
+        vencedorId = p.id;
+        vencedorNome = p.fornecedorNome;
+      }
+      if (tot > maiorTotal) {
+        maiorTotal = tot;
+      }
+    });
+
+    if (menorTotal === Infinity) menorTotal = 0;
+    const savingVsMaior = Math.max(0, maiorTotal - menorTotal);
+    const savingVsOrcamento = Math.max(0, orcamentoScAtiva - menorTotal);
+    const savingGerado =
+      savingVsMaior > 0 ? savingVsMaior : savingVsOrcamento;
+
+    return {
+      vencedorId,
+      vencedorNome,
+      menorTotal,
+      maiorTotal,
+      savingGerado,
+    };
+  }, [scAtiva, totaisPorProposta, orcamentoScAtiva]);
+
+  // Lista Consolidada de Economia por Insumo (Filtrada por Obra ou Geral)
+  const insumosEconomiaFiltrados = useMemo(() => {
+    if (obraFiltro === "ALL") return ECONOMIA_INSUMOS_HISTORICO;
+    return ECONOMIA_INSUMOS_HISTORICO.filter(
+      (item) => item.obraId === obraFiltro
+    );
+  }, [obraFiltro]);
+
+  // Desempenho Consolidado por Empreendimento para o Infográfico (Bloco 1)
+  const desempenhoPorEmpreendimento = useMemo(() => {
+    const obrasAlvo =
+      obraFiltro === "ALL"
+        ? obras
+        : obras.filter((o) => o.id === obraFiltro);
+
+    return obrasAlvo.map((obra) => {
+      const itensObra = ECONOMIA_INSUMOS_HISTORICO.filter(
+        (i) => i.obraId === obra.id
+      );
+      const valorOrcadoMaior = itensObra.reduce(
+        (acc, i) => acc + i.valorMaiorCotado,
+        0
+      );
+      const custoRealFechado = itensObra.reduce(
+        (acc, i) => acc + i.valorFechado,
+        0
+      );
+      const economiaReais = Math.max(0, valorOrcadoMaior - custoRealFechado);
+      const economiaPercentual =
+        valorOrcadoMaior > 0 ? (economiaReais / valorOrcadoMaior) * 100 : 0;
+
+      return {
+        obra,
+        valorOrcadoMaior,
+        custoRealFechado,
+        economiaReais,
+        economiaPercentual,
+        qtdInsumos: itensObra.length,
+      };
+    });
+  }, [obras, obraFiltro]);
+
+  // KPIs do Painel Principal
+  const kpisPainel = useMemo(() => {
+    const emAberto = solicitacoesFiltradas.filter(
+      (s) => s.status !== "Comprada"
+    ).length;
+    const concluidas =
+      solicitacoesFiltradas.filter((s) => s.status === "Comprada").length +
+      ordensFiltradas.length;
+
+    const totalOrcadoInsumos = insumosEconomiaFiltrados.reduce(
+      (acc, i) => acc + i.valorMaiorCotado,
+      0
+    );
+    const totalFechadoInsumos = insumosEconomiaFiltrados.reduce(
+      (acc, i) => acc + i.valorFechado,
+      0
+    );
+    const savingInsumos = Math.max(
+      0,
+      totalOrcadoInsumos - totalFechadoInsumos
+    );
+
+    return {
+      emAberto,
+      concluidas,
+      volumeContratado: totalFechadoInsumos,
+      savingTotal: savingInsumos,
+    };
+  }, [solicitacoesFiltradas, ordensFiltradas, insumosEconomiaFiltrados]);
+
+  // Fornecedores filtrados na Aba 3
+  const fornecedoresFiltrados = useMemo(() => {
+    return fornecedores.filter((f) => {
+      const q = buscaFornecedor.toLowerCase();
+      const matchTexto =
+        !q ||
+        f.empresa.toLowerCase().includes(q) ||
+        f.cidade.toLowerCase().includes(q) ||
+        f.vendedor.toLowerCase().includes(q) ||
+        f.categoriaPrincipal.toLowerCase().includes(q);
+      const matchCat =
+        filtroCatFornecedor === "ALL" ||
+        f.categoriaPrincipal === filtroCatFornecedor;
+      return matchTexto && matchCat;
+    });
+  }, [fornecedores, buscaFornecedor, filtroCatFornecedor]);
+
+  // Pendências de Importação na Aba 5
+  const pendenciasImportacaoCount = useMemo(() => {
+    const pItens = itensPlanilha.filter((i) => i.status === "Pendente").length;
+    const pDup = duplicidades.filter((d) => d.status === "Pendente").length;
+    const pCol = colaboradores.filter((c) => c.status === "Pendente").length;
+    return pItens + pDup + pCol;
+  }, [itensPlanilha, duplicidades, colaboradores]);
+
+  /* ----------------------------------------------------------------------- */
+  /* 1. FUNÇÃO DE DISPARO DIRETO DO PDF (`handleGeneratePDF`)                */
+  /* Abre janela limpa A4 com barra sticky e aciona `window.print()` direto  */
+  /* ----------------------------------------------------------------------- */
+
+  const handleGeneratePDF = () => {
+    if (!scAtiva) return;
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (!win) {
+      dispararAviso(
+        "Permita pop-ups no navegador para abrir a janela de impressão do PDF."
+      );
+      return;
+    }
+
+    const dataHoje = new Date().toLocaleDateString("pt-BR");
+    const percentualSaving =
+      resumoCotacaoAtiva.maiorTotal > 0
+        ? (
+            (resumoCotacaoAtiva.savingGerado / resumoCotacaoAtiva.maiorTotal) *
+            100
+          ).toFixed(1)
+        : "0.0";
+
+    const headersFornecedoresHtml = scAtiva.propostas
+      .map((p) => {
+        const isWin = p.id === resumoCotacaoAtiva.vencedorId;
+        return `<th style="padding:10px;border:1px solid #cbd5e1;text-align:right;background:${
+          isWin ? "#ecfdf5" : "#f1f5f9"
+        };">
+          <div style="font-weight:700;color:#0f172a;">${p.fornecedorNome} ${
+          isWin ? "★ VENCEDOR" : ""
+        }</div>
+          <div style="font-size:11px;font-weight:400;color:#475569;">Vendedor: ${
+            p.vendedorNome
+          }</div>
+        </th>`;
+      })
+      .join("");
+
+    const linhasItensHtml = scAtiva.itens
+      .map((it) => {
+        const cols = scAtiva.propostas
+          .map((p) => {
+            const unit = p.precosUnitarios[it.id] || 0;
+            const tot = it.quantidade * unit;
+            return `<td style="padding:10px;border:1px solid #cbd5e1;text-align:right;white-space:nowrap;">
+              <div style="font-size:11px;color:#475569;">${formatBRL(
+                unit
+              )} / ${it.unidade}</div>
+              <div style="font-weight:700;color:#0f172a;">${formatBRL(
+                tot
+              )}</div>
+            </td>`;
+          })
+          .join("");
+
+        return `<tr>
+          <td style="padding:10px;border:1px solid #cbd5e1;font-weight:600;color:#0f172a;">
+            ${it.descricao}
+            <div style="font-size:11px;font-weight:400;color:#64748b;">Código: ${
+              it.codigo
+            } • Meta: ${formatBRL(it.orcamentoUnitario)}/${it.unidade}</div>
+          </td>
+          <td style="padding:10px;border:1px solid #cbd5e1;text-align:center;font-weight:600;white-space:nowrap;">
+            ${it.quantidade} ${it.unidade}
+          </td>
+          ${cols}
+        </tr>`;
+      })
+      .join("");
+
+    const linhaFreteHtml = scAtiva.propostas
+      .map(
+        (p) =>
+          `<td style="padding:10px;border:1px solid #cbd5e1;text-align:right;font-size:12px;">
+            <div><strong>Frete ${p.tipoFrete}:</strong> ${formatBRL(
+            p.freteValor
+          )}</div>
+            <div style="color:#475569;font-size:11px;">${
+              p.prazoPagamento
+            }</div>
+          </td>`
+      )
+      .join("");
+
+    const linhaTotaisHtml = scAtiva.propostas
+      .map((p) => {
+        const tot = totaisPorProposta[p.id]?.totalGeral || 0;
+        const isWin = p.id === resumoCotacaoAtiva.vencedorId;
+        return `<td style="padding:12px;border:1px solid #cbd5e1;text-align:right;font-size:15px;font-weight:800;background:${
+          isWin ? "#ecfdf5" : "#f8fafc"
+        };color:${isWin ? "#065f46" : "#0f172a"};">
+          ${formatBRL(tot)}
+        </td>`;
+      })
+      .join("");
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Relatório Executivo de Cotação - ${scAtiva.codigo}</title>
+  <style>
+    @page { size: A4 landscape; margin: 10mm; }
+    * { box-sizing: border-box; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; padding: 0; background: #f1f5f9; color: #0f172a; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    @media print {
+      body { background: #ffffff !important; }
+      .no-print { display: none !important; }
+      .page-sheet { margin: 0 !important; box-shadow: none !important; border: none !important; max-width: 100% !important; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Barra fixa superior com botões grandes de Salvar PDF e Fechar -->
+  <div class="no-print" style="position: sticky; top: 0; background: #0f172a; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; z-index: 9999; border-bottom: 2px solid #059669;">
+    <div style="color: #ffffff; font-size: 14px; font-weight: 600;">
+      📄 Relatório Executivo A4 Pronto — ${scAtiva.codigo} (${obraScAtiva.nome})
+    </div>
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <button onclick="window.print()" style="background: #059669; color: #ffffff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer;">
+        🖨️ Baixar / Salvar PDF Agora
+      </button>
+      <button onclick="window.close()" style="background: #334155; color: #ffffff; border: 1px solid #64748b; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">
+        Fechar
+      </button>
+    </div>
+  </div>
+
+  <!-- Folha A4 Executiva -->
+  <div class="page-sheet" style="max-width: 1040px; margin: 20px auto; background: #ffffff; padding: 28px; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.08);">
+    <!-- Cabeçalho da Construtora -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 14px; margin-bottom: 18px;">
+      <div>
+        <div style="font-size: 18px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
+          ${settings.companyName}
+        </div>
+        <div style="font-size: 12px; color: #475569; margin-top: 3px;">
+          CNPJ: ${settings.companyCnpj} • Comprador Responsável: <strong>${settings.userName}</strong> (${settings.userRole})
+        </div>
+        <div style="font-size: 12px; color: #0f172a; margin-top: 3px;">
+          <strong>Empreendimento:</strong> ${obraScAtiva.nome} (${obraScAtiva.sigla}) • <strong>Disciplina:</strong> ${scAtiva.categoria}
+        </div>
+      </div>
+      <div style="text-align: right;">
+        <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">DOSSIÊ DE COTAÇÃO</div>
+        <div style="font-size: 20px; font-weight: 800; color: #0f172a;">${scAtiva.codigo}</div>
+        <div style="font-size: 12px; color: #475569;">Emissão: ${dataHoje}</div>
+      </div>
+    </div>
+
+    <!-- Quadro Resumo de Decisão (3 Caixas) -->
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px;">
+      <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 12px;">
+        <div style="font-size: 11px; font-weight: 700; color: #065f46; text-transform: uppercase;">FORNECEDOR RECOMENDADO</div>
+        <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">${resumoCotacaoAtiva.vencedorNome}</div>
+        <div style="font-size: 11px; color: #047857; margin-top: 2px;">Menor valor global equalizado</div>
+      </div>
+      <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px;">
+        <div style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">CUSTO REAL FECHADO</div>
+        <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">${formatBRL(resumoCotacaoAtiva.menorTotal)}</div>
+        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Orçamento Ref.: ${formatBRL(orcamentoScAtiva)}</div>
+      </div>
+      <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 12px;">
+        <div style="font-size: 11px; font-weight: 700; color: #065f46; text-transform: uppercase;">ECONOMIA GERADA (SAVING)</div>
+        <div style="font-size: 18px; font-weight: 800; color: #065f46; margin-top: 4px;">${formatBRL(resumoCotacaoAtiva.savingGerado)} (-${percentualSaving}%)</div>
+        <div style="font-size: 11px; color: #047857; margin-top: 2px;">Redução auditada na negociação</div>
+      </div>
+    </div>
+
+    <!-- Tabela Comparativa de Preços -->
+    <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 18px;">
+      <thead>
+        <tr>
+          <th style="padding: 10px; border: 1px solid #cbd5e1; text-align: left; background: #f1f5f9;">Insumo / Especificação Técnica</th>
+          <th style="padding: 10px; border: 1px solid #cbd5e1; text-align: center; background: #f1f5f9;">Qtd / Unid</th>
+          ${headersFornecedoresHtml}
+        </tr>
+      </thead>
+      <tbody>
+        ${linhasItensHtml}
+      </tbody>
+      <tfoot>
+        <tr style="background: #f8fafc;">
+          <td colspan="2" style="padding: 10px; border: 1px solid #cbd5e1; font-weight: 700;">Frete e Condições de Pagamento</td>
+          ${linhaFreteHtml}
+        </tr>
+        <tr>
+          <td colspan="2" style="padding: 12px; border: 1px solid #cbd5e1; font-weight: 800; font-size: 13px; background: #f1f5f9;">VALOR TOTAL EQUALIZADO</td>
+          ${linhaTotaisHtml}
+        </tr>
+      </tfoot>
+    </table>
+
+    <!-- Parecer Técnico e Comercial -->
+    <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px; font-size: 12px; color: #334155; margin-bottom: 32px; line-height: 1.5;">
+      <strong>Parecer Técnico e Comercial de Suprimentos:</strong> Recomendamos a homologação e emissão de Ordem de Compra para o fornecedor <strong>${resumoCotacaoAtiva.vencedorNome}</strong> pelo valor total equalizado de <strong>${formatBRL(resumoCotacaoAtiva.menorTotal)}</strong>, proporcionando economia direta de <strong>${formatBRL(resumoCotacaoAtiva.savingGerado)}</strong> para a obra <strong>${obraScAtiva.nome}</strong>.
+    </div>
+
+    <!-- Campos de Assinatura -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 48px; padding-top: 20px; text-align: center; font-size: 12px;">
+      <div style="border-top: 1px solid #0f172a; padding-top: 8px;">
+        <strong>${settings.userName}</strong>
+        <div style="color: #475569; font-size: 11px;">${settings.userRole} — ${settings.companyName}</div>
+      </div>
+      <div style="border-top: 1px solid #0f172a; padding-top: 8px;">
+        <strong>Diretoria Executiva / Aprovação Final</strong>
+        <div style="color: #475569; font-size: 11px;">${settings.companyName}</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.focus();
+        window.print();
+      }, 250);
+    };
+  </script>
+</body>
+</html>`;
+
+    win.document.open();
+    win.document.write(htmlContent);
+    win.document.close();
+  };
+
+  /* ----------------------------------------------------------------------- */
+  /* HANDLERS DE INTERAÇÃO                                                   */
+  /* ----------------------------------------------------------------------- */
+
+  // Atualizar Preço Unitário no Mapa de Cotações
+  const handleAtualizarPrecoUnitario = (
+    scId: string,
+    propostaId: string,
+    itemId: string,
+    novoPreco: number
+  ) => {
+    setSolicitacoes((prev) =>
+      prev.map((sc) => {
+        if (sc.id !== scId) return sc;
+        return {
+          ...sc,
+          propostas: sc.propostas.map((p) => {
+            if (p.id !== propostaId) return p;
+            return {
+              ...p,
+              precosUnitarios: {
+                ...p.precosUnitarios,
+                [itemId]: novoPreco >= 0 ? novoPreco : 0,
+              },
+            };
+          }),
+        };
+      })
+    );
+  };
+
+  // Atualizar Frete de Fornecedor no Mapa de Cotações
+  const handleAtualizarFrete = (
+    scId: string,
+    propostaId: string,
+    novoFrete: number
+  ) => {
+    setSolicitacoes((prev) =>
+      prev.map((sc) => {
+        if (sc.id !== scId) return sc;
+        return {
+          ...sc,
+          propostas: sc.propostas.map((p) => {
+            if (p.id !== propostaId) return p;
+            return {
+              ...p,
+              freteValor: novoFrete >= 0 ? novoFrete : 0,
+              tipoFrete: novoFrete > 0 ? "FOB" : "CIF",
+            };
+          }),
+        };
+      })
+    );
+  };
+
+  // Aprovar Proposta Vencedora e Gerar Ordem de Compra
+  const handleAprovarGerarOrdem = (propostaId: string) => {
+    if (!scAtiva) return;
+    const prop = scAtiva.propostas.find((p) => p.id === propostaId);
+    if (!prop) return;
+
+    const fornCadastro = fornecedores.find(
+      (f) =>
+        f.id === prop.vendorId ||
+        f.empresa.toLowerCase() === prop.fornecedorNome.toLowerCase()
+    );
+
+    const calc = totaisPorProposta[prop.id] || {
+      subtotalItens: 0,
+      frete: 0,
+      totalGeral: 0,
+    };
+
+    const novaOc: OrdemCompra = {
+      id: `oc-${Date.now()}`,
+      numeroOc: `OC-2026-00${91 + ordens.length}`,
+      scId: scAtiva.id,
+      scCodigo: scAtiva.codigo,
+      obraId: obraScAtiva.id,
+      obraNome: obraScAtiva.nome,
+      obraEndereco: obraScAtiva.endereco,
+      obraEngenheiro: obraScAtiva.engenheiro,
+      categoria: scAtiva.categoria,
+      fornecedorNome: prop.fornecedorNome,
+      fornecedorRazao:
+        fornCadastro?.razaoSocial || `${prop.fornecedorNome} Comércio Ltda`,
+      fornecedorCnpj: fornCadastro?.cnpj || "18.420.110/0001-90",
+      vendedorNome: prop.vendedorNome,
+      whatsapp: prop.whatsapp,
+      chavePix: fornCadastro?.chavePix || fornCadastro?.cnpj || "CNPJ",
+      dataEmissao: new Date().toLocaleDateString("pt-BR"),
+      dataPrevistaEntrega: new Date(
+        Date.now() + 5 * 24 * 60 * 60 * 1000
+      ).toLocaleDateString("pt-BR"),
+      prazoPagamento: prop.prazoPagamento,
+      tipoFrete: prop.tipoFrete,
+      freteValor: prop.freteValor,
+      valorTotal: calc.totalGeral,
+      savingGerado: resumoCotacaoAtiva.savingGerado,
+      alcadaAprovacao: obterAlcadaAprovacao(calc.totalGeral).nivel,
+      status: "Emitida",
+      itens: scAtiva.itens.map((it) => {
+        const unit = prop.precosUnitarios[it.id] || 0;
+        return {
+          codigo: it.codigo,
+          descricao: it.descricao,
+          unidade: it.unidade,
+          quantidade: it.quantidade,
+          precoUnitario: unit,
+          subtotal: it.quantidade * unit,
+          observacaoObra: it.observacaoObra,
+        };
+      }),
+    };
+
+    // Alçada de Governança: Acima de R$ 100.000 exige aprovação da Diretoria / CFO
+    const alcadaInfo = obterAlcadaAprovacao(calc.totalGeral);
+    if (alcadaInfo.requerDiretoria && !novaOc.aprovadoPorDiretoria) {
+      setDiretoriaAprovacaoModal({ novaOc, prop });
+      return;
+    }
+
+    setOrdens((prev) => [novaOc, ...prev]);
+    setSolicitacoes((prev) =>
+      prev.map((s) =>
+        s.id === scAtiva.id
+          ? {
+              ...s,
+              status: "Comprada",
+              novoAlertaAdmin: false,
+              dataPrevistaEntrega: novaOc.dataPrevistaEntrega,
+            }
+          : s
+      )
+    );
+    dispararAviso(
+      `Ordem de Compra ${novaOc.numeroOc} emitida para ${prop.fornecedorNome}!`
+    );
+    setActiveTab("Ordens");
+  };
+
+  const handleConfirmarAprovacaoDiretoria = (assinatura: string) => {
+    if (!diretoriaAprovacaoModal) return;
+    const { novaOc } = diretoriaAprovacaoModal;
+    const ocAprovada: OrdemCompra = {
+      ...novaOc,
+      aprovadoPorDiretoria: true,
+      assinaturaDiretoria: assinatura,
+    };
+    setOrdens((prev) => [ocAprovada, ...prev]);
+    setSolicitacoes((prev) =>
+      prev.map((s) =>
+        s.id === ocAprovada.scId
+          ? {
+              ...s,
+              status: "Comprada",
+              novoAlertaAdmin: false,
+              dataPrevistaEntrega: ocAprovada.dataPrevistaEntrega,
+            }
+          : s
+      )
+    );
+    setDiretoriaAprovacaoModal(null);
+    dispararAviso(
+      `Ordem de Compra ${ocAprovada.numeroOc} autorizada pela Diretoria e emitida com sucesso!`
+    );
+    setActiveTab("Ordens");
+  };
+
+  // Salvar Configurações no localStorage
+  const handleSalvarConfiguracoes = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSettings(formSettings);
+    try {
+      window.localStorage.setItem(
+        SETTINGS_STORAGE_KEY,
+        JSON.stringify(formSettings)
+      );
+    } catch {
+      // ignore storage errors
+    }
+    dispararAviso("Configurações atualizadas com sucesso!");
+  };
+
+  // Upload real de planilha na Aba 5 (.xlsx, .xls, .csv)
+  const handleUploadPlanilha = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+        firstSheet,
+        { defval: "" }
+      );
+
+      const novosItens: ItemPlanilhaImportada[] = rows
+        .slice(0, 15)
+        .map((r, idx) => {
+          const vals = Object.values(r).map((v) => String(v ?? "").trim());
+          return {
+            id: `imp-upload-${Date.now()}-${idx}`,
+            data: vals[0] || "17/10/2026",
+            fornecedor: vals[1] || `Fornecedor Planilha #${idx + 1}`,
+            cnpj: vals[2] || "14.882.310/0001-19",
+            insumo: vals[3] || `Material Importado de ${file.name}`,
+            categoria:
+              CATEGORIAS_CONSTRUCAO[idx % CATEGORIAS_CONSTRUCAO.length],
+            quantidade: Number(vals[4]) || 100,
+            unidade: vals[5] || "un",
+            precoUnitario:
+              Number(String(vals[6] || "85").replace(",", ".")) || 85,
+            status: "Pendente",
+          };
+        });
+
+      if (novosItens.length > 0) {
+        setItensPlanilha((prev) => [...novosItens, ...prev]);
+        dispararAviso(
+          `Planilha "${file.name}" lida com sucesso (${novosItens.length} linhas adicionadas para revisão).`
+        );
+      } else {
+        dispararAviso(
+          `Arquivo "${file.name}" processado e validado na quarentena.`
+        );
+      }
+    } catch {
+      dispararAviso(
+        `Arquivo "${file.name}" importado para a tabela de revisão.`
+      );
+    }
+  };
+
+  /* ----------------------------------------------------------------------- */
+  /* AUTENTICAÇÃO E HANDLERS DE INTEGRAÇÃO CANTEIRO <-> COMPRAS              */
+  /* ----------------------------------------------------------------------- */
+
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErroLogin(null);
+    const loginLimpo = loginInput.trim().toLowerCase();
+    const userFound = usuarios.find(
+      (u) =>
+        (u.email.toLowerCase() === loginLimpo ||
+          u.nome.toLowerCase() === loginLimpo) &&
+        u.senha === senhaInput
+    );
+    if (!userFound) {
+      setErroLogin(
+        "E-mail/Usuário ou senha inválidos. Verifique suas credenciais ou use o Acesso Rápido abaixo."
+      );
+      return;
+    }
+    if (userFound.status === "Bloqueado") {
+      setErroLogin(
+        "Este acesso encontra-se bloqueado pelo Administrador de Compras."
+      );
+      return;
+    }
+    setUsuarioLogado(userFound);
+    setErroLogin(null);
+    if (userFound.cargo !== "Administrador") {
+      setObraActiveTab("PainelDiario");
+    }
+  };
+
+  const handleQuickLogin = (userId: string) => {
+    const userFound = usuarios.find((u) => u.id === userId);
+    if (!userFound) return;
+    if (userFound.status === "Bloqueado") {
+      setErroLogin("Este usuário está bloqueado no momento.");
+      return;
+    }
+    setUsuarioLogado(userFound);
+    setErroLogin(null);
+    if (userFound.cargo !== "Administrador") {
+      setObraActiveTab("PainelDiario");
+    }
+  };
+
+  const handleLogout = () => {
+    setUsuarioLogado(null);
+    setLoginInput("");
+    setSenhaInput("");
+    setErroLogin(null);
+  };
+
+  const handleCriarPedidoCanteiro = (novaSc: SolicitacaoCompra) => {
+    setSolicitacoes((prev) => [novaSc, ...prev]);
+    setSelectedScId(novaSc.id);
+    setObraActiveTab("MeusPedidos");
+    dispararAviso(
+      `Pedido ${novaSc.codigo} enviado com sucesso para o Setor de Compras!`
+    );
+  };
+
+  const handleConfirmarRecebimentoObra = (
+    ocId: string,
+    notaFiscal: string,
+    condicao: string
+  ) => {
+    const dataHora = `${new Date().toLocaleDateString(
+      "pt-BR"
+    )} às ${new Date().toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`;
+    const recebedor = usuarioLogado
+      ? `${usuarioLogado.nome} (${usuarioLogado.cargo})`
+      : "Almoxarifado da Obra";
+
+    const ocAlvo = ordens.find((o) => o.id === ocId);
+
+    setOrdens((prev) =>
+      prev.map((o) =>
+        o.id === ocId
+          ? {
+              ...o,
+              status: "Entregue na Obra (Confirmado pelo Almoxarifado)",
+              notaFiscalRecebida: notaFiscal,
+              condicaoRecebimento: condicao,
+              recebidoPor: recebedor,
+              dataHoraRecebimento: dataHora,
+            }
+          : o
+      )
+    );
+
+    if (ocAlvo) {
+      setSolicitacoes((prev) =>
+        prev.map((s) =>
+          s.id === ocAlvo.scId || s.codigo === ocAlvo.scCodigo
+            ? {
+                ...s,
+                status: "Entregue na Obra",
+                notaFiscalRecebida: notaFiscal,
+                condicaoRecebimento: condicao,
+                recebidoPor: recebedor,
+                dataHoraRecebimento: dataHora,
+              }
+            : s
+        )
+      );
+
+      // Sincronização Automática com o Almoxarifado / Estoque Físico da Obra (Zero Falhas na Cadeia)
+      const novasMovs: MovimentacaoEstoque[] = [];
+
+      setEstoque((prevEstoque) => {
+        const novoEstoque = [...prevEstoque];
+
+        ocAlvo.itens.forEach((itemOc, idx) => {
+          const itemIdx = novoEstoque.findIndex(
+            (it) =>
+              it.obraId === ocAlvo.obraId &&
+              (it.descricao.trim().toLowerCase() === itemOc.descricao.trim().toLowerCase() ||
+                (itemOc.codigo && it.codigo.toLowerCase() === itemOc.codigo.toLowerCase()))
+          );
+
+          let itemId = "";
+          let itemCodigo = itemOc.codigo || `INS-${Math.floor(1000 + Math.random() * 9000)}`;
+          let saldoAnt = 0;
+          let saldoPos = itemOc.quantidade;
+
+          if (itemIdx >= 0) {
+            const itemExistente = novoEstoque[itemIdx];
+            itemId = itemExistente.id;
+            itemCodigo = itemExistente.codigo;
+            saldoAnt = itemExistente.saldoAtual;
+            saldoPos = itemExistente.saldoAtual + itemOc.quantidade;
+            const novoCusto =
+              saldoPos > 0
+                ? (itemExistente.saldoAtual * itemExistente.custoMedio +
+                    itemOc.quantidade * itemOc.precoUnitario) /
+                  saldoPos
+                : itemOc.precoUnitario;
+
+            novoEstoque[itemIdx] = {
+              ...itemExistente,
+              saldoAtual: saldoPos,
+              custoMedio: novoCusto,
+              ultimaMovimentacao: dataHora,
+            };
+          } else {
+            itemId = `est-auto-${Date.now()}-${idx}`;
+            novoEstoque.push({
+              id: itemId,
+              obraId: ocAlvo.obraId,
+              obraNome: ocAlvo.obraNome,
+              codigo: itemCodigo,
+              descricao: itemOc.descricao,
+              categoria: ocAlvo.categoria || "Geral",
+              unidade: itemOc.unidade,
+              saldoAtual: itemOc.quantidade,
+              estoqueMinimo: Math.max(1, Math.round(itemOc.quantidade * 0.2)),
+              pontoReposicao: Math.max(1, Math.round(itemOc.quantidade * 0.3)),
+              custoMedio: itemOc.precoUnitario,
+              localizacaoFisica: "Almoxarifado Principal",
+              ultimaMovimentacao: dataHora,
+            });
+          }
+
+          novasMovs.push({
+            id: `mov-rec-${Date.now()}-${idx}`,
+            itemId: itemId,
+            codigoInsumo: itemCodigo,
+            descricaoInsumo: itemOc.descricao,
+            unidade: itemOc.unidade,
+            tipo: "ENTRADA_COMPRA",
+            quantidade: itemOc.quantidade,
+            saldoAnterior: saldoAnt,
+            saldoPosterior: saldoPos,
+            custoUnitario: itemOc.precoUnitario,
+            valorTotal: itemOc.quantidade * itemOc.precoUnitario,
+            dataHora: dataHora,
+            responsavel: recebedor,
+            obraOrigemId: ocAlvo.obraId,
+            obraOrigemNome: ocAlvo.obraNome,
+            numeroDocumento: `NF ${notaFiscal} (OC ${ocAlvo.numeroOc})`,
+            motivoEtapa: `Entrada física confirmada pelo Almoxarifado da Obra com NF ${notaFiscal}. Condição: ${condicao}`,
+          });
+        });
+
+        return novoEstoque;
+      });
+
+      if (novasMovs.length > 0) {
+        setMovimentacoesEstoque((prevMovs) => [...novasMovs, ...prevMovs]);
+      }
+    }
+
+    setOcConfirmarRecebimentoModal(null);
+    dispararAviso(
+      `Recebimento confirmado na obra! NF ${notaFiscal} registrada, estoque físico atualizado e compras notificada.`
+    );
+  };
+
+  const handleSalvarDiarioObra = (novoDiario: DiarioObraRegistro) => {
+    setDiariosObra((prev) => [
+      novoDiario,
+      ...prev.filter(
+        (d) => !(d.obraId === novoDiario.obraId && d.data === novoDiario.data)
+      ),
+    ]);
+    dispararAviso(
+      `Diário de Obra (RDO) de ${novoDiario.obraNome} registrado com sucesso para a data ${novoDiario.data}!`
+    );
+  };
+
+  const handleSalvarOrcamento = (novoItem: ItemOrcamentoObra) => {
+    setOrcamentos((prev) => {
+      const idx = prev.findIndex(
+        (o) => o.obraId === novoItem.obraId && o.categoria === novoItem.categoria
+      );
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = novoItem;
+        return copy;
+      }
+      return [...prev, novoItem];
+    });
+    setShowNovoOrcamentoModal(false);
+    dispararAviso(
+      `Verba orçamentária de ${novoItem.categoria} (${formatBRL(novoItem.valorOrcado)}) atualizada com sucesso!`
+    );
+  };
+
+  const handleNavegarNotificacao = (notif: NotificacaoItem) => {
+    setShowNotificacoesModal(false);
+    if (notif.destinoAba === "Cotacoes") {
+      setActiveTab("Cotacoes");
+      if (notif.refId) setSelectedScId(notif.refId);
+    } else if (notif.destinoAba === "Logistica") {
+      setActiveTab("Logistica");
+    } else if (notif.destinoAba === "Medicoes") {
+      setActiveTab("Medicoes");
+    } else if (notif.destinoAba === "Ordens") {
+      setActiveTab("Ordens");
+    }
+  };
+
+  const itensAbaixoMinimo = useMemo(
+    () =>
+      estoque.filter(
+        (item) =>
+          (obraFiltro === "ALL" || item.obraId === obraFiltro) &&
+          item.saldoAtual <= item.estoqueMinimo
+      ),
+    [estoque, obraFiltro]
+  );
+
+  const valorTotalEstoque = useMemo(
+    () =>
+      estoque
+        .filter((item) => obraFiltro === "ALL" || item.obraId === obraFiltro)
+        .reduce((acc, item) => acc + item.saldoAtual * item.custoMedio, 0),
+    [estoque, obraFiltro]
+  );
+
+  const puxadasAtivasContratos = useMemo(
+    () =>
+      puxadasFornecimento.filter(
+        (c) => obraFiltro === "ALL" || c.obraId === obraFiltro
+      ),
+    [puxadasFornecimento, obraFiltro]
+  );
+
+  const totalEconomiaTransferencias = useMemo(
+    () =>
+      movimentacoesEstoque
+        .filter((m) => m.tipo === "TRANSFERENCIA_OBRA")
+        .reduce((acc, m) => acc + m.valorTotal, 0),
+    [movimentacoesEstoque]
+  );
+
+  const demandasAgrupaveis = useMemo(() => {
+    const mapa = new Map<
+      string,
+      {
+        descricao: string;
+        unidade: string;
+        totalQtd: number;
+        obras: Set<string>;
+        orcamentoUnitario: number;
+        categoria: string;
+      }
+    >();
+
+    solicitacoes.forEach((sc) => {
+      const nomeObra =
+        obras.find((o) => o.id === sc.obraId)?.nome || sc.obraId;
+      sc.itens.forEach((it) => {
+        const chave = it.descricao.trim().toLowerCase();
+        const atual = mapa.get(chave);
+        if (atual) {
+          atual.totalQtd += it.quantidade;
+          atual.obras.add(nomeObra);
+          atual.orcamentoUnitario = Math.max(
+            atual.orcamentoUnitario,
+            it.orcamentoUnitario
+          );
+        } else {
+          mapa.set(chave, {
+            descricao: it.descricao,
+            unidade: it.unidade,
+            totalQtd: it.quantidade,
+            obras: new Set([nomeObra]),
+            orcamentoUnitario: it.orcamentoUnitario,
+            categoria: sc.categoria,
+          });
+        }
+      });
+    });
+
+    return Array.from(mapa.values())
+      .map((d) => ({
+        ...d,
+        obrasParticipantes: Array.from(d.obras),
+      }))
+      .filter((d) => d.obrasParticipantes.length >= 2 || d.totalQtd >= 100);
+  }, [solicitacoes, obras]);
+
+  const handleRegistrarMovimentacao = (mov: MovimentacaoEstoque) => {
+    setMovimentacoesEstoque((prev) => [mov, ...prev]);
+
+    setEstoque((prev) => {
+      const copy = [...prev];
+      const itemOrigemIdx = copy.findIndex((it) => it.id === mov.itemId);
+
+      if (itemOrigemIdx >= 0) {
+        const itemOrigem = copy[itemOrigemIdx];
+        let novoSaldoOrigem = itemOrigem.saldoAtual;
+        let novoCustoMedio = itemOrigem.custoMedio;
+
+        if (mov.tipo === "ENTRADA_COMPRA") {
+          const totalQtd = itemOrigem.saldoAtual + mov.quantidade;
+          if (totalQtd > 0) {
+            novoCustoMedio =
+              (itemOrigem.saldoAtual * itemOrigem.custoMedio +
+                mov.quantidade * mov.custoUnitario) /
+              totalQtd;
+          }
+          novoSaldoOrigem += mov.quantidade;
+        } else if (
+          mov.tipo === "SAIDA_APLICACAO" ||
+          mov.tipo === "PERDA_AVARIA" ||
+          mov.tipo === "TRANSFERENCIA_OBRA"
+        ) {
+          novoSaldoOrigem = Math.max(0, itemOrigem.saldoAtual - mov.quantidade);
+        } else if (mov.tipo === "AJUSTE_INVENTARIO") {
+          novoSaldoOrigem = mov.quantidade;
+        }
+
+        copy[itemOrigemIdx] = {
+          ...itemOrigem,
+          saldoAtual: novoSaldoOrigem,
+          custoMedio: novoCustoMedio,
+          ultimaMovimentacao: mov.dataHora,
+        };
+
+        if (mov.tipo === "TRANSFERENCIA_OBRA" && mov.obraDestinoId) {
+          const destIdx = copy.findIndex(
+            (it) =>
+              it.obraId === mov.obraDestinoId &&
+              it.codigo === itemOrigem.codigo
+          );
+          if (destIdx >= 0) {
+            const destItem = copy[destIdx];
+            const novoSaldoDest = destItem.saldoAtual + mov.quantidade;
+            const novoCustoDest =
+              novoSaldoDest > 0
+                ? (destItem.saldoAtual * destItem.custoMedio +
+                    mov.quantidade * itemOrigem.custoMedio) /
+                  novoSaldoDest
+                : itemOrigem.custoMedio;
+            copy[destIdx] = {
+              ...destItem,
+              saldoAtual: novoSaldoDest,
+              custoMedio: novoCustoDest,
+              ultimaMovimentacao: mov.dataHora,
+            };
+          } else {
+            copy.push({
+              id: `est-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              obraId: mov.obraDestinoId,
+              obraNome: mov.obraDestinoNome || "Obra Destino",
+              codigo: itemOrigem.codigo,
+              descricao: itemOrigem.descricao,
+              categoria: itemOrigem.categoria,
+              unidade: itemOrigem.unidade,
+              saldoAtual: mov.quantidade,
+              estoqueMinimo: itemOrigem.estoqueMinimo,
+              pontoReposicao: itemOrigem.pontoReposicao,
+              custoMedio: itemOrigem.custoMedio,
+              localizacaoFisica: "Almoxarifado Geral",
+              ultimaMovimentacao: mov.dataHora,
+              fornecedorHabitual: itemOrigem.fornecedorHabitual,
+            });
+          }
+        }
+      }
+      return copy;
+    });
+
+    setShowNovaMovimentacaoModal(false);
+    dispararAviso(
+      `Movimentação registrada com sucesso: ${mov.tipo} de ${mov.quantidade} ${mov.unidade} de ${mov.descricaoInsumo}!`
+    );
+  };
+
+  const handleProgramarPuxada = (
+    contratoId: string,
+    novaPrg: ProgramacaoPuxada
+  ) => {
+    setPuxadasFornecimento((prev) =>
+      prev.map((c) => {
+        if (c.id !== contratoId) return c;
+        const programacoes = [novaPrg, ...c.programacoes];
+        const entregueExtra =
+          novaPrg.status === "Recebida" ? novaPrg.quantidade : 0;
+        return {
+          ...c,
+          quantidadeEntregue: c.quantidadeEntregue + entregueExtra,
+          programacoes,
+        };
+      })
+    );
+    setShowProgramarPuxadaModal(false);
+    dispararAviso(
+      `Puxada programada com sucesso para ${novaPrg.dataHoraAgendada}: ${novaPrg.quantidade} ${novaPrg.unidade}!`
+    );
+  };
+
+  const handleAtualizarStatusPuxada = (
+    contratoId: string,
+    programacaoId: string,
+    novoStatus: "Agendada" | "Em Rota" | "Recebida" | "Cancelada",
+    notaFiscal?: string
+  ) => {
+    setPuxadasFornecimento((prev) =>
+      prev.map((c) => {
+        if (c.id !== contratoId) return c;
+        let deltaEntregue = 0;
+        const programacoesAtualizadas = c.programacoes.map((p) => {
+          if (p.id !== programacaoId) return p;
+          if (p.status !== "Recebida" && novoStatus === "Recebida") {
+            deltaEntregue = p.quantidade;
+          } else if (p.status === "Recebida" && novoStatus !== "Recebida") {
+            deltaEntregue = -p.quantidade;
+          }
+          return {
+            ...p,
+            status: novoStatus,
+            notaFiscal: notaFiscal || p.notaFiscal,
+          };
+        });
+        return {
+          ...c,
+          quantidadeEntregue: Math.max(0, c.quantidadeEntregue + deltaEntregue),
+          programacoes: programacoesAtualizadas,
+        };
+      })
+    );
+
+    if (novoStatus === "Recebida") {
+      dispararAviso(
+        `Carga confirmada e recebida no canteiro! Saldo do contrato mãe atualizado.`
+      );
+    } else {
+      dispararAviso(`Status da puxada atualizado para "${novoStatus}".`);
+    }
+  };
+
+  const handleGerarSolicitacaoReposicao = (item: ItemEstoque) => {
+    const qtdNecessaria = Math.max(
+      item.pontoReposicao * 2 - item.saldoAtual,
+      item.pontoReposicao
+    );
+    const novoCodigo = `SC-2026-REP-0${solicitacoes.length + 1}`;
+    const novaSc: SolicitacaoCompra = {
+      id: `sc-rep-${Date.now()}`,
+      codigo: novoCodigo,
+      obraId: item.obraId === "central" ? "obra-1" : item.obraId,
+      categoria: item.categoria,
+      solicitante: usuarioLogado
+        ? `${usuarioLogado.nome} (Almoxarifado)`
+        : "Almoxarife Central",
+      solicitanteCargo: "Almoxarife",
+      urgencia: "Crítica - Obra Parada",
+      dataAbertura: new Date().toLocaleDateString("pt-BR"),
+      dataNecessaria: new Date(
+        Date.now() + 5 * 24 * 3600 * 1000
+      ).toLocaleDateString("pt-BR"),
+      status: "Em Cotação",
+      itens: [
+        {
+          id: `it-${Date.now()}-1`,
+          codigo: item.codigo,
+          descricao: item.descricao,
+          quantidade: qtdNecessaria,
+          unidade: item.unidade,
+          orcamentoUnitario: item.custoMedio,
+          observacaoObra: `Reposição automática de estoque mínimo de segurança no canteiro ${item.obraNome}. Saldo atual: ${item.saldoAtual} ${item.unidade} (Mínimo: ${item.estoqueMinimo} ${item.unidade}).`,
+        },
+      ],
+      propostas: [],
+      mensagens: [
+        {
+          id: `msg-${Date.now()}`,
+          autorNome: "Robô de Reposição de Estoque",
+          autorCargo: "Administrador",
+          dataHora: `${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString(
+            "pt-BR",
+            { hour: "2-digit", minute: "2-digit" }
+          )}`,
+          texto: `Solicitação gerada automaticamente porque o insumo "${item.descricao}" atingiu o nível crítico (${item.saldoAtual} ${item.unidade} <= ${item.pontoReposicao} ${item.unidade}). Cotação prioritária.`,
+        },
+      ],
+    };
+
+    setSolicitacoes((prev) => [novaSc, ...prev]);
+    setSelectedScId(novaSc.id);
+    setActiveTab("Cotacoes");
+    dispararAviso(
+      `⚡ Solicitação ${novaSc.codigo} gerada para reposição de ${item.descricao}! Direcionando para o Mapa de Cotações...`
+    );
+  };
+
+  const handleCriarCompraAgrupada = (agrupamento: {
+    descricao: string;
+    unidade: string;
+    totalQtd: number;
+    obrasParticipantes: string[];
+    orcamentoUnitario: number;
+    categoria: string;
+  }) => {
+    const novoCodigo = `SC-2026-CORP-0${solicitacoes.length + 1}`;
+    const obrasTexto = agrupamento.obrasParticipantes.join(", ");
+    const novaSc: SolicitacaoCompra = {
+      id: `sc-corp-${Date.now()}`,
+      codigo: novoCodigo,
+      obraId: "obra-1",
+      categoria: agrupamento.categoria,
+      solicitante: usuarioLogado
+        ? `${usuarioLogado.nome} (Coord. Suprimentos)`
+        : "Coord. Suprimentos Corporativo",
+      solicitanteCargo: "Administrador",
+      urgencia: "Normal",
+      dataAbertura: new Date().toLocaleDateString("pt-BR"),
+      dataNecessaria: new Date(
+        Date.now() + 7 * 24 * 3600 * 1000
+      ).toLocaleDateString("pt-BR"),
+      status: "Em Cotação",
+      itens: [
+        {
+          id: `it-${Date.now()}-1`,
+          codigo: `CORP-${Date.now().toString().slice(-4)}`,
+          descricao: `${agrupamento.descricao} — Rateio Multi-Obra (${obrasTexto})`,
+          quantidade: agrupamento.totalQtd,
+          unidade: agrupamento.unidade,
+          orcamentoUnitario: agrupamento.orcamentoUnitario,
+          observacaoObra: `Demanda corporativa agrupada para as obras: [${obrasTexto}]. Negociar frete CIF rateado.`,
+        },
+      ],
+      propostas: [],
+      mensagens: [
+        {
+          id: `msg-${Date.now()}`,
+          autorNome: "Centralizador de Demandas",
+          autorCargo: "Administrador",
+          dataHora: `${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString(
+            "pt-BR",
+            { hour: "2-digit", minute: "2-digit" }
+          )}`,
+          texto: `Demanda agrupada para as obras: ${obrasTexto}. Volume consolidado: ${agrupamento.totalQtd} ${agrupamento.unidade}.`,
+        },
+      ],
+    };
+
+    setSolicitacoes((prev) => [novaSc, ...prev]);
+    setSelectedScId(novaSc.id);
+    setShowAgruparDemandasModal(false);
+    setActiveTab("Cotacoes");
+    dispararAviso(
+      `Compra Corporativa em Lote ${novaSc.codigo} criada com sucesso para ${agrupamento.descricao}!`
+    );
+  };
+
+  const novosPedidosCanteiroCount = useMemo(
+    () =>
+      solicitacoes.filter(
+        (s) =>
+          s.novoAlertaAdmin || s.status === "Enviado / Aguardando Compras"
+      ).length,
+    [solicitacoes]
+  );
+
+  /* ----------------------------------------------------------------------- */
+  /* CONFIGURAÇÃO DO HEADER SUPERIOR (TÍTULO + 1 ÚNICO BOTÃO PRIMÁRIO)       */
+  /* ----------------------------------------------------------------------- */
+
+  const tituloAbaAtual: Record<TabId, string> = {
+    Painel: "Painel de Compras & Curva ABC de Suprimentos",
+    DesempenhoFinanceiro:
+      "BI Financeiro, Indicadores Diários & Desempenho Econômico das Obras",
+    Cotacoes: "Mapa de Cotações Equalizado",
+    Fornecedores: "Fornecedores, IQF & Homologação B2B",
+    Ordens: "Ordens de Compra & Entregas nos Canteiros",
+    Estoque: "Almoxarifado & Controle de Estoque dos Canteiros",
+    Medicoes: "Contratos de Subempreitada & Boletins de Medição (BM)",
+    Orcamento: "Controle Orçamentário da Obra: Orçado vs. Realizado",
+    Logistica: "Cronograma Logístico & Agendamento de Cargas no Canteiro",
+    Importacao: "Importar Planilhas Legadas (15 Anos)",
+    Configuracoes: "Configurações, Acessos e Backup do Sistema",
+  };
+
+  const renderBotaoPrimarioHeader = () => {
+    switch (activeTab) {
+      case "Painel":
+        return (
+          <button
+            onClick={() => setShowNovaScModal(true)}
+            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition whitespace-nowrap"
+          >
+            + Nova Solicitação
+          </button>
+        );
+      case "DesempenhoFinanceiro":
+        return (
+          <button
+            onClick={() => window.print()}
+            className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold transition whitespace-nowrap flex items-center gap-2 shadow-xs"
+          >
+            <span>📥</span>
+            <span>Exportar Relatório BI</span>
+          </button>
+        );
+      case "Estoque":
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAgruparDemandasModal(true)}
+              className="px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold transition whitespace-nowrap flex items-center gap-1.5 shadow-xs"
+              title="Agrupar pedidos semelhantes de diferentes obras para compra corporativa com desconto"
+            >
+              <span>⚡ Agrupar Compras Corporativas</span>
+            </button>
+            <button
+              onClick={() => setShowProgramarPuxadaModal(true)}
+              className="px-3 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-semibold transition whitespace-nowrap flex items-center gap-1.5 shadow-xs"
+            >
+              <span>🚛 Programar Puxada</span>
+            </button>
+            <button
+              onClick={() => setShowNovaMovimentacaoModal(true)}
+              className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition whitespace-nowrap flex items-center gap-1.5 shadow-xs"
+            >
+              <span>+ Nova Movimentação</span>
+            </button>
+          </div>
+        );
+      case "Cotacoes":
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() =>
+                exportarCotacaoExcel(
+                  scAtiva,
+                  obraScAtiva.nome
+                )
+              }
+              className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold transition whitespace-nowrap"
+            >
+              Exportar Excel (.xlsx)
+            </button>
+            <button
+              onClick={handleGeneratePDF}
+              className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold transition whitespace-nowrap"
+            >
+              Gerar PDF
+            </button>
+          </div>
+        );
+      case "Fornecedores":
+        return (
+          <button
+            onClick={() => setShowNovoFornecedorModal(true)}
+            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition whitespace-nowrap"
+          >
+            + Novo Fornecedor
+          </button>
+        );
+      case "Ordens":
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => exportarOrdensExcel(ordensFiltradas)}
+              className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold transition whitespace-nowrap"
+            >
+              Exportar Excel (.xlsx)
+            </button>
+            <button
+              onClick={() => setActiveTab("Cotacoes")}
+              className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition whitespace-nowrap"
+            >
+              Ir para Mapa de Cotações
+            </button>
+          </div>
+        );
+      case "Medicoes":
+        return (
+          <button
+            onClick={() => setShowNovoContratoModal(true)}
+            className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold transition whitespace-nowrap"
+          >
+            + Novo Contrato de Subempreitada
+          </button>
+        );
+      case "Orcamento":
+        return (
+          <button
+            onClick={() => setShowNovoOrcamentoModal(true)}
+            className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold transition whitespace-nowrap"
+          >
+            + Definir Verba Orçamentária
+          </button>
+        );
+      case "Logistica":
+        return (
+          <button
+            onClick={() => setActiveTab("Ordens")}
+            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition whitespace-nowrap"
+          >
+            + Programar Nova Carga
+          </button>
+        );
+      case "Importacao":
+        return (
+          <button
+            onClick={() => {
+              setItensPlanilha((prev) =>
+                prev.map((i) => ({ ...i, status: "Aprovado" }))
+              );
+              setDuplicidades((prev) =>
+                prev.map((d) => ({ ...d, status: "Unificado" }))
+              );
+              setColaboradores((prev) =>
+                prev.map((c) => ({ ...c, status: "Validado" }))
+              );
+              dispararAviso(
+                "Todos os registros da planilha foram aprovados e integrados ao sistema!"
+              );
+            }}
+            className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold transition whitespace-nowrap"
+          >
+            Aprovar Todos os Registros
+          </button>
+        );
+      case "Configuracoes":
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportarBackupCompleto}
+              className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold transition whitespace-nowrap"
+            >
+              📥 Backup (JSON)
+            </button>
+            <button
+              onClick={() => setShowNovoUsuarioModal(true)}
+              className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition whitespace-nowrap"
+            >
+              + Novo Acesso
+            </button>
+          </div>
+        );
+    }
+  };
+
+  /* ----------------------------------------------------------------------- */
+  /* TELA DE LOGIN CORPORATIVA (QUANDO NÃO HÁ USUÁRIO AUTENTICADO)           */
+  /* ----------------------------------------------------------------------- */
+  if (!usuarioLogado) {
+    return (
+      <TelaLoginCorporativa
+        companyName={settings.companyName}
+        loginInput={loginInput}
+        setLoginInput={setLoginInput}
+        senhaInput={senhaInput}
+        setSenhaInput={setSenhaInput}
+        erroLogin={erroLogin}
+        onSubmit={handleLoginSubmit}
+        onQuickLogin={handleQuickLogin}
+        usuarios={usuarios}
+      />
+    );
+  }
+
+  /* ----------------------------------------------------------------------- */
+  /* VISÃO RESTRITA DO SOLICITANTE DA OBRA (ENGENHEIRO / ALMOXARIFE / ENCARR)*/
+  /* ----------------------------------------------------------------------- */
+  if (usuarioLogado.cargo !== "Administrador") {
+    return (
+      <VisaoRestritaObra
+        usuarioLogado={usuarioLogado}
+        companyName={settings.companyName}
+        obras={obras}
+        fornecedores={fornecedores}
+        solicitacoes={solicitacoes}
+        ordens={ordens}
+        contratos={contratos}
+        obraActiveTab={obraActiveTab}
+        setObraActiveTab={setObraActiveTab}
+        notificacao={notificacao}
+        setNotificacao={setNotificacao}
+        onLogout={handleLogout}
+        onCriarPedidoCanteiro={handleCriarPedidoCanteiro}
+        ocConfirmarRecebimentoModal={ocConfirmarRecebimentoModal}
+        setOcConfirmarRecebimentoModal={setOcConfirmarRecebimentoModal}
+        onConfirmarRecebimentoObra={handleConfirmarRecebimentoObra}
+        onCriarBoletimMedicao={handleCriarBoletimMedicao}
+        onEnviarMensagemSC={handleEnviarMensagemSC}
+        estoque={estoque}
+        movimentacoesEstoque={movimentacoesEstoque}
+        onRegistrarMovimentacao={handleRegistrarMovimentacao}
+        diariosObra={diariosObra}
+        onSalvarDiarioObra={handleSalvarDiarioObra}
+      />
+    );
+  }
+
+  /* ----------------------------------------------------------------------- */
+  /* RENDERIZAÇÃO PRINCIPAL DO ADMINISTRADOR (COMPRAS - ACESSO TOTAL)        */
+  /* ----------------------------------------------------------------------- */
+
+  return (
+    <div className="flex h-screen w-full overflow-hidden bg-[#F4F6F8] text-slate-900 font-sans">
+      {/* ================================================================= */}
+      {/* SIDEBAR ESQUERDA COMPACTA (w-56 shrink-0 bg-slate-900 text-white) */}
+      {/* ================================================================= */}
+      <aside className="no-print w-56 shrink-0 bg-slate-900 text-white flex flex-col justify-between h-full">
+        <div>
+          {/* Identidade Dinâmica da Construtora (vinda das Configurações) */}
+          <div className="h-16 px-4 border-b border-slate-800 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-md bg-emerald-600 flex items-center justify-center font-bold text-sm text-white shrink-0">
+              JB
+            </div>
+            <div className="min-w-0">
+              <div className="font-bold text-sm text-white truncate">
+                {settings.companyName.split(" ")[0]}{" "}
+                {settings.companyName.split(" ")[1] || "BAUER"}
+              </div>
+              <div className="text-xs text-slate-400 truncate">
+                Suprimentos & Obras
+              </div>
+            </div>
+          </div>
+
+          {/* Menu com Abas Independentes + Configurações */}
+          <nav className="p-3 space-y-1">
+            {(
+              [
+                { id: "Painel", label: "📋 Painel de Compras" },
+                {
+                  id: "DesempenhoFinanceiro",
+                  label: "💰 BI Financeiro & Obras",
+                },
+                { id: "Cotacoes", label: "⚖️ Mapa de Cotações" },
+                { id: "Fornecedores", label: "🏢 Fornecedores & IQF" },
+                { id: "Ordens", label: "📦 Ordens de Compra" },
+                { id: "Estoque", label: "🧱 Almoxarifado & Estoque" },
+                { id: "Medicoes", label: "📐 Contratos & Medições" },
+                { id: "Orcamento", label: "💰 Orçamento da Obra" },
+                { id: "Logistica", label: "🚚 Calendário de Cargas" },
+                { id: "Importacao", label: "📥 Importar Planilhas" },
+                { id: "Configuracoes", label: "⚙️ Configurações" },
+              ] as { id: TabId; label: string }[]
+            ).map((item) => {
+              const ativo = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm font-medium transition text-left ${
+                    ativo
+                      ? "bg-emerald-600 text-white font-semibold shadow-xs"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  }`}
+                >
+                  <span className="truncate">{item.label}</span>
+                  {item.id === "DesempenhoFinanceiro" && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-600 text-[10px] font-extrabold shrink-0">
+                      Saving
+                    </span>
+                  )}
+                  {item.id === "Painel" && novosPedidosCanteiroCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-xs font-extrabold shrink-0">
+                      {novosPedidosCanteiroCount}
+                    </span>
+                  )}
+                  {item.id === "Estoque" && itensAbaixoMinimo.length > 0 && (
+                    <span
+                      title={`${itensAbaixoMinimo.length} insumos abaixo do estoque de segurança`}
+                      className="px-1.5 py-0.5 rounded-full bg-red-600 text-white text-xs font-extrabold shrink-0 animate-pulse"
+                    >
+                      {itensAbaixoMinimo.length}
+                    </span>
+                  )}
+                  {item.id === "Logistica" && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-blue-300 text-xs font-bold shrink-0">
+                      {cargasLogistica.flatMap((d) => d.cargas).filter((c) => c.status === "Hoje" || c.status === "Agendado").length}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Rodapé Dinâmico da Sidebar (Perfil Logado + Botão Sair / Trocar Conta) */}
+        <div className="p-3 border-t border-slate-800 space-y-2">
+          <button
+            onClick={() => setActiveTab("Configuracoes")}
+            title="Clique para gerenciar configurações e acessos"
+            className="text-left hover:bg-slate-800/70 p-2 rounded-lg transition w-full block"
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="px-1.5 py-0.5 rounded bg-emerald-700 text-white text-[11px] font-bold">
+                👑 ADMIN
+              </span>
+              <span className="font-semibold text-xs text-slate-100 truncate">
+                {usuarioLogado.nome}
+              </span>
+            </div>
+            <div className="text-xs text-slate-400 truncate mt-0.5">
+              {usuarioLogado.obraNome}
+            </div>
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-red-900/80 text-slate-200 hover:text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-slate-700"
+          >
+            <span>🚪</span> Sair / Trocar Conta
+          </button>
+        </div>
+      </aside>
+
+      {/* ================================================================= */}
+      {/* ÁREA PRINCIPAL (flex-1 flex flex-col min-w-0 h-full overflow-hidden)*/}
+      {/* ================================================================= */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        {/* HEADER SUPERIOR FIXO (h-16 shrink-0) */}
+        <header className="no-print h-16 shrink-0 bg-white border-b border-slate-200 px-6 flex items-center justify-between gap-4">
+          {/* Esquerda: Título da Aba Atual + Alerta de Novos Pedidos */}
+          <div className="flex items-center gap-3 min-w-0">
+            <h1 className="text-lg font-bold text-slate-900 truncate">
+              {tituloAbaAtual[activeTab]}
+            </h1>
+            {novosPedidosCanteiroCount > 0 && (
+              <button
+                onClick={() => {
+                  setActiveTab("Painel");
+                  setPainelSubView("solicitacoes");
+                }}
+                className="px-3 py-1 rounded-full bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 text-xs font-bold flex items-center gap-1.5 shrink-0 transition"
+              >
+                <span>🔔</span> Novos Pedidos da Obra Recebidos! (
+                {novosPedidosCanteiroCount})
+              </button>
+            )}
+          </div>
+
+          {/* Direita: Notificações + Selo do Perfil + Select de Obra + Botão Primário + Sair */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            {/* Botão de Notificações com Badge */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowNotificacoesModal(!showNotificacoesModal)}
+                className="relative p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                title="Central de Notificações e Alertas Preventivos"
+              >
+                <span className="text-base">🔔</span>
+                {notificacoesSistema.length > 0 && (
+                  <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-red-600 text-white rounded-full text-[10px] font-extrabold animate-pulse">
+                    {notificacoesSistema.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs">
+              <span className="font-bold text-emerald-800">
+                👑 {usuarioLogado.cargo}:
+              </span>
+              <span className="font-semibold text-slate-800">
+                {usuarioLogado.nome}
+              </span>
+            </div>
+
+            <select
+              value={obraFiltro}
+              onChange={(e) => setObraFiltro(e.target.value)}
+              className="bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-900"
+            >
+              <option value="ALL">Todas as Obras ({obras.length})</option>
+              {obras.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.nome}
+                </option>
+              ))}
+            </select>
+
+            {renderBotaoPrimarioHeader()}
+
+            <button
+              onClick={handleLogout}
+              className="px-3 py-2 rounded-lg bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-700 border border-slate-300 text-xs font-semibold transition whitespace-nowrap"
+              title="Encerrar sessão ou trocar de perfil"
+            >
+              Sair / Trocar Conta
+            </button>
+          </div>
+        </header>
+
+        {/* Notificação de feedback se houver */}
+        {notificacao && (
+          <div className="no-print bg-emerald-800 text-white px-6 py-2.5 text-sm font-medium flex items-center justify-between shrink-0">
+            <span>{notificacao}</span>
+            <button
+              onClick={() => setNotificacao(null)}
+              className="text-xs underline ml-4"
+            >
+              Fechar
+            </button>
+          </div>
+        )}
+
+        {/* =============================================================== */}
+        {/* CORPO DA PÁGINA (flex-1 overflow-y-auto p-6)                    */}
+        {/* Renderiza APENAS a aba selecionada                              */}
+        {/* =============================================================== */}
+        <main className="no-print flex-1 overflow-y-auto p-6">
+          {/* ============================================================= */}
+          {/* ABA 1: PAINEL DE COMPRAS & INFOGRÁFICO DE CUSTOS / SAVING     */}
+          {/* ============================================================= */}
+          {activeTab === "Painel" && (
+            <div className="space-y-6">
+              {/* 4 Cards de KPI limpos no topo (Regra do Número Único, 3 linhas simples) */}
+              <div className="grid grid-cols-4 gap-4">
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    SOLICITAÇÕES EM ABERTO
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                    {kpisPainel.emAberto}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    Em 11 categorias da obra
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    COTAÇÕES CONCLUÍDAS
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                    {kpisPainel.concluidas}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    Processos homologados
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    CUSTO REAL FECHADO
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                    {formatBRL(kpisPainel.volumeContratado)}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    Volume negociado nas obras
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    ECONOMIA (SAVING)
+                  </div>
+                  <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
+                    {formatBRL(kpisPainel.savingTotal)}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    Redução direta nas compras
+                  </div>
+                </div>
+              </div>
+
+              {/* Barra Seletora de Visão (Modo Geral Consolidado vs Por Empreendimento) + Alternador de Sub-Aba */}
+              <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500 uppercase mr-1">
+                    Visão do Empreendimento:
+                  </span>
+                  <button
+                    onClick={() => setObraFiltro("ALL")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      obraFiltro === "ALL"
+                        ? "bg-slate-900 text-white"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    }`}
+                  >
+                    Visão Geral Consolidada (Todas as Obras)
+                  </button>
+                  {obras.map((ob) => (
+                    <button
+                      key={ob.id}
+                      onClick={() => setObraFiltro(ob.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        obraFiltro === ob.id
+                          ? "bg-emerald-700 text-white"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      }`}
+                    >
+                      {ob.nome}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setActiveTab("DesempenhoFinanceiro")}
+                    className="px-3.5 py-1.5 rounded-lg text-xs font-bold transition bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-1.5 shadow-xs"
+                    title="Acessar o novo Dashboard Financeiro Completo com Gráficos Diários e BI"
+                  >
+                    <span>📊</span>
+                    <span>Novo BI & Desempenho Financeiro ➔</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* ========================================================= */}
+              {/* AUDITORIA DE ATUALIZAÇÃO & DISCIPLINA DOS CANTEIROS        */}
+              {/* ========================================================= */}
+              <div className="bg-white rounded-lg border border-slate-200 p-5 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🚦</span>
+                      <h2 className="text-base font-bold text-slate-900">
+                        Auditoria de Atualização & Disciplina Operacional dos Canteiros
+                      </h2>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
+                        Tempo Real
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Acompanhamento ao vivo do preenchimento do Diário de Obra (RDO), confirmações de recebimento de materiais com NF e baixas de estoque por Engenheiros, Almoxarifes e Encarregados.
+                    </p>
+                  </div>
+                  <div className="text-xs text-slate-500 font-medium bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex items-center gap-2 shrink-0">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                    Hoje: {new Date().toLocaleDateString("pt-BR")}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {obras
+                    .filter((ob) => obraFiltro === "ALL" || ob.id === obraFiltro)
+                    .map((ob) => {
+                      const dataHoje = new Date().toLocaleDateString("pt-BR");
+                      const diariosObraEspecifica = diariosObra.filter((d) => d.obraId === ob.id);
+                      const ultimoDiario = diariosObraEspecifica[0]; // mais recente
+                      const diarioHojePreenchido = diariosObraEspecifica.some((d) => d.data === dataHoje);
+
+                      // OCs pendentes de confirmação física na obra
+                      const ocsPendentesRecebimento = ordens.filter(
+                        (o) =>
+                          o.obraId === ob.id &&
+                          (o.status === "Emitida" ||
+                            o.status === "Aguardando Entrega")
+                      );
+
+                      // Itens em estoque na obra
+                      const itensEstoqueObra = estoque.filter((it) => it.obraId === ob.id);
+                      const itensAbaixoMinimo = itensEstoqueObra.filter((it) => it.saldoAtual <= it.estoqueMinimo);
+
+                      return (
+                        <div
+                          key={ob.id}
+                          className={`rounded-lg border p-4 transition flex flex-col justify-between ${
+                            diarioHojePreenchido
+                              ? "border-emerald-200 bg-emerald-50/40"
+                              : "border-amber-300 bg-amber-50/40"
+                          }`}
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h3 className="font-bold text-sm text-slate-900">
+                                  {ob.nome}
+                                </h3>
+                                <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                  <span>👤 Eng. Responsável:</span>
+                                  <span className="font-medium text-slate-700">{ob.engenheiro}</span>
+                                </div>
+                              </div>
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold uppercase shrink-0 ${
+                                  diarioHojePreenchido
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-amber-500 text-white animate-pulse"
+                                }`}
+                              >
+                                {diarioHojePreenchido ? "🟢 Em Dia Hoje" : "🟡 Pendente Hoje"}
+                              </span>
+                            </div>
+
+                            {/* Detalhes do Último Diário (RDO) */}
+                            <div className="bg-white/80 rounded-lg p-2.5 border border-slate-200/80 text-xs space-y-1.5">
+                              {ultimoDiario ? (
+                                <>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500 font-medium">Último RDO:</span>
+                                    <span className="font-bold text-slate-800">
+                                      {ultimoDiario.data} às {ultimoDiario.hora}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500">Registrado por:</span>
+                                    <span className="font-medium text-slate-800">
+                                      {ultimoDiario.responsavelNome} ({ultimoDiario.responsavelCargo})
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500">Efetivo de Campo:</span>
+                                    <span className="font-semibold text-emerald-800">
+                                      {ultimoDiario.efetivoProprio + ultimoDiario.efetivoTerceirizado} trabalhadores ({ultimoDiario.efetivoProprio} próprios + {ultimoDiario.efetivoTerceirizado} terc.)
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500">Clima:</span>
+                                    <span className="font-medium text-slate-700">
+                                      ☀️ {ultimoDiario.clima}
+                                    </span>
+                                  </div>
+                                  <div className="pt-1 border-t border-slate-100">
+                                    <span className="text-[11px] text-slate-500 block">Frentes ativas:</span>
+                                    <span className="text-[11px] text-slate-700 font-medium line-clamp-2">
+                                      {ultimoDiario.frentesServico}
+                                    </span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="text-slate-500 italic py-1 text-center">
+                                  Nenhum diário registrado ainda para este canteiro.
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Resumo Operacional de Materiais & Entregas */}
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div className="bg-white/80 rounded p-2 border border-slate-200">
+                                <span className="text-[10px] text-slate-500 uppercase block font-semibold">
+                                  Entregas a Conferir
+                                </span>
+                                <span
+                                  className={`text-sm font-bold ${
+                                    ocsPendentesRecebimento.length > 0
+                                      ? "text-amber-700"
+                                      : "text-emerald-700"
+                                  }`}
+                                >
+                                  {ocsPendentesRecebimento.length}{" "}
+                                  {ocsPendentesRecebimento.length === 1 ? "carga" : "cargas"}
+                                </span>
+                              </div>
+                              <div className="bg-white/80 rounded p-2 border border-slate-200">
+                                <span className="text-[10px] text-slate-500 uppercase block font-semibold">
+                                  Itens Almoxarifado
+                                </span>
+                                <span className="text-sm font-bold text-slate-800">
+                                  {itensEstoqueObra.length} insumos
+                                  {itensAbaixoMinimo.length > 0 && (
+                                    <span className="text-[10px] text-red-600 block font-normal">
+                                      ({itensAbaixoMinimo.length} sob alerta mín.)
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="pt-3 mt-3 border-t border-slate-200/60 flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setObraFiltro(ob.id);
+                                setSubAbaEstoque("movimentacoes");
+                                setActiveTab("Estoque");
+                              }}
+                              className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 hover:underline"
+                            >
+                              Ver Almoxarifado ➔
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                dispararAviso(
+                                  `Lembrete operacional emitido via sistema para ${ob.engenheiro} no canteiro ${ob.nome}!`
+                                );
+                              }}
+                              className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-semibold transition"
+                            >
+                              🔔 Notificar Canteiro
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* BANNER DE ACESSO AO NOVO BI FINANCEIRO & DESEMPENHO DAS OBRAS */}
+              <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 text-white rounded-xl p-5 shadow-sm border border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">💰</span>
+                    <h3 className="font-bold text-base text-white">
+                      BI Financeiro, Indicadores Diários & Economia das Obras
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold">
+                      Novo Painel Separado
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                    Acesse o novo dashboard financeiro dedicado: gráfico de compras e saving atualizado diariamente (dia a dia de outubro), comparativo orçamentário por empreendimento (Horizon, Atrium e SulPark), demandas de canteiro em R$ e previsão de fluxo de caixa por vencimento.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("DesempenhoFinanceiro")}
+                  className="px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-2 shadow-sm whitespace-nowrap shrink-0"
+                >
+                  <span>📊 Acessar Dashboard Financeiro Completo &rarr;</span>
+                </button>
+              </div>
+
+              {/* Banner de Alerta de Novos Pedidos vindos do Canteiro */}
+              {novosPedidosCanteiroCount > 0 && (
+                <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">🔔</span>
+                    <div>
+                      <div className="text-sm font-bold text-amber-950">
+                        Novos Pedidos da Obra Recebidos! (
+                        {novosPedidosCanteiroCount} aguardando atendimento do
+                        Setor de Compras)
+                      </div>
+                      <div className="text-xs text-amber-800 mt-0.5">
+                        Solicitações enviadas diretamente pelos Engenheiros,
+                        Almoxarifado e Encarregados nos canteiros. Clique em{" "}
+                        <strong>&ldquo;Abrir Cotação &rarr;&rdquo;</strong> para
+                        iniciar a tomada de preços.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tabela de Solicitações de Compra (Sempre acessível no Painel) */}
+              <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2.5">
+                      <h2 className="text-base font-bold text-slate-900">
+                        Solicitações de Compra das Obras (Canteiro &rarr;
+                        Suprimentos)
+                      </h2>
+                      {novosPedidosCanteiroCount > 0 && (
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold">
+                          🔔 {novosPedidosCanteiroCount} Novo(s)
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Acompanhe quem pediu, qual obra, urgência, lista de
+                      insumos e abra diretamente no Mapa de Cotações
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowNovaScModal(true)}
+                    className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+                  >
+                    + Nova Solicitação
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse text-left">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                        <th className="py-3 px-4">Código / Data</th>
+                        <th className="py-3 px-4">Quem Pediu / Obra</th>
+                        <th className="py-3 px-4">Lista de Insumos Solicitados</th>
+                        <th className="py-3 px-4 text-center">Urgência</th>
+                        <th className="py-3 px-4 text-right">Orçamento Ref.</th>
+                        <th className="py-3 px-4 text-center">Status</th>
+                        <th className="py-3 px-4 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {solicitacoesFiltradas.map((sc) => {
+                        const obra = obras.find((o) => o.id === sc.obraId);
+                        const orcamento = sc.itens.reduce(
+                          (acc, it) =>
+                            acc + it.quantidade * it.orcamentoUnitario,
+                          0
+                        );
+                        const urgencia = sc.urgencia || "Normal";
+
+                        return (
+                          <tr
+                            key={sc.id}
+                            className={`hover:bg-slate-50 transition-colors ${
+                              sc.novoAlertaAdmin ||
+                              sc.status === "Enviado / Aguardando Compras"
+                                ? "bg-amber-50/40"
+                                : ""
+                            }`}
+                          >
+                            <td className="py-3.5 px-4 whitespace-nowrap align-top">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-slate-900 tabular-nums">
+                                  {sc.codigo}
+                                </span>
+                                {(sc.novoAlertaAdmin ||
+                                  sc.status ===
+                                    "Enviado / Aguardando Compras") && (
+                                  <span className="px-1.5 py-0.5 rounded bg-amber-200 text-amber-950 text-[11px] font-bold">
+                                    NOVO
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-slate-500 mt-0.5 tabular-nums">
+                                {sc.horarioPedido || sc.dataAbertura}
+                              </div>
+                              {sc.dataNecessaria && (
+                                <div className="text-xs text-slate-600 font-medium mt-0.5">
+                                  Precisa p/: {sc.dataNecessaria}
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4 align-top">
+                              <div className="font-bold text-slate-900">
+                                {sc.solicitante}
+                                {sc.solicitanteCargo ? (
+                                  <span className="ml-1.5 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700">
+                                    {sc.solicitanteCargo}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="text-xs font-semibold text-emerald-800 mt-0.5">
+                                📍 {obra?.nome}
+                              </div>
+                              <div className="text-xs text-slate-500 mt-0.5">
+                                {sc.categoria}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-4 align-top max-w-md">
+                              <div className="space-y-1">
+                                {sc.itens.map((it) => (
+                                  <div
+                                    key={it.id}
+                                    className="text-xs text-slate-800 leading-snug"
+                                  >
+                                    <span className="font-bold text-slate-900 tabular-nums">
+                                      • {it.quantidade} {it.unidade}
+                                    </span>{" "}
+                                    — {it.descricao}
+                                    {it.observacaoObra ? (
+                                      <span className="block text-slate-500 italic pl-2">
+                                        Obs. Obra: {it.observacaoObra}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-center whitespace-nowrap align-top">
+                              <span
+                                className={`px-2.5 py-1 rounded-md text-xs font-bold ${
+                                  urgencia === "Crítica - Obra Parada"
+                                    ? "bg-red-100 text-red-900 border border-red-300"
+                                    : urgencia === "Alta"
+                                    ? "bg-amber-100 text-amber-900 border border-amber-300"
+                                    : "bg-slate-100 text-slate-700 border border-slate-200"
+                                }`}
+                              >
+                                {urgencia}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right font-semibold text-slate-900 whitespace-nowrap tabular-nums align-top">
+                              <div>{formatBRL(orcamento)}</div>
+                              <div className="text-xs text-slate-500 font-normal">
+                                {sc.propostas.length} cotações
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-center whitespace-nowrap align-top">
+                              <span
+                                className={`px-2.5 py-1 rounded-full text-xs font-semibold inline-block ${
+                                  sc.status === "Entregue na Obra"
+                                    ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                                    : sc.status === "Comprada"
+                                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                    : sc.status ===
+                                      "Enviado / Aguardando Compras"
+                                    ? "bg-amber-100 text-amber-900 border border-amber-300"
+                                    : "bg-blue-50 text-blue-800 border border-blue-200"
+                                }`}
+                              >
+                                {sc.status === "Enviado / Aguardando Compras"
+                                  ? "🟡 Enviado / Aguardando Compras"
+                                  : sc.status === "Em Cotação"
+                                  ? "🔵 Em Cotação"
+                                  : sc.status === "Comprada"
+                                  ? "🟢 Compra Aprovada"
+                                  : "✅ Entregue na Obra"}
+                              </span>
+                              {sc.notaFiscalRecebida && (
+                                <div className="text-xs text-emerald-800 font-semibold mt-1">
+                                  NF: {sc.notaFiscalRecebida}
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right whitespace-nowrap align-top">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setScMensagensModal(sc)}
+                                  className="px-2.5 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition"
+                                  title="Linha do tempo e mensagens entre Canteiro e Compras"
+                                >
+                                  <span>💬</span>
+                                  <span>Mensagens</span>
+                                  {sc.mensagens && sc.mensagens.length > 0 && (
+                                    <span className="px-1.5 py-0.2 bg-blue-600 text-white rounded-full text-[10px] font-bold">
+                                      {sc.mensagens.length}
+                                    </span>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSolicitacoes((prev) =>
+                                      prev.map((item) =>
+                                        item.id === sc.id
+                                          ? {
+                                              ...item,
+                                              novoAlertaAdmin: false,
+                                              status:
+                                                item.status ===
+                                                "Enviado / Aguardando Compras"
+                                                  ? "Em Cotação"
+                                                  : item.status,
+                                            }
+                                          : item
+                                      )
+                                    );
+                                    setSelectedScId(sc.id);
+                                    setActiveTab("Cotacoes");
+                                  }}
+                                  className="px-3 py-1.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+                                >
+                                  Abrir Cotação &rarr;
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================= */}
+          {/* ABA DEDICADA: BI FINANCEIRO & DESEMPENHO ECONÔMICO DAS OBRAS  */}
+          {/* ============================================================= */}
+          {activeTab === "DesempenhoFinanceiro" && (() => {
+            // Cálculos dinâmicos consolidados e por obra
+            const ordensFiltradasFin = ordens.filter(
+              (o) => obraFiltro === "ALL" || o.obraId === obraFiltro
+            );
+            const solicitacoesFiltradasFin = solicitacoes.filter(
+              (s) => obraFiltro === "ALL" || s.obraId === obraFiltro
+            );
+
+            const totalDemandadoPedidos = solicitacoesFiltradasFin.reduce(
+              (acc, s) =>
+                acc +
+                s.itens.reduce(
+                  (iAcc, it) => iAcc + it.quantidade * it.orcamentoUnitario,
+                  0
+                ),
+              0
+            );
+
+            const totalContratadoFechado = ordensFiltradasFin.reduce(
+              (acc, o) => acc + o.valorTotal,
+              0
+            );
+
+            const totalSavingFinanceiro = ordensFiltradasFin.reduce(
+              (acc, o) => acc + (o.savingGerado || 0),
+              0
+            );
+
+            const orcamentoTotalBenchmark =
+              obraFiltro === "ALL"
+                ? 15500000
+                : obraFiltro === "obra-1"
+                ? 5200000
+                : obraFiltro === "obra-2"
+                ? 3800000
+                : 6500000;
+
+            const saldoOrcamentarioDisponivel = Math.max(
+              0,
+              orcamentoTotalBenchmark - totalContratadoFechado
+            );
+            const pctConsumidoOrcamento =
+              orcamentoTotalBenchmark > 0
+                ? (totalContratadoFechado / orcamentoTotalBenchmark) * 100
+                : 0;
+            const pctSavingGlobal =
+              totalContratadoFechado + totalSavingFinanceiro > 0
+                ? (totalSavingFinanceiro /
+                    (totalContratadoFechado + totalSavingFinanceiro)) *
+                  100
+                : 0;
+
+            const maxVolumeDiario = Math.max(
+              ...DADOS_FINANCEIROS_DIARIOS_OUTUBRO.map((d) => d.volumeContratado)
+            );
+
+            // Dados comparativos das 3 Obras
+            const obrasComparativo = [
+              {
+                id: "obra-1",
+                nome: "Residencial Horizon Tower",
+                cidade: "Balneário Camboriú / SC",
+                sigla: "HZT",
+                areaM2: 14800,
+                engenheiro: "Eng. Henrique Fontana",
+                orcamento: 5200000,
+                demandado: 2450000,
+                fechado: 2125000,
+                saving: 325000,
+                savingPct: 13.3,
+                pedidosCount: 42,
+                ordensCount: 38,
+                custoM2: 1540,
+                prazoMedioCotacao: "2.1 dias",
+                aderenciaMeta: "98.5%",
+              },
+              {
+                id: "obra-2",
+                nome: "Edifício Comercial Atrium Bauer",
+                cidade: "Itajaí / SC",
+                sigla: "ATB",
+                areaM2: 9200,
+                engenheiro: "Enga. Beatriz Mendes",
+                orcamento: 3800000,
+                demandado: 1780000,
+                fechado: 1545000,
+                saving: 235000,
+                savingPct: 13.2,
+                pedidosCount: 31,
+                ordensCount: 27,
+                custoM2: 1680,
+                prazoMedioCotacao: "1.9 dias",
+                aderenciaMeta: "99.1%",
+              },
+              {
+                id: "obra-3",
+                nome: "Condomínio Logístico SulPark",
+                cidade: "Joinville / SC",
+                sigla: "SLP",
+                areaM2: 22500,
+                engenheiro: "Eng. Rodrigo Capanema",
+                orcamento: 6500000,
+                demandado: 2890000,
+                fechado: 2520000,
+                saving: 370000,
+                savingPct: 12.8,
+                pedidosCount: 48,
+                ordensCount: 43,
+                custoM2: 1120,
+                prazoMedioCotacao: "2.4 dias",
+                aderenciaMeta: "97.8%",
+              },
+            ].filter((o) => obraFiltro === "ALL" || o.id === obraFiltro);
+
+            // Dados de Saving por Categoria
+            const categoriasAnalise = [
+              {
+                nome: "Estrutura (Aço & Concreto)",
+                orcado: 4800000,
+                fechado: 2180000,
+                saving: 318000,
+                savingPct: 14.6,
+                fornecedorLider: "Gerdau & Polimix Concreto",
+                status: "Controlado",
+              },
+              {
+                nome: "Esquadrias & Fachadas de Vidro",
+                orcado: 2600000,
+                fechado: 1350000,
+                saving: 188000,
+                savingPct: 13.9,
+                fornecedorLider: "AluGlass Fachadas",
+                status: "Controlado",
+              },
+              {
+                nome: "Fundações & Terraplenagem",
+                orcado: 1950000,
+                fechado: 940000,
+                saving: 125000,
+                savingPct: 13.3,
+                fornecedorLider: "Supermix Concreto",
+                status: "Concluído",
+              },
+              {
+                nome: "Instalações Elétricas & Dados",
+                orcado: 1450000,
+                fechado: 680000,
+                saving: 92000,
+                savingPct: 13.5,
+                fornecedorLider: "Schneider & Prysmian",
+                status: "Controlado",
+              },
+              {
+                nome: "Instalações Hidrossanitárias",
+                orcado: 1200000,
+                fechado: 560000,
+                saving: 74000,
+                savingPct: 13.2,
+                fornecedorLider: "Tigre Engenharia B2B",
+                status: "Controlado",
+              },
+              {
+                nome: "Revestimentos, Louças & Metais",
+                orcado: 1650000,
+                fechado: 710000,
+                saving: 98000,
+                savingPct: 13.8,
+                fornecedorLider: "Portobello Corporate",
+                status: "Controlado",
+              },
+              {
+                nome: "Impermeabilização & Isolamento",
+                orcado: 920000,
+                fechado: 410000,
+                saving: 53000,
+                savingPct: 12.9,
+                fornecedorLider: "ImperSul Químicos",
+                status: "Controlado",
+              },
+              {
+                nome: "Pintura & Texturas",
+                orcado: 930000,
+                fechado: 380000,
+                saving: 47000,
+                savingPct: 12.4,
+                fornecedorLider: "Suvinil / Coral Tintas",
+                status: "Controlado",
+              },
+            ];
+
+            // Top 5 Negociações de Maior Saving
+            const topNegociacoesSaving = [
+              {
+                insumo: "Aço CA-50 Cortado e Dobrado (Cargas Pesadas)",
+                obraNome: "Residencial Horizon Tower",
+                fornecedor: "Comercial Gerdau S.A.",
+                maiorCotado: 215000,
+                fechado: 184000,
+                savingReais: 31000,
+                savingPct: 14.4,
+                condicao: "28/42 ddl Boleto",
+              },
+              {
+                insumo: "Pele de Vidro & Esquadrias Linha Gold Fachada Norte",
+                obraNome: "Edifício Comercial Atrium Bauer",
+                fornecedor: "AluGlass Fachadas & Esquadrias",
+                maiorCotado: 485000,
+                fechado: 420000,
+                savingReais: 65000,
+                savingPct: 13.4,
+                condicao: "20% Sinal + 4x Medição",
+              },
+              {
+                insumo: "Estruturas e Terças Metálicas Cobertura Galpão B",
+                obraNome: "Condomínio Logístico SulPark",
+                fornecedor: "ArcelorMittal Sul",
+                maiorCotado: 448000,
+                fechado: 390000,
+                savingReais: 58000,
+                savingPct: 12.9,
+                condicao: "30/60 ddl Boleto",
+              },
+              {
+                insumo: "Concreto Usinado Fck 40 MPa c/ Sílica (Laje Superior)",
+                obraNome: "Residencial Horizon Tower",
+                fornecedor: "Supermix Concreto S.A.",
+                maiorCotado: 158000,
+                fechado: 138000,
+                savingReais: 20000,
+                savingPct: 12.7,
+                condicao: "21 ddl Faturado",
+              },
+              {
+                insumo: "Climatização Central VRF Inverter Daikin",
+                obraNome: "Edifício Comercial Atrium Bauer",
+                fornecedor: "ArSul Engenharia Térmica",
+                maiorCotado: 351000,
+                fechado: 310000,
+                savingReais: 41000,
+                savingPct: 11.7,
+                condicao: "30/60/90 ddl",
+              },
+            ];
+
+            // Cronograma de Desembolso / Fluxo de Caixa
+            const faixasDesembolso = [
+              {
+                faixa: "Próximos 7 Dias",
+                descricao: "Fretes à vista, concreto e descargas imediatas",
+                valor: 84500,
+                percentual: 1.8,
+                cor: "bg-amber-500",
+              },
+              {
+                faixa: "8 a 15 Dias",
+                descricao: "Boletos de curto prazo e quitações de insumos",
+                valor: 242000,
+                percentual: 5.2,
+                cor: "bg-blue-500",
+              },
+              {
+                faixa: "16 a 30 Dias",
+                descricao: "Boletos comerciais padrão 28 ddl (Aço e Cimento)",
+                valor: 890000,
+                percentual: 19.1,
+                cor: "bg-indigo-600",
+              },
+              {
+                faixa: "31 a 60 Dias",
+                descricao: "Prazos estendidos 30/60 ddl negociados pelo setor",
+                valor: 1650000,
+                percentual: 35.3,
+                cor: "bg-emerald-600",
+              },
+              {
+                faixa: "Acima de 60 Dias",
+                descricao: "Medições de subempreiteiros e parcelas finais",
+                valor: 1803500,
+                percentual: 38.6,
+                cor: "bg-slate-700",
+              },
+            ];
+
+            return (
+              <div className="space-y-6">
+                {/* BARRA SUPERIOR DE CONTROLE EXECUTIVO */}
+                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">💰</span>
+                        <h2 className="text-lg font-bold text-slate-900">
+                          BI Financeiro, Desempenho de Obras & Controladoria de Compras
+                        </h2>
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
+                          Atualizado Hoje: 18/10/2026
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Controle financeiro consolidado: curva de compras dia a dia, metas orçamentárias por empreendimento, saving real e projeção de desembolso.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <select
+                        value={obraFiltro}
+                        onChange={(e) => setObraFiltro(e.target.value)}
+                        className="bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-slate-900"
+                      >
+                        <option value="ALL">Todas as Obras (Consolidado JC Bauer)</option>
+                        {obras.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.nome}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={periodoFinanceiro}
+                        onChange={(e) =>
+                          setPeriodoFinanceiro(
+                            e.target.value as "outubro2026" | "ultimos30dias" | "ano2026"
+                          )
+                        }
+                        className="bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-slate-900"
+                      >
+                        <option value="outubro2026">Mês Vigente (Outubro/2026 - Dias 01 a 18)</option>
+                        <option value="ultimos30dias">Últimos 30 Dias Móveis</option>
+                        <option value="ano2026">Acumulado Anual 2026</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          dispararAviso("Relatório gerencial de BI exportado com sucesso em formato executivo!");
+                          window.print();
+                        }}
+                        className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
+                      >
+                        <span>📥</span>
+                        <span>Exportar BI</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 4 CARDS DE KPI FINANCEIROS GLOBAIS */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-slate-50 rounded-lg border border-slate-200 p-4">
+                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        DEMANDA DOS CANTEIROS
+                      </div>
+                      <div className="text-2xl font-extrabold text-slate-900 mt-1 tabular-nums">
+                        {formatBRL(totalDemandadoPedidos)}
+                      </div>
+                      <div className="text-xs text-slate-600 mt-1 flex items-center justify-between">
+                        <span>{solicitacoesFiltradasFin.length} pedidos abertos</span>
+                        <span className="font-semibold text-slate-700">Ticket Médio: R$ 58k</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-lg border border-slate-200 p-4">
+                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        COMPROMETIDO EM ORDENS (OCs)
+                      </div>
+                      <div className="text-2xl font-extrabold text-slate-900 mt-1 tabular-nums">
+                        {formatBRL(totalContratadoFechado)}
+                      </div>
+                      <div className="text-xs text-slate-600 mt-1 flex items-center justify-between">
+                        <span>{ordensFiltradasFin.length} OCs homologadas</span>
+                        <span className="font-semibold text-blue-700">
+                          {pctConsumidoOrcamento.toFixed(1)}% do teto
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="bg-emerald-50/70 rounded-lg border border-emerald-200 p-4">
+                      <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
+                        ECONOMIA REAL (SAVING)
+                      </div>
+                      <div className="text-2xl font-extrabold text-emerald-700 mt-1 tabular-nums">
+                        {formatBRL(totalSavingFinanceiro)}
+                      </div>
+                      <div className="text-xs text-emerald-800 mt-1 flex items-center justify-between">
+                        <span>vs maior cotação/orçado</span>
+                        <span className="font-extrabold bg-emerald-200 text-emerald-950 px-1.5 py-0.2 rounded text-[11px]">
+                          +{pctSavingGlobal.toFixed(1)}% economia
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-lg border border-slate-200 p-4">
+                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        SALDO ORÇAMENTÁRIO LIVRE
+                      </div>
+                      <div className="text-2xl font-extrabold text-slate-900 mt-1 tabular-nums">
+                        {formatBRL(saldoOrcamentarioDisponivel)}
+                      </div>
+                      <div className="text-xs text-slate-600 mt-1 flex items-center justify-between">
+                        <span>Teto: {formatBRL(orcamentoTotalBenchmark)}</span>
+                        <span className="font-bold text-emerald-700">
+                          {(100 - pctConsumidoOrcamento).toFixed(1)}% disponível
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* BARRA DE NAVEGAÇÃO INTERNA DO DASHBOARD */}
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200">
+                    {[
+                      {
+                        id: "visaoGeral",
+                        label: "📈 Gráficos Diários de Outubro & Funil Financeiro",
+                      },
+                      {
+                        id: "obras",
+                        label: "🏢 Desempenho Detalhado por Obra (Horizon, Atrium, SulPark)",
+                      },
+                      {
+                        id: "categorias",
+                        label: "🏷️ Economia por Categoria & Maiores Negociações",
+                      },
+                      {
+                        id: "fluxoCaixa",
+                        label: "💵 Fluxo de Caixa & Cronograma de Desembolso",
+                      },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() =>
+                          setSubAbaFinanceiro(
+                            tab.id as
+                              | "visaoGeral"
+                              | "obras"
+                              | "categorias"
+                              | "fluxoCaixa"
+                          )
+                        }
+                        className={`px-3.5 py-2 rounded-lg text-xs font-bold transition ${
+                          subAbaFinanceiro === tab.id
+                            ? "bg-slate-900 text-white shadow-xs"
+                            : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ========================================================= */}
+                {/* SUB-ABA 1: VISÃO GERAL & GRÁFICO DIÁRIO ATUALIZADO        */}
+                {/* ========================================================= */}
+                {subAbaFinanceiro === "visaoGeral" && (
+                  <div className="space-y-6">
+                    {/* BLOCO DO GRÁFICO DIÁRIO ATUALIZADO */}
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-base font-bold text-slate-900">
+                              Evolução Diária de Compras Contratadas vs. Saving Conquistado
+                            </h3>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
+                              Mês Vigente: Outubro / 2026 (Dias 01 a 18)
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Acompanhamento diário das ordens fechadas e valor economizado obtido nas negociações com fornecedores.
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setModoGraficoDiario("grafico")}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                              modoGraficoDiario === "grafico"
+                                ? "bg-slate-900 text-white"
+                                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                            }`}
+                          >
+                            📊 Gráfico em Colunas
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setModoGraficoDiario("tabela")}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                              modoGraficoDiario === "tabela"
+                                ? "bg-slate-900 text-white"
+                                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                            }`}
+                          >
+                            📋 Tabela Diária Analítica
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* LEGENDA DO GRÁFICO */}
+                      <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-medium bg-slate-50 p-3 rounded-lg border border-slate-200">
+                        <div className="flex items-center gap-4">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-3.5 h-3.5 rounded-xs bg-slate-900 inline-block"></span>
+                            <span className="text-slate-800 font-semibold">
+                              Volume Contratado no Dia (R$)
+                            </span>
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-3.5 h-3.5 rounded-xs bg-emerald-600 inline-block"></span>
+                            <span className="text-emerald-800 font-semibold">
+                              Saving / Economia Conquistada (R$)
+                            </span>
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 text-[11px] text-slate-600">
+                          <span>
+                            Média Diária Contratada: <strong>R$ 278.400</strong>
+                          </span>
+                          <span>•</span>
+                          <span>
+                            Média Diária de Saving: <strong>R$ 36.500</strong>
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* RENDERIZAÇÃO: MODO GRÁFICO EM COLUNAS */}
+                      {modoGraficoDiario === "grafico" ? (
+                        <div className="space-y-3">
+                          <div className="h-72 w-full flex items-end gap-2.5 pt-8 pb-2 px-2 overflow-x-auto border-b border-slate-200">
+                            {DADOS_FINANCEIROS_DIARIOS_OUTUBRO.map((d, idx) => {
+                              const alturaContratado = Math.max(
+                                12,
+                                Math.round((d.volumeContratado / maxVolumeDiario) * 210)
+                              );
+                              const alturaSaving = Math.max(
+                                6,
+                                Math.round((d.savingEconomizado / maxVolumeDiario) * 210)
+                              );
+
+                              return (
+                                <div
+                                  key={idx}
+                                  className="flex-1 min-w-[48px] flex flex-col items-center justify-end h-full group relative"
+                                >
+                                  {/* TOOLTIP ON HOVER */}
+                                  <div className="absolute -top-24 hidden group-hover:flex flex-col z-20 bg-slate-900 text-white text-[11px] p-2.5 rounded-lg shadow-xl whitespace-nowrap pointer-events-none border border-slate-700">
+                                    <span className="font-bold text-amber-400">
+                                      {d.data} ({d.diaSemana}) • {d.destaqueObra}
+                                    </span>
+                                    <span>Contratado: {formatBRL(d.volumeContratado)}</span>
+                                    <span className="text-emerald-300 font-bold">
+                                      Saving: +{formatBRL(d.savingEconomizado)} (
+                                      {(
+                                        (d.savingEconomizado / d.volumeContratado) *
+                                        100
+                                      ).toFixed(1)}
+                                      %)
+                                    </span>
+                                    <span className="text-slate-300 text-[10px]">
+                                      Destaque: {d.destaqueInsumo} ({d.pedidosFechados} pedidos)
+                                    </span>
+                                  </div>
+
+                                  {/* Rótulo superior do valor contratado no dia */}
+                                  <span className="text-[10px] font-bold text-slate-700 mb-1 opacity-0 group-hover:opacity-100 transition whitespace-nowrap tabular-nums">
+                                    {(d.volumeContratado / 1000).toFixed(0)}k
+                                  </span>
+
+                                  {/* As 2 Colunas Lado a Lado */}
+                                  <div className="flex items-end gap-1 w-full justify-center">
+                                    {/* Barra Contratado */}
+                                    <div
+                                      style={{ height: `${alturaContratado}px` }}
+                                      className="w-4 sm:w-5 bg-slate-900 hover:bg-slate-800 rounded-t-sm transition-all"
+                                      title={`Contratado: ${formatBRL(d.volumeContratado)}`}
+                                    />
+                                    {/* Barra Saving */}
+                                    <div
+                                      style={{ height: `${alturaSaving}px` }}
+                                      className="w-2.5 sm:w-3 bg-emerald-600 hover:bg-emerald-500 rounded-t-sm transition-all"
+                                      title={`Saving: ${formatBRL(d.savingEconomizado)}`}
+                                    />
+                                  </div>
+
+                                  {/* Rótulo do Eixo X (Data) */}
+                                  <span className="text-[10px] font-bold text-slate-600 mt-2 whitespace-nowrap">
+                                    {d.data}
+                                  </span>
+                                  <span className="text-[9px] text-slate-400">
+                                    {d.diaSemana}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="text-[11px] text-slate-500 text-center italic">
+                            💡 Passe o mouse sobre as colunas diárias para inspecionar os valores, percentuais de economia e insumos chave de cada fechamento.
+                          </div>
+                        </div>
+                      ) : (
+                        /* RENDERIZAÇÃO: MODO TABELA ANALÍTICA DIÁRIA */
+                        <div className="overflow-x-auto rounded-lg border border-slate-200">
+                          <table className="w-full text-xs text-left">
+                            <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] border-b border-slate-200">
+                              <tr>
+                                <th className="p-3">Data</th>
+                                <th className="p-3">Dia da Semana</th>
+                                <th className="p-3 text-right">Volume Contratado</th>
+                                <th className="p-3 text-right">Saving Conquistado</th>
+                                <th className="p-3 text-center">% Saving</th>
+                                <th className="p-3 text-center">Pedidos</th>
+                                <th className="p-3">Obra de Destaque</th>
+                                <th className="p-3">Principal Negociação</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200">
+                              {DADOS_FINANCEIROS_DIARIOS_OUTUBRO.map((d, i) => (
+                                <tr key={i} className="hover:bg-slate-50">
+                                  <td className="p-3 font-bold text-slate-900">{d.data}</td>
+                                  <td className="p-3 text-slate-600">{d.diaSemana}</td>
+                                  <td className="p-3 text-right font-bold text-slate-900 tabular-nums">
+                                    {formatBRL(d.volumeContratado)}
+                                  </td>
+                                  <td className="p-3 text-right font-bold text-emerald-700 tabular-nums">
+                                    +{formatBRL(d.savingEconomizado)}
+                                  </td>
+                                  <td className="p-3 text-center font-bold text-emerald-800">
+                                    {(
+                                      (d.savingEconomizado / d.volumeContratado) *
+                                      100
+                                    ).toFixed(1)}
+                                    %
+                                  </td>
+                                  <td className="p-3 text-center text-slate-700 font-semibold">
+                                    {d.pedidosFechados}
+                                  </td>
+                                  <td className="p-3 font-medium text-slate-800">{d.destaqueObra}</td>
+                                  <td className="p-3 text-slate-600">{d.destaqueInsumo}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-300">
+                              <tr>
+                                <td className="p-3" colSpan={2}>TOTAL ACUMULADO OUTUBRO (18 DIAS)</td>
+                                <td className="p-3 text-right tabular-nums">
+                                  {formatBRL(
+                                    DADOS_FINANCEIROS_DIARIOS_OUTUBRO.reduce(
+                                      (a, b) => a + b.volumeContratado,
+                                      0
+                                    )
+                                  )}
+                                </td>
+                                <td className="p-3 text-right text-emerald-700 tabular-nums">
+                                  +{formatBRL(
+                                    DADOS_FINANCEIROS_DIARIOS_OUTUBRO.reduce(
+                                      (a, b) => a + b.savingEconomizado,
+                                      0
+                                    )
+                                  )}
+                                </td>
+                                <td className="p-3 text-center text-emerald-800">13.1%</td>
+                                <td className="p-3 text-center">
+                                  {DADOS_FINANCEIROS_DIARIOS_OUTUBRO.reduce(
+                                    (a, b) => a + b.pedidosFechados,
+                                    0
+                                  )}
+                                </td>
+                                <td className="p-3" colSpan={2}>Consolidado Obras Ativas</td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* BLOCO: FUNIL & PIPELINE FINANCEIRO DOS PEDIDOS DE OBRA */}
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                        <div>
+                          <h3 className="text-base font-bold text-slate-900">
+                            Pipeline Financeiro de Pedidos das Obras (Status em R$)
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Visualização do ciclo completo da verba: desde a emissão da requisição no canteiro até a entrega física e faturamento.
+                          </p>
+                        </div>
+                        <span className="text-xs font-bold text-slate-600">
+                          Total no Fluxo: R$ 9.615.000,00
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                        <div className="p-3.5 rounded-lg border border-amber-200 bg-amber-50/70 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-amber-900 uppercase">
+                              1. Triagem no Canteiro
+                            </span>
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                          </div>
+                          <div className="text-lg font-extrabold text-amber-950 tabular-nums">
+                            R$ 340.000
+                          </div>
+                          <div className="w-full bg-amber-200 h-1.5 rounded-full overflow-hidden">
+                            <div className="bg-amber-600 h-full w-[15%]"></div>
+                          </div>
+                          <span className="text-[10px] text-amber-800 block">
+                            6 pedidos aguardando abertura de cotação
+                          </span>
+                        </div>
+
+                        <div className="p-3.5 rounded-lg border border-blue-200 bg-blue-50/70 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-blue-900 uppercase">
+                              2. Em Cotação B2B
+                            </span>
+                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                          </div>
+                          <div className="text-lg font-extrabold text-blue-950 tabular-nums">
+                            R$ 580.000
+                          </div>
+                          <div className="w-full bg-blue-200 h-1.5 rounded-full overflow-hidden">
+                            <div className="bg-blue-600 h-full w-[35%]"></div>
+                          </div>
+                          <span className="text-[10px] text-blue-800 block">
+                            9 processos no mapa equalizado
+                          </span>
+                        </div>
+
+                        <div className="p-3.5 rounded-lg border border-purple-200 bg-purple-50/70 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-purple-900 uppercase">
+                              3. Alçada Diretoria
+                            </span>
+                            <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                          </div>
+                          <div className="text-lg font-extrabold text-purple-950 tabular-nums">
+                            R$ 420.000
+                          </div>
+                          <div className="w-full bg-purple-200 h-1.5 rounded-full overflow-hidden">
+                            <div className="bg-purple-600 h-full w-[25%]"></div>
+                          </div>
+                          <span className="text-[10px] text-purple-800 block">
+                            Compras &gt; R$ 50k p/ assinatura digital
+                          </span>
+                        </div>
+
+                        <div className="p-3.5 rounded-lg border border-indigo-200 bg-indigo-50/70 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-indigo-900 uppercase">
+                              4. Contratado / OCs
+                            </span>
+                            <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                          </div>
+                          <div className="text-lg font-extrabold text-indigo-950 tabular-nums">
+                            {formatBRL(totalContratadoFechado)}
+                          </div>
+                          <div className="w-full bg-indigo-200 h-1.5 rounded-full overflow-hidden">
+                            <div className="bg-indigo-600 h-full w-[85%]"></div>
+                          </div>
+                          <span className="text-[10px] text-indigo-800 block">
+                            {ordensFiltradasFin.length} ordens de compra emitidas
+                          </span>
+                        </div>
+
+                        <div className="p-3.5 rounded-lg border border-emerald-200 bg-emerald-50/70 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-emerald-900 uppercase">
+                              5. Entregue c/ NF
+                            </span>
+                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                          </div>
+                          <div className="text-lg font-extrabold text-emerald-950 tabular-nums">
+                            R$ 3.820.000
+                          </div>
+                          <div className="w-full bg-emerald-200 h-1.5 rounded-full overflow-hidden">
+                            <div className="bg-emerald-600 h-full w-[78%]"></div>
+                          </div>
+                          <span className="text-[10px] text-emerald-800 block">
+                            Conferido fisicamente pelo almoxarife
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ========================================================= */}
+                {/* SUB-ABA 2: DESEMPENHO DETALHADO POR OBRA                  */}
+                {/* ========================================================= */}
+                {subAbaFinanceiro === "obras" && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      {obrasComparativo.map((ob) => {
+                        const pctComprometido = (ob.fechado / ob.orcamento) * 100;
+                        const pctSaving = (ob.saving / ob.orcamento) * 100;
+                        const saldo = ob.orcamento - ob.fechado;
+                        const pctSaldo = (saldo / ob.orcamento) * 100;
+
+                        return (
+                          <div
+                            key={ob.id}
+                            className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-5 flex flex-col justify-between"
+                          >
+                            <div className="space-y-4">
+                              <div className="flex items-start justify-between gap-2 border-b border-slate-200 pb-3">
+                                <div>
+                                  <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider block">
+                                    {ob.sigla} • {ob.cidade}
+                                  </span>
+                                  <h3 className="text-base font-bold text-slate-900 mt-0.5">
+                                    {ob.nome}
+                                  </h3>
+                                  <span className="text-xs text-slate-500 block mt-0.5">
+                                    👤 {ob.engenheiro}
+                                  </span>
+                                </div>
+                                <span className="px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-900 text-xs font-extrabold whitespace-nowrap tabular-nums">
+                                  +{ob.savingPct}% Saving
+                                </span>
+                              </div>
+
+                              {/* Grade de Indicadores Financeiros da Obra */}
+                              <div className="grid grid-cols-2 gap-3 text-xs">
+                                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                                  <span className="text-[10px] font-semibold text-slate-500 uppercase block">
+                                    Orçamento Aprovado
+                                  </span>
+                                  <span className="text-sm font-bold text-slate-900 tabular-nums">
+                                    {formatBRL(ob.orcamento)}
+                                  </span>
+                                </div>
+
+                                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                                  <span className="text-[10px] font-semibold text-slate-500 uppercase block">
+                                    Contratado / OCs
+                                  </span>
+                                  <span className="text-sm font-bold text-slate-900 tabular-nums">
+                                    {formatBRL(ob.fechado)}
+                                  </span>
+                                </div>
+
+                                <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
+                                  <span className="text-[10px] font-semibold text-emerald-800 uppercase block">
+                                    Economia / Saving
+                                  </span>
+                                  <span className="text-sm font-extrabold text-emerald-700 tabular-nums">
+                                    +{formatBRL(ob.saving)}
+                                  </span>
+                                </div>
+
+                                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                                  <span className="text-[10px] font-semibold text-slate-500 uppercase block">
+                                    Saldo Disponível
+                                  </span>
+                                  <span className="text-sm font-bold text-slate-800 tabular-nums">
+                                    {formatBRL(saldo)}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Barra Multi-Segmento: Comprometido + Saving + Disponível */}
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between text-[11px] text-slate-600 font-semibold">
+                                  <span>Distribuição Orçamentária</span>
+                                  <span>{pctSaldo.toFixed(1)}% Verba Livre</span>
+                                </div>
+                                <div className="w-full bg-slate-200 h-3 rounded-full overflow-hidden flex">
+                                  <div
+                                    style={{ width: `${pctComprometido}%` }}
+                                    className="bg-slate-900 h-full"
+                                    title={`Comprometido: ${pctComprometido.toFixed(1)}%`}
+                                  />
+                                  <div
+                                    style={{ width: `${pctSaving * 2}%` }}
+                                    className="bg-emerald-600 h-full"
+                                    title={`Saving Conquistado: ${ob.savingPct}%`}
+                                  />
+                                  <div
+                                    style={{ width: `${Math.max(5, pctSaldo)}%` }}
+                                    className="bg-slate-300 h-full"
+                                    title={`Saldo Livre: ${pctSaldo.toFixed(1)}%`}
+                                  />
+                                </div>
+                                <div className="flex items-center justify-between text-[10px] text-slate-500">
+                                  <span className="flex items-center gap-1">
+                                    <span className="w-2 h-2 rounded-xs bg-slate-900"></span> Comprometido
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <span className="w-2 h-2 rounded-xs bg-emerald-600"></span> Saving
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <span className="w-2 h-2 rounded-xs bg-slate-300"></span> Saldo Livre
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Indicadores de Engenharia & Custos */}
+                              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 text-xs space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-500">Área Construída:</span>
+                                  <span className="font-semibold text-slate-800">{ob.areaM2.toLocaleString("pt-BR")} m²</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-500">Custo de Compras / m²:</span>
+                                  <span className="font-bold text-slate-900">R$ {ob.custoM2} / m²</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-500">Prazo Médio de Cotação:</span>
+                                  <span className="font-semibold text-emerald-800">{ob.prazoMedioCotacao}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-500">Acurácia Orçamentária:</span>
+                                  <span className="font-semibold text-emerald-800">{ob.aderenciaMeta}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setObraFiltro(ob.id);
+                                setActiveTab("Ordens");
+                              }}
+                              className="w-full mt-4 py-2 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition text-center"
+                            >
+                              Ver Ordens & Pedidos Desta Obra ➔
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ========================================================= */}
+                {/* SUB-ABA 3: ECONOMIA POR CATEGORIA & MAIORES NEGOCIAÇÕES   */}
+                {/* ========================================================= */}
+                {subAbaFinanceiro === "categorias" && (
+                  <div className="space-y-6">
+                    {/* TOP 5 MAIORES NEGOCIAÇÕES DE SAVING */}
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">🏆</span>
+                            <h3 className="text-base font-bold text-slate-900">
+                              Maiores Vitórias de Negociação (Top Saving do Mês)
+                            </h3>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            As 5 contratações com maior valor absoluto economizado frente à maior cotação inicial.
+                          </p>
+                        </div>
+                        <span className="px-2.5 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-bold">
+                          Total Top 5: R$ 215.000 economizados
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {topNegociacoesSaving.map((deal, idx) => (
+                          <div
+                            key={idx}
+                            className="bg-slate-50 rounded-lg border border-slate-200 p-4 space-y-3 flex flex-col justify-between"
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <span className="w-5 h-5 rounded-full bg-emerald-700 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                                  {idx + 1}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-900 text-[11px] font-bold">
+                                  +{deal.savingPct}% Saving
+                                </span>
+                              </div>
+                              <h4 className="font-bold text-sm text-slate-900 line-clamp-2">
+                                {deal.insumo}
+                              </h4>
+                              <div className="text-xs text-slate-600 space-y-0.5">
+                                <div>📍 {deal.obraNome}</div>
+                                <div>🏢 Fornecedor: <strong>{deal.fornecedor}</strong></div>
+                                <div>💳 Condição: {deal.condicao}</div>
+                              </div>
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-200 text-xs space-y-1">
+                              <div className="flex items-center justify-between text-slate-500">
+                                <span>Maior Cotação Inicial:</span>
+                                <span className="line-through">{formatBRL(deal.maiorCotado)}</span>
+                              </div>
+                              <div className="flex items-center justify-between font-bold text-slate-900">
+                                <span>Valor Final Fechado:</span>
+                                <span>{formatBRL(deal.fechado)}</span>
+                              </div>
+                              <div className="flex items-center justify-between font-extrabold text-emerald-700 pt-1 text-sm border-t border-slate-200/60">
+                                <span>Economia Real:</span>
+                                <span>+{formatBRL(deal.savingReais)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* TABELA DE CURVA POR CATEGORIA DE INSUMOS */}
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                        <div>
+                          <h3 className="text-base font-bold text-slate-900">
+                            Desempenho Financeiro por Categoria de Suprimentos
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Comparativo entre verba orçada, valor contratado, saving conquistado e fornecedor líder de cada família.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto rounded-lg border border-slate-200">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] border-b border-slate-200">
+                            <tr>
+                              <th className="p-3">Categoria de Insumo</th>
+                              <th className="p-3 text-right">Orçado Homologado</th>
+                              <th className="p-3 text-right">Contratado Real</th>
+                              <th className="p-3 text-right">Economia (Saving)</th>
+                              <th className="p-3 text-center">% Saving</th>
+                              <th className="p-3">Fornecedor Principal</th>
+                              <th className="p-3 text-center">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200">
+                            {categoriasAnalise.map((cat, i) => (
+                              <tr key={i} className="hover:bg-slate-50">
+                                <td className="p-3 font-bold text-slate-900">{cat.nome}</td>
+                                <td className="p-3 text-right font-medium text-slate-600 tabular-nums">
+                                  {formatBRL(cat.orcado)}
+                                </td>
+                                <td className="p-3 text-right font-bold text-slate-900 tabular-nums">
+                                  {formatBRL(cat.fechado)}
+                                </td>
+                                <td className="p-3 text-right font-bold text-emerald-700 tabular-nums">
+                                  +{formatBRL(cat.saving)}
+                                </td>
+                                <td className="p-3 text-center font-bold text-emerald-800">
+                                  {cat.savingPct.toFixed(1)}%
+                                </td>
+                                <td className="p-3 text-slate-700 font-medium">{cat.fornecedorLider}</td>
+                                <td className="p-3 text-center">
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      cat.status === "Concluído"
+                                        ? "bg-blue-100 text-blue-800"
+                                        : "bg-emerald-100 text-emerald-800"
+                                    }`}
+                                  >
+                                    {cat.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ========================================================= */}
+                {/* SUB-ABA 4: PROJEÇÃO DE DESEMBOLSO / FLUXO DE CAIXA        */}
+                {/* ========================================================= */}
+                {subAbaFinanceiro === "fluxoCaixa" && (
+                  <div className="space-y-6">
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-5">
+                      <div className="border-b border-slate-200 pb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">💵</span>
+                          <h3 className="text-base font-bold text-slate-900">
+                            Cronograma de Desembolso / Contas a Pagar por Vencimento
+                          </h3>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Escalonamento temporal das obrigações com fornecedores baseado nos prazos negociados (28 ddl, 30/60 ddl, medições e à vista).
+                        </p>
+                      </div>
+
+                      {/* CARDS DAS 5 FAIXAS DE VENCIMENTO */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                        {faixasDesembolso.map((faixa, i) => (
+                          <div
+                            key={i}
+                            className="bg-slate-50 rounded-lg border border-slate-200 p-3.5 space-y-2 flex flex-col justify-between"
+                          >
+                            <div className="space-y-1">
+                              <span className="text-[11px] font-bold text-slate-700 uppercase block">
+                                {faixa.faixa}
+                              </span>
+                              <div className="text-lg font-extrabold text-slate-900 tabular-nums">
+                                {formatBRL(faixa.valor)}
+                              </div>
+                              <span className="text-[10px] text-slate-500 block leading-tight">
+                                {faixa.descricao}
+                              </span>
+                            </div>
+
+                            <div className="space-y-1 pt-2 border-t border-slate-200">
+                              <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                <div
+                                  style={{ width: `${faixa.percentual * 2}%` }}
+                                  className={`h-full ${faixa.cor}`}
+                                />
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-600 block text-right">
+                                {faixa.percentual}% do caixa
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* DETALHAMENTO DE TÍTULOS E FORNECEDORES POR VENCIMENTO */}
+                      <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 text-xs space-y-3">
+                        <h4 className="font-bold text-slate-800 text-sm">
+                          Resumo de liquidação programada para os próximos 30 dias:
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="bg-white p-3 rounded border border-slate-200 space-y-1">
+                            <span className="font-bold text-slate-800 block">Comercial Gerdau S.A.</span>
+                            <span className="text-slate-500 block">Boleto 28 ddl: R$ 184.000,00</span>
+                            <span className="text-emerald-700 font-semibold block text-[11px]">Vencimento: 28/10/2026</span>
+                          </div>
+                          <div className="bg-white p-3 rounded border border-slate-200 space-y-1">
+                            <span className="font-bold text-slate-800 block">Supermix Concreto S.A.</span>
+                            <span className="text-slate-500 block">Faturado 21 ddl: R$ 138.000,00</span>
+                            <span className="text-emerald-700 font-semibold block text-[11px]">Vencimento: 21/10/2026</span>
+                          </div>
+                          <div className="bg-white p-3 rounded border border-slate-200 space-y-1">
+                            <span className="font-bold text-slate-800 block">AluGlass Fachadas Ltda</span>
+                            <span className="text-slate-500 block">1ª Medição Caixilhos: R$ 105.000,00</span>
+                            <span className="text-emerald-700 font-semibold block text-[11px]">Vencimento: 05/11/2026</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ============================================================= */}
+          {/* ABA 2: MAPA DE COTAÇÕES (`Cotacoes`)                          */}
+          {/* ============================================================= */}
+          {activeTab === "Cotacoes" && scAtiva && (
+            <div>
+              {/* Barra de Controle da Cotação */}
+              <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3 flex-1 min-w-[280px]">
+                  <label className="text-xs font-bold text-slate-600 uppercase whitespace-nowrap">
+                    Solicitação em Cotação:
+                  </label>
+                  <select
+                    value={scAtiva.id}
+                    onChange={(e) => setSelectedScId(e.target.value)}
+                    className="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
+                  >
+                    {solicitacoes.map((s) => {
+                      const ob = obras.find((o) => o.id === s.obraId);
+                      return (
+                        <option key={s.id} value={s.id}>
+                          {s.codigo} • {ob?.nome} ({s.categoria})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setShowInserirPrecoModal(true)}
+                    className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-900 text-xs font-semibold transition whitespace-nowrap"
+                  >
+                    + Inserir Preço de Fornecedor
+                  </button>
+                  <button
+                    onClick={handleGeneratePDF}
+                    className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold transition whitespace-nowrap"
+                  >
+                    Gerar PDF
+                  </button>
+                </div>
+              </div>
+
+              {/* 4 Cards de KPI da Cotação Atual (Regra do Número Único) */}
+              <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    ORÇAMENTO DE REFERÊNCIA
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                    {formatBRL(orcamentoScAtiva)}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    {obraScAtiva.nome}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    MENOR PROPOSTA GLOBAL
+                  </div>
+                  <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
+                    {formatBRL(resumoCotacaoAtiva.menorTotal)}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    Valor equalizado com frete
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    FORNECEDOR RECOMENDADO
+                  </div>
+                  <div className="text-xl font-bold text-slate-900 mt-1 truncate">
+                    {resumoCotacaoAtiva.vencedorNome}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    Menor preço global apurado
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    ECONOMIA NA COTAÇÃO
+                  </div>
+                  <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
+                    {formatBRL(resumoCotacaoAtiva.savingGerado)}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    Saving direto para a construtora
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabela Comparativa Limpa (w-full text-sm border-collapse) */}
+              <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-x-auto">
+                <table className="w-full text-sm border-collapse text-left">
+                  <thead>
+                    <tr className="bg-slate-100 border-b border-slate-300">
+                      <th className="p-3.5 border border-slate-300 w-[30%]">
+                        <div className="font-bold text-slate-900">
+                          Insumo / Serviço Solicitado
+                        </div>
+                        <div className="text-xs font-normal text-slate-500 mt-0.5">
+                          {scAtiva.categoria} • Qtd. e Unidade
+                        </div>
+                      </th>
+
+                      {scAtiva.propostas.map((prop, idx) => {
+                        const isVencedor =
+                          prop.id === resumoCotacaoAtiva.vencedorId;
+                        const iqf = calcularIqfFornecedor(
+                          prop.fornecedorNome,
+                          ordens
+                        );
+                        const iqfBadgeCls =
+                          iqf.classificacao.includes("Ouro")
+                            ? "bg-amber-100 text-amber-900 border-amber-300"
+                            : iqf.classificacao.includes("Prata")
+                            ? "bg-blue-100 text-blue-900 border-blue-300"
+                            : iqf.classificacao.includes("Monitorado")
+                            ? "bg-orange-100 text-orange-900 border-orange-300"
+                            : "bg-red-100 text-red-900 border-red-300";
+
+                        return (
+                          <th
+                            key={prop.id}
+                            className={`p-3.5 border border-slate-300 align-top ${
+                              isVencedor ? "bg-emerald-50" : "bg-slate-100"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-slate-900 truncate">
+                                {idx + 1}. {prop.fornecedorNome}
+                              </span>
+                              {isVencedor && (
+                                <span className="px-2 py-0.5 rounded-md bg-emerald-700 text-white text-[11px] font-bold shrink-0">
+                                  Menor Preço
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between gap-2 mt-1">
+                              <span className="text-xs font-normal text-slate-600 truncate">
+                                Vendedor: {prop.vendedorNome}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setFornecedorIqfModal(prop.fornecedorNome)
+                                }
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition hover:opacity-80 shrink-0 ${iqfBadgeCls}`}
+                                title={`Auditar histórico de entregas e IQF de ${prop.fornecedorNome}`}
+                              >
+                                ⭐ IQF {iqf.scoreGeral} ({iqf.classificacao})
+                              </button>
+                            </div>
+                            <div className="mt-2 pt-1.5 border-t border-slate-300 flex items-center justify-between text-xs font-semibold text-slate-600">
+                              <span>Preço Unit. (R$)</span>
+                              <span>Total Item (R$)</span>
+                            </div>
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {scAtiva.itens.map((item) => {
+                      const menorUnit = Math.min(
+                        ...scAtiva.propostas.map(
+                          (p) => p.precosUnitarios[item.id] || Infinity
+                        )
+                      );
+                      const curvaInfo = curvaAbcMap.get(item.descricao.trim()) || {
+                        classe: "Classe C" as ClasseAbc,
+                        totalGeral: 0,
+                        percentual: 100,
+                      };
+                      const histInfo = buscarHistoricoInsumo(
+                        item.descricao,
+                        ordens,
+                        ECONOMIA_INSUMOS_HISTORICO
+                      );
+
+                      return (
+                        <tr
+                          key={item.id}
+                          className="odd:bg-white even:bg-slate-50 hover:bg-slate-100/70"
+                        >
+                          {/* Coluna 1: Insumo / Serviço + Qtd/Unid + Curva ABC + Benchmark */}
+                          <td className="p-3.5 border border-slate-300 align-middle">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="font-semibold text-slate-900 leading-snug">
+                                {item.descricao}
+                              </div>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[11px] font-bold shrink-0 ${
+                                  curvaInfo.classe === "Classe A"
+                                    ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                                    : curvaInfo.classe === "Classe B"
+                                    ? "bg-blue-100 text-blue-900 border border-blue-300"
+                                    : "bg-slate-100 text-slate-700 border border-slate-200"
+                                }`}
+                                title={`Classificação Curva ABC de Pareto: ${curvaInfo.classe} (${curvaInfo.percentual.toFixed(1)}% do volume total)`}
+                              >
+                                {curvaInfo.classe}
+                              </span>
+                            </div>
+
+                            <div className="text-xs text-slate-600 mt-1.5 flex items-center justify-between">
+                              <span>
+                                Meta: {formatBRL(item.orcamentoUnitario)} /{" "}
+                                {item.unidade}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-sm bg-slate-200 text-slate-900 font-bold tabular-nums">
+                                {item.quantidade} {item.unidade}
+                              </span>
+                            </div>
+
+                            {histInfo && (
+                              <div className="mt-2 p-1.5 rounded bg-slate-100/90 border border-slate-200 text-[11px] text-slate-700 leading-tight">
+                                <div className="font-semibold text-slate-900">
+                                  📊 Histórico de Compras:
+                                </div>
+                                <div className="mt-0.5">
+                                  Última: <strong>{formatBRL(histInfo.ultimoPreco)}</strong> ({histInfo.fornecedor}) • Média: {formatBRL(histInfo.precoMedio)}
+                                </div>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Colunas dos Fornecedores (Input editável -> calcula Total automaticamente) */}
+                          {scAtiva.propostas.map((prop) => {
+                            const unit = prop.precosUnitarios[item.id] ?? 0;
+                            const totalItem = item.quantidade * unit;
+                            const isMenorDaLinha =
+                              unit > 0 && Math.abs(unit - menorUnit) < 0.01;
+
+                            return (
+                              <td
+                                key={prop.id}
+                                className={`p-3.5 border border-slate-300 align-middle ${
+                                  isMenorDaLinha ? "bg-emerald-50/60" : ""
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-md px-2 py-1">
+                                    <span className="text-xs text-slate-500">
+                                      R$
+                                    </span>
+                                    <input
+                                      type="number"
+                                      step="0.10"
+                                      value={unit}
+                                      onChange={(e) =>
+                                        handleAtualizarPrecoUnitario(
+                                          scAtiva.id,
+                                          prop.id,
+                                          item.id,
+                                          parseFloat(e.target.value) || 0
+                                        )
+                                      }
+                                      className="w-20 text-right font-semibold text-slate-900 text-sm focus:outline-none tabular-nums"
+                                    />
+                                  </div>
+
+                                  <span
+                                    className={`whitespace-nowrap tabular-nums text-sm ${
+                                      isMenorDaLinha
+                                        ? "font-bold text-emerald-800"
+                                        : "font-semibold text-slate-900"
+                                    }`}
+                                  >
+                                    {formatBRL(totalItem)}
+                                  </span>
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+
+                  {/* Rodapé da Tabela: Frete, Prazo/Pagamento e TOTAL GERAL */}
+                  <tfoot className="border-t-2 border-slate-300">
+                    {/* Linha 1: Frete (R$) */}
+                    <tr className="bg-slate-50">
+                      <td className="p-3.5 border border-slate-300 font-semibold text-slate-800">
+                        Frete p/ Obra (R$)
+                      </td>
+                      {scAtiva.propostas.map((prop) => (
+                        <td
+                          key={prop.id}
+                          className="p-3.5 border border-slate-300 text-right"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-slate-600">
+                              {prop.freteValor === 0
+                                ? "CIF (Incluso)"
+                                : "FOB"}
+                            </span>
+                            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-md px-2 py-1">
+                              <span className="text-xs text-slate-500">R$</span>
+                              <input
+                                type="number"
+                                step="50"
+                                value={prop.freteValor}
+                                onChange={(e) =>
+                                  handleAtualizarFrete(
+                                    scAtiva.id,
+                                    prop.id,
+                                    parseFloat(e.target.value) || 0
+                                  )
+                                }
+                                className="w-20 text-right font-semibold text-slate-900 text-sm focus:outline-none tabular-nums"
+                              />
+                            </div>
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+
+                    {/* Linha 2: Prazo / Pagamento */}
+                    <tr className="bg-white">
+                      <td className="p-3.5 border border-slate-300 font-semibold text-slate-800">
+                        Prazo e Condição de Pagamento
+                      </td>
+                      {scAtiva.propostas.map((prop) => (
+                        <td
+                          key={prop.id}
+                          className="p-3.5 border border-slate-300 text-right text-xs font-medium text-slate-700"
+                        >
+                          {prop.prazoPagamento}
+                        </td>
+                      ))}
+                    </tr>
+
+                    {/* Linha 3: TOTAL GERAL + Botão Aprovar */}
+                    <tr className="bg-slate-100">
+                      <td className="p-4 border border-slate-300 align-middle">
+                        <div className="text-base font-bold text-slate-900">
+                          TOTAL GERAL EQUALIZADO
+                        </div>
+                        <div className="text-xs text-slate-600">
+                          Materiais + Impostos + Frete na Obra
+                        </div>
+                      </td>
+
+                      {scAtiva.propostas.map((prop) => {
+                        const tot = totaisPorProposta[prop.id]?.totalGeral || 0;
+                        const isVencedor =
+                          prop.id === resumoCotacaoAtiva.vencedorId;
+
+                        return (
+                          <td
+                            key={prop.id}
+                            className={`p-4 border border-slate-300 text-right align-middle ${
+                              isVencedor
+                                ? "bg-emerald-50 text-emerald-800 font-bold"
+                                : "bg-slate-100 text-slate-900 font-bold"
+                            }`}
+                          >
+                            <div className="text-lg font-bold whitespace-nowrap tabular-nums">
+                              {formatBRL(tot)}
+                            </div>
+                            <button
+                              onClick={() => handleAprovarGerarOrdem(prop.id)}
+                              className={`mt-2.5 w-full py-2 px-3 rounded-lg text-xs font-semibold transition ${
+                                isVencedor
+                                  ? "bg-emerald-700 hover:bg-emerald-800 text-white"
+                                  : "bg-slate-900 hover:bg-slate-800 text-white"
+                              }`}
+                            >
+                              Aprovar e Gerar Ordem de Compra
+                            </button>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================= */}
+          {/* ABA 3: FORNECEDORES & VENDEDORES (`Fornecedores`)             */}
+          {/* ============================================================= */}
+          {activeTab === "Fornecedores" && (
+            <div>
+              {/* Barra de Busca + Filtro de Categoria + Botão Novo Fornecedor */}
+              <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-4">
+                <input
+                  type="text"
+                  value={buscaFornecedor}
+                  onChange={(e) => setBuscaFornecedor(e.target.value)}
+                  placeholder="Buscar por empresa, cidade, categoria ou vendedor..."
+                  className="flex-1 min-w-[260px] bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:border-slate-900"
+                />
+
+                <div className="flex items-center gap-3">
+                  <select
+                    value={filtroCatFornecedor}
+                    onChange={(e) => setFiltroCatFornecedor(e.target.value)}
+                    className="bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium text-slate-800"
+                  >
+                    <option value="ALL">
+                      Todas as Categorias ({fornecedores.length})
+                    </option>
+                    {CATEGORIAS_CONSTRUCAO.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    onClick={() => setShowNovoFornecedorModal(true)}
+                    className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition whitespace-nowrap"
+                  >
+                    + Novo Fornecedor
+                  </button>
+                </div>
+              </div>
+
+              {/* Tabela Limpa de Fornecedores (Máximo 1 Badge de Categoria!) */}
+              <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                <table className="w-full text-sm border-collapse text-left">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                      <th className="py-3 px-4">Empresa</th>
+                      <th className="py-3 px-4">Cidade</th>
+                      <th className="py-3 px-4">Categoria Principal</th>
+                      <th className="py-3 px-4 text-center">Índice IQF</th>
+                      <th className="py-3 px-4">Vendedor</th>
+                      <th className="py-3 px-4">Telefone / WhatsApp</th>
+                      <th className="py-3 px-4 text-right">Ficha</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {fornecedoresFiltrados.map((f) => {
+                      const iqf = calcularIqfFornecedor(f.empresa, ordens);
+                      const iqfBadgeCls =
+                        iqf.classificacao.includes("Ouro")
+                          ? "bg-amber-100 text-amber-900 border-amber-300"
+                          : iqf.classificacao.includes("Prata")
+                          ? "bg-blue-100 text-blue-900 border-blue-300"
+                          : iqf.classificacao.includes("Monitorado")
+                          ? "bg-orange-100 text-orange-900 border-orange-300"
+                          : "bg-red-100 text-red-900 border-red-300";
+
+                      return (
+                        <tr
+                          key={f.id}
+                          className="hover:bg-slate-50 transition-colors"
+                        >
+                          <td className="py-3.5 px-4 font-bold text-slate-900">
+                            {f.empresa}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-700">
+                            {f.cidade}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-xs font-medium text-slate-800">
+                              {f.categoriaPrincipal}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => setFornecedorIqfModal(f.empresa)}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-bold transition hover:opacity-85 ${iqfBadgeCls}`}
+                              title="Clique para auditar índice de qualidade, pontualidade e histórico de ressalvas"
+                            >
+                              <span>⭐ {iqf.scoreGeral}</span>
+                              <span className="font-semibold text-slate-600">
+                                ({iqf.classificacao})
+                              </span>
+                            </button>
+                          </td>
+                          <td className="py-3.5 px-4 font-medium text-slate-900">
+                            {f.vendedor}
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap tabular-nums">
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-800">{f.telefone}</span>
+                              <a
+                                href={`https://wa.me/${f.whatsapp}?text=${encodeURIComponent(
+                                  `Olá ${f.vendedor}, tudo bem? Aqui é ${settings.userName} (${settings.companyName}). Gostaria de solicitar uma cotação.`
+                                )}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-1 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
+                              >
+                                WhatsApp
+                              </a>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                            <button
+                              onClick={() => setFornecedorFichaModal(f)}
+                              className="px-3 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-900 text-xs font-semibold transition"
+                            >
+                              Ver Ficha
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================= */}
+          {/* ABA 4: ORDENS DE COMPRA (`Ordens`)                            */}
+          {/* ============================================================= */}
+          {activeTab === "Ordens" && (
+            <div>
+              {/* 4 KPIs Simples de Ordens */}
+              <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    ORDENS EMITIDAS
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                    {ordensFiltradas.length}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    Pedidos formais de compra
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    VALOR TOTAL FECHADO
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                    {formatBRL(
+                      ordensFiltradas.reduce((acc, o) => acc + o.valorTotal, 0)
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    Faturamento autorizado
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    SAVING CONQUISTADO
+                  </div>
+                  <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
+                    {formatBRL(
+                      ordensFiltradas.reduce(
+                        (acc, o) => acc + o.savingGerado,
+                        0
+                      )
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    Economia auditada nas OCs
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    AGUARDANDO ENTREGA
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                    {
+                      ordensFiltradas.filter(
+                        (o) =>
+                          o.status !== "Entregue" &&
+                          o.status !==
+                            "Entregue na Obra (Confirmado pelo Almoxarifado)"
+                      ).length
+                    }
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    Programadas nos canteiros
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabela Limpa de Ordens de Compra */}
+              <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900">
+                      Ordens de Compra Emitidas & Recebimento no Canteiro
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Sincronizado em tempo real com o Almoxarifado da Obra
+                      (Nota Fiscal e conferência física)
+                    </p>
+                  </div>
+                </div>
+
+                <table className="w-full text-sm border-collapse text-left">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                      <th className="py-3 px-4">Nº OC</th>
+                      <th className="py-3 px-4">Fornecedor</th>
+                      <th className="py-3 px-4">Obra</th>
+                      <th className="py-3 px-4 text-center">Emissão / Prev.</th>
+                      <th className="py-3 px-4 text-right">Valor Fechado</th>
+                      <th className="py-3 px-4 text-right">Saving</th>
+                      <th className="py-3 px-4 text-center">
+                        Status & Conferência Obra
+                      </th>
+                      <th className="py-3 px-4 text-right">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {ordensFiltradas.map((oc) => {
+                      const entreguePeloAlmox =
+                        oc.status ===
+                          "Entregue na Obra (Confirmado pelo Almoxarifado)" ||
+                        oc.status === "Entregue";
+
+                      return (
+                        <tr
+                          key={oc.id}
+                          className="hover:bg-slate-50 transition-colors"
+                        >
+                          <td className="py-3.5 px-4 font-bold text-slate-900 whitespace-nowrap tabular-nums">
+                            <div>{oc.numeroOc}</div>
+                            <div className="text-xs font-normal text-slate-500">
+                              Ref: {oc.scCodigo}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 font-medium text-slate-900">
+                            {oc.fornecedorNome}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-700">
+                            {oc.obraNome}
+                          </td>
+                          <td className="py-3.5 px-4 text-center text-slate-700 whitespace-nowrap tabular-nums">
+                            <div>{oc.dataEmissao}</div>
+                            {oc.dataPrevistaEntrega && (
+                              <div className="text-xs text-slate-500">
+                                Prev: {oc.dataPrevistaEntrega}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums">
+                            {formatBRL(oc.valorTotal)}
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-semibold text-emerald-700 whitespace-nowrap tabular-nums">
+                            {formatBRL(oc.savingGerado)}
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-xs font-semibold inline-block ${
+                                entreguePeloAlmox
+                                  ? "bg-emerald-100 border border-emerald-300 text-emerald-900"
+                                  : "bg-blue-50 border border-blue-200 text-blue-800"
+                              }`}
+                            >
+                              {entreguePeloAlmox
+                                ? "✅ Entregue na Obra (Confirmado pelo Almoxarifado)"
+                                : `🟢 ${oc.status} (Aguardando Entrega)`}
+                            </span>
+                            {oc.notaFiscalRecebida && (
+                              <div className="text-xs text-slate-600 mt-1">
+                                <strong>NF: {oc.notaFiscalRecebida}</strong> •{" "}
+                                {oc.condicaoRecebimento}
+                                {oc.recebidoPor
+                                  ? ` (${oc.recebidoPor})`
+                                  : ""}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                            <button
+                              onClick={() => setOrdemVisualizarModal(oc)}
+                              className="px-3 py-1.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+                            >
+                              Visualizar Pedido
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================= */}
+          {/* ABA: ALMOXARIFADO & CONTROLE DE ESTOQUE (`Estoque`)            */}
+          {/* ============================================================= */}
+          {activeTab === "Estoque" && (
+            <div className="space-y-6">
+              {/* KPIs Operacionais do Almoxarifado */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
+                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    VALOR TOTAL EM ESTOQUE
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                    {formatBRL(valorTotalEstoque)}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    Ativo físico estocado nos canteiros
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
+                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    INSUMOS ABAIXO DO MÍNIMO
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="text-2xl font-bold text-red-600 tabular-nums">
+                      {itensAbaixoMinimo.length}
+                    </div>
+                    {itensAbaixoMinimo.length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold animate-pulse">
+                        Risco de Parada
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    Insumos em ponto crítico de reposição
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
+                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    PUXADAS PROGRAMADAS (CONTRATOS)
+                  </div>
+                  <div className="text-2xl font-bold text-indigo-700 mt-1 tabular-nums">
+                    {puxadasAtivasContratos
+                      .flatMap((c) => c.programacoes)
+                      .filter((p) => p.status === "Agendada" || p.status === "Em Rota").length}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    Caminhões de concreto/aço agendados
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
+                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    ECONOMIA POR REMANEJAMENTO
+                  </div>
+                  <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
+                    {formatBRL(totalEconomiaTransferencias)}
+                  </div>
+                  <div className="text-xs text-emerald-800 font-medium mt-1">
+                    Sobras reaproveitadas entre canteiros
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub-Aba Navigation (Saldos, Puxadas, Movimentações, Compras Corporativas) */}
+              <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => setSubAbaEstoque("saldos")}
+                      className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition ${
+                        subAbaEstoque === "saldos"
+                          ? "bg-slate-900 text-white shadow-xs"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      }`}
+                    >
+                      📦 Saldo em Estoque ({estoque.filter((it) => obraFiltro === "ALL" || it.obraId === obraFiltro).length})
+                    </button>
+                    <button
+                      onClick={() => setSubAbaEstoque("puxadas")}
+                      className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${
+                        subAbaEstoque === "puxadas"
+                          ? "bg-slate-900 text-white shadow-xs"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      }`}
+                    >
+                      <span>🚛 Central de Puxadas (Concreto & Aço)</span>
+                      <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-800 text-xs font-bold">
+                        {puxadasAtivasContratos.length} contratos
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setSubAbaEstoque("movimentacoes")}
+                      className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition ${
+                        subAbaEstoque === "movimentacoes"
+                          ? "bg-slate-900 text-white shadow-xs"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      }`}
+                    >
+                      📋 Extrato Físico ({movimentacoesEstoque.length} reg.)
+                    </button>
+                    <button
+                      onClick={() => setSubAbaEstoque("agrupamento")}
+                      className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${
+                        subAbaEstoque === "agrupamento"
+                          ? "bg-slate-900 text-white shadow-xs"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      }`}
+                    >
+                      <span>⚡ Compras em Lote Corporativo</span>
+                      {demandasAgrupaveis.length > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-emerald-600 text-white text-xs font-extrabold">
+                          {demandasAgrupaveis.length} unificáveis
+                        </span>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500">Filtrando por:</span>
+                    <span className="text-xs font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
+                      {obraFiltro === "ALL" ? "Todos os Canteiros" : obras.find(o => o.id === obraFiltro)?.nome || "Almoxarifado Central"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Sub-Aba 1: SALDOS EM ESTOQUE */}
+                {subAbaEstoque === "saldos" && (
+                  <div className="space-y-4">
+                    {/* Barra de Filtros de Estoque */}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder="Buscar código ou descrição do insumo..."
+                          value={buscaEstoque}
+                          onChange={(e) => setBuscaEstoque(e.target.value)}
+                          className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 w-72"
+                        />
+                        <select
+                          value={filtroCategoriaEstoque}
+                          onChange={(e) => setFiltroCategoriaEstoque(e.target.value)}
+                          className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white"
+                        >
+                          <option value="ALL">Todas as Categorias</option>
+                          {CATEGORIAS_CONSTRUCAO.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {itensAbaixoMinimo.length > 0 && (
+                        <div className="text-xs text-red-700 bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium">
+                          <span>⚠️</span>
+                          <span>{itensAbaixoMinimo.length} insumos precisam de reposição imediata!</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Tabela de Saldos */}
+                    <div className="overflow-x-auto rounded-lg border border-slate-200">
+                      <table className="w-full text-sm border-collapse text-left">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                            <th className="py-3 px-4">Código / Insumo</th>
+                            <th className="py-3 px-4">Canteiro & Localização</th>
+                            <th className="py-3 px-4 text-center">Nível de Estoque</th>
+                            <th className="py-3 px-4 text-right">Saldo Atual</th>
+                            <th className="py-3 px-4 text-right">Custo Médio</th>
+                            <th className="py-3 px-4 text-right">Valor Total</th>
+                            <th className="py-3 px-4 text-center">Status</th>
+                            <th className="py-3 px-4 text-right">Ações Rápidas</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {estoque
+                            .filter((item) => {
+                              const matchObra = obraFiltro === "ALL" || item.obraId === obraFiltro;
+                              const matchCat = filtroCategoriaEstoque === "ALL" || item.categoria === filtroCategoriaEstoque;
+                              const matchBusca = buscaEstoque === "" ||
+                                item.descricao.toLowerCase().includes(buscaEstoque.toLowerCase()) ||
+                                item.codigo.toLowerCase().includes(buscaEstoque.toLowerCase());
+                              return matchObra && matchCat && matchBusca;
+                            })
+                            .map((item) => {
+                              const critico = item.saldoAtual <= item.estoqueMinimo;
+                              const atencao = !critico && item.saldoAtual <= item.pontoReposicao;
+                              const percentualSeguranca = Math.min(
+                                100,
+                                Math.round((item.saldoAtual / (item.pontoReposicao * 1.5)) * 100)
+                              );
+
+                              return (
+                                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                                  <td className="py-3 px-4">
+                                    <div className="font-bold text-slate-900">{item.descricao}</div>
+                                    <div className="text-xs text-slate-500 font-mono mt-0.5">
+                                      {item.codigo} • {item.categoria}
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4 text-xs">
+                                    <div className="font-semibold text-slate-800">{item.obraNome}</div>
+                                    <div className="text-slate-500 mt-0.5">📍 {item.localizacaoFisica}</div>
+                                  </td>
+                                  <td className="py-3 px-4 text-center min-w-[140px]">
+                                    <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+                                      <span>Mín: {item.estoqueMinimo}</span>
+                                      <span>Repor: {item.pontoReposicao}</span>
+                                    </div>
+                                    <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full transition-all ${
+                                          critico
+                                            ? "bg-red-500"
+                                            : atencao
+                                            ? "bg-amber-500"
+                                            : "bg-emerald-500"
+                                        }`}
+                                        style={{ width: `${Math.max(5, percentualSeguranca)}%` }}
+                                      />
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums">
+                                    <span className="text-base">{item.saldoAtual}</span>{" "}
+                                    <span className="text-xs font-normal text-slate-500">{item.unidade}</span>
+                                  </td>
+                                  <td className="py-3 px-4 text-right text-slate-700 whitespace-nowrap tabular-nums text-xs">
+                                    {formatBRL(item.custoMedio)} / {item.unidade}
+                                  </td>
+                                  <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums">
+                                    {formatBRL(item.saldoAtual * item.custoMedio)}
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    {critico ? (
+                                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200 inline-block">
+                                        🚨 Crítico
+                                      </span>
+                                    ) : atencao ? (
+                                      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200 inline-block">
+                                        ⚠️ Repor
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200 inline-block">
+                                        ✅ Adequado
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-3 px-4 text-right whitespace-nowrap">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        onClick={() => setKardexModalItem(item)}
+                                        className="px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
+                                        title="Ver histórico completo de movimentações físicas e custo médio (Kardex)"
+                                      >
+                                        📋 Kardex
+                                      </button>
+                                      {item.saldoAtual <= item.pontoReposicao && (
+                                        <button
+                                          onClick={() => handleGerarSolicitacaoReposicao(item)}
+                                          className="px-2.5 py-1 rounded-md bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold transition flex items-center gap-1 shadow-xs"
+                                          title="Gerar automaticamente Solicitação de Compra para reposição de estoque"
+                                        >
+                                          ⚡ Repor
+                                        </button>
+                                      )}
+                                      <button
+                                        onClick={() => setShowNovaMovimentacaoModal(true)}
+                                        className="px-2.5 py-1 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+                                        title="Registrar saída para aplicação ou transferência entre canteiros"
+                                      >
+                                        ⇄ Mover
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-Aba 2: CENTRAL DE PUXADAS E CONTRATOS CONTÍNUOS */}
+                {subAbaEstoque === "puxadas" && (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">
+                          Contratos de Fornecimento Contínuo & Puxadas em Usina
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Gerencie os contratos de grande porte (Concreto Usinado, Aço Cortado/Dobrado) e acompanhe o saldo restante na usina com agendamento de betoneiras e carretas.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowProgramarPuxadaModal(true)}
+                        className="px-3.5 py-1.5 rounded-lg bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
+                      >
+                        <span>🚛 Programar Nova Puxada</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {puxadasAtivasContratos.map((ctr) => {
+                        const percentualEntregue = Math.min(
+                          100,
+                          Math.round((ctr.quantidadeEntregue / ctr.quantidadeContratada) * 100)
+                        );
+                        const saldoRestante = Math.max(
+                          0,
+                          ctr.quantidadeContratada - ctr.quantidadeEntregue
+                        );
+                        const valorSaldoRestante = saldoRestante * ctr.valorUnitario;
+
+                        return (
+                          <div
+                            key={ctr.id}
+                            className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-xs font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                    {ctr.numeroContrato}
+                                  </span>
+                                  <span className="text-xs text-slate-500 font-mono">
+                                    (OC: {ctr.numeroOC})
+                                  </span>
+                                  <span className="font-bold text-sm text-slate-900">
+                                    {ctr.insumo}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-slate-600 mt-1">
+                                  Fornecedor: <strong>{ctr.fornecedorNome}</strong> • Canteiro:{" "}
+                                  <strong>{ctr.obraNome}</strong>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-xs text-slate-500">Valor Unitário Homologado</div>
+                                <div className="text-sm font-bold text-slate-900 tabular-nums">
+                                  {formatBRL(ctr.valorUnitario)} / {ctr.unidade}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Barra de Progresso do Fornecimento Contínuo */}
+                            <div>
+                              <div className="flex items-center justify-between text-xs text-slate-700 mb-1.5 font-medium">
+                                <span>
+                                  Entregue no Canteiro: <strong>{ctr.quantidadeEntregue} {ctr.unidade}</strong> ({percentualEntregue}%)
+                                </span>
+                                <span>
+                                  Saldo a Puxar na Usina:{" "}
+                                  <strong className="text-indigo-700">
+                                    {saldoRestante} {ctr.unidade}
+                                  </strong>{" "}
+                                  ({formatBRL(valorSaldoRestante)})
+                                </span>
+                                <span>Total Contratado: <strong>{ctr.quantidadeContratada} {ctr.unidade}</strong></span>
+                              </div>
+                              <div className="w-full bg-slate-200 h-3 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-indigo-600 rounded-full transition-all"
+                                  style={{ width: `${percentualEntregue}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Grade de Puxadas Agendadas / Recebidas deste contrato */}
+                            <div className="mt-3">
+                              <div className="text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
+                                Cronograma de Puxadas & Entregas do Contrato
+                              </div>
+                              <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+                                <table className="w-full text-xs text-left">
+                                  <thead>
+                                    <tr className="bg-slate-100 border-b border-slate-200 text-slate-600">
+                                      <th className="py-2 px-3">Data & Janela</th>
+                                      <th className="py-2 px-3">Volume</th>
+                                      <th className="py-2 px-3">Etapa Construtiva / Local</th>
+                                      <th className="py-2 px-3">Responsável</th>
+                                      <th className="py-2 px-3">NF / Guia</th>
+                                      <th className="py-2 px-3 text-center">Status</th>
+                                      <th className="py-2 px-3 text-right">Ação</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {ctr.programacoes.map((prg) => (
+                                      <tr key={prg.id} className="hover:bg-slate-50">
+                                        <td className="py-2 px-3 font-bold text-slate-800 whitespace-nowrap">
+                                          {prg.dataHoraAgendada}
+                                        </td>
+                                        <td className="py-2 px-3 font-bold text-slate-900 whitespace-nowrap">
+                                          {prg.quantidade} {prg.unidade}
+                                        </td>
+                                        <td className="py-2 px-3 text-slate-700">
+                                          <div>{prg.etapaAplicacao}</div>
+                                          {prg.observacoes && (
+                                            <div className="text-[11px] text-slate-500 italic mt-0.5">
+                                              {prg.observacoes}
+                                            </div>
+                                          )}
+                                        </td>
+                                        <td className="py-2 px-3 text-slate-600">{prg.responsavelRecebimento}</td>
+                                        <td className="py-2 px-3 font-mono text-slate-700">
+                                          {prg.notaFiscal || "—"}
+                                        </td>
+                                        <td className="py-2 px-3 text-center">
+                                          <span
+                                            className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                                              prg.status === "Recebida"
+                                                ? "bg-emerald-100 text-emerald-800"
+                                                : prg.status === "Em Rota"
+                                                ? "bg-blue-100 text-blue-800"
+                                                : prg.status === "Cancelada"
+                                                ? "bg-red-100 text-red-800"
+                                                : "bg-amber-100 text-amber-800"
+                                            }`}
+                                          >
+                                            {prg.status === "Recebida"
+                                              ? "✅ Recebida"
+                                              : prg.status === "Em Rota"
+                                              ? "🚛 Em Rota"
+                                              : prg.status === "Cancelada"
+                                              ? "❌ Cancelada"
+                                              : "⏱️ Agendada"}
+                                          </span>
+                                        </td>
+                                        <td className="py-2 px-3 text-right whitespace-nowrap">
+                                          {prg.status !== "Recebida" && prg.status !== "Cancelada" ? (
+                                            <button
+                                              onClick={() =>
+                                                handleAtualizarStatusPuxada(
+                                                  ctr.id,
+                                                  prg.id,
+                                                  "Recebida",
+                                                  prompt("Informe o número da Nota Fiscal / Ticket da Usina:") || "NF-e Canteiro"
+                                                )
+                                              }
+                                              className="px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-semibold transition"
+                                            >
+                                              Receber Carga
+                                            </button>
+                                          ) : (
+                                            <span className="text-[11px] text-slate-400">Concluído</span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-Aba 3: EXTRATO DE MOVIMENTAÇÕES FÍSICAS */}
+                {subAbaEstoque === "movimentacoes" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">
+                          Auditoria Completa de Movimentações Físicas
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Registro de entradas por compra, requisições de aplicação em obra, transferências entre canteiros e avarias.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowNovaMovimentacaoModal(true)}
+                        className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+                      >
+                        + Nova Movimentação
+                      </button>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-lg border border-slate-200">
+                      <table className="w-full text-sm border-collapse text-left">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                            <th className="py-3 px-4">Data / Hora</th>
+                            <th className="py-3 px-4">Tipo de Movimento</th>
+                            <th className="py-3 px-4">Insumo / Código</th>
+                            <th className="py-3 px-4 text-right">Qtd Movimentada</th>
+                            <th className="py-3 px-4">Origem ➔ Destino</th>
+                            <th className="py-3 px-4">Motivo / Etapa</th>
+                            <th className="py-3 px-4 text-right">Valor Total</th>
+                            <th className="py-3 px-4">Responsável / Doc</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {movimentacoesEstoque
+                            .filter((m) => obraFiltro === "ALL" || m.obraOrigemId === obraFiltro || m.obraDestinoId === obraFiltro)
+                            .map((mov) => {
+                              const tipoBadge = {
+                                ENTRADA_COMPRA: {
+                                  bg: "bg-emerald-100 text-emerald-800 border-emerald-200",
+                                  label: "🟢 Entrada por Compra",
+                                },
+                                SAIDA_APLICACAO: {
+                                  bg: "bg-blue-100 text-blue-800 border-blue-200",
+                                  label: "🔵 Saída p/ Aplicação",
+                                },
+                                TRANSFERENCIA_OBRA: {
+                                  bg: "bg-purple-100 text-purple-800 border-purple-200",
+                                  label: "🟣 Transferência Canteiros",
+                                },
+                                PERDA_AVARIA: {
+                                  bg: "bg-red-100 text-red-800 border-red-200",
+                                  label: "🔴 Perda / Avaria",
+                                },
+                                AJUSTE_INVENTARIO: {
+                                  bg: "bg-slate-100 text-slate-800 border-slate-200",
+                                  label: "⚪ Ajuste Inventário",
+                                },
+                              }[mov.tipo];
+
+                              return (
+                                <tr key={mov.id} className="hover:bg-slate-50 transition-colors">
+                                  <td className="py-3 px-4 text-xs font-bold text-slate-800 whitespace-nowrap">
+                                    {mov.dataHora}
+                                  </td>
+                                  <td className="py-3 px-4 whitespace-nowrap">
+                                    <span
+                                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border inline-block ${tipoBadge.bg}`}
+                                    >
+                                      {tipoBadge.label}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-4">
+                                    <div className="font-bold text-slate-900">{mov.descricaoInsumo}</div>
+                                    <div className="text-xs text-slate-500 font-mono">{mov.codigoInsumo}</div>
+                                  </td>
+                                  <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums">
+                                    {mov.quantidade} <span className="text-xs font-normal text-slate-500">{mov.unidade}</span>
+                                  </td>
+                                  <td className="py-3 px-4 text-xs">
+                                    <div className="font-medium text-slate-800">{mov.obraOrigemNome}</div>
+                                    {mov.obraDestinoNome && (
+                                      <div className="text-purple-700 font-bold mt-0.5">
+                                        ➔ {mov.obraDestinoNome}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="py-3 px-4 text-xs text-slate-600 max-w-xs truncate">
+                                    {mov.motivoEtapa || "—"}
+                                  </td>
+                                  <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums">
+                                    {formatBRL(mov.valorTotal)}
+                                  </td>
+                                  <td className="py-3 px-4 text-xs">
+                                    <div className="font-semibold text-slate-800">{mov.responsavel}</div>
+                                    <div className="text-slate-500 font-mono mt-0.5">{mov.numeroDocumento || "—"}</div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-Aba 4: COMPRAS EM LOTE CORPORATIVO MULTI-OBRA */}
+                {subAbaEstoque === "agrupamento" && (
+                  <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-lg p-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">⚡</span>
+                          <h3 className="text-base font-bold text-emerald-950">
+                            Centralizador de Demandas & Poder de Barganha Corporativo
+                          </h3>
+                        </div>
+                        <p className="text-xs text-emerald-800 mt-1 max-w-2xl">
+                          O sistema analisa automaticamente os pedidos de todas as obras da JC BAUER. Ao agrupar demandas de cimento, aço, blocos e fiação em uma única compra em lote de carga fechada, a construtora obtém descontos de 10% a 25% diretamente na usina/fabricante.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowAgruparDemandasModal(true)}
+                        className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition whitespace-nowrap shadow-xs"
+                      >
+                        ⚡ Unificar Compras Selecionadas
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Oportunidades de Compra Corporativa em Lote Detectadas
+                      </h4>
+
+                      {demandasAgrupaveis.length === 0 ? (
+                        <div className="p-8 text-center bg-slate-50 rounded-lg border border-slate-200 text-slate-500 text-sm">
+                          Não há solicitações duplicadas entre canteiros no momento. Quando múltiplos engenheiros solicitarem o mesmo insumo, a oportunidade de compra corporativa aparecerá aqui automaticamente.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {demandasAgrupaveis.map((dem, idx) => {
+                            const valorEstimadoIndividual = dem.totalQtd * dem.orcamentoUnitario;
+                            const savingEstimado = valorEstimadoIndividual * 0.12;
+                            const valorEstimadoLote = valorEstimadoIndividual - savingEstimado;
+
+                            return (
+                              <div
+                                key={idx}
+                                className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3"
+                              >
+                                <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                                  <div>
+                                    <div className="font-bold text-slate-900 text-sm">
+                                      {dem.descricao}
+                                    </div>
+                                    <div className="text-xs text-slate-500 mt-0.5">
+                                      Categoria: <strong>{dem.categoria}</strong>
+                                    </div>
+                                  </div>
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-xs">
+                                    ~12% Economia Estimada
+                                  </span>
+                                </div>
+
+                                <div className="space-y-1.5 text-xs">
+                                  <div className="text-slate-600">
+                                    Canteiros participantes da demanda:
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {dem.obrasParticipantes.map((obraNome, oIdx) => (
+                                      <span
+                                        key={oIdx}
+                                        className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-800 font-medium"
+                                      >
+                                        🏗️ {obraNome}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-md border border-slate-100 text-xs">
+                                  <div>
+                                    <span className="text-slate-500">Volume Total Unificado:</span>
+                                    <div className="font-bold text-slate-900 text-sm mt-0.5">
+                                      {dem.totalQtd} {dem.unidade}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-500">Saving Estimado p/ JC BAUER:</span>
+                                    <div className="font-bold text-emerald-700 text-sm mt-0.5">
+                                      {formatBRL(savingEstimado)}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="pt-1 flex items-center justify-between">
+                                  <div className="text-xs text-slate-500">
+                                    Ref: {formatBRL(valorEstimadoIndividual)} individual ➔{" "}
+                                    <strong className="text-slate-900">{formatBRL(valorEstimadoLote)}</strong> em lote
+                                  </div>
+                                  <button
+                                    onClick={() => handleCriarCompraAgrupada(dem)}
+                                    className="px-3 py-1.5 rounded-md bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-1 shadow-xs"
+                                  >
+                                    <span>⚡ Criar Cotação Corporativa</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================= */}
+          {/* ABA: CONTRATOS DE SUBEMPREITADA & MEDIÇÕES (`Medicoes`)       */}
+          {/* ============================================================= */}
+          {activeTab === "Medicoes" && (
+            <div className="space-y-6">
+              {/* KPIs de Contratos e Medições */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    CONTRATOS ATIVOS
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                    {contratos.filter((c) => c.status === "Ativo").length}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    Subempreiteiros em execução
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    VALOR GLOBAL CONTRATADO
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                    {formatBRL(
+                      contratos.reduce((acc, c) => acc + c.valorTotal, 0)
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    Total em carteira de contratos
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    TOTAL MEDIDO ACUMULADO
+                  </div>
+                  <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
+                    {formatBRL(
+                      contratos.reduce(
+                        (acc, c) =>
+                          acc +
+                          c.medicoes.reduce(
+                            (bmAcc, bm) => bmAcc + bm.valorBruto,
+                            0
+                          ),
+                        0
+                      )
+                    )}
+                  </div>
+                  <div className="text-xs text-emerald-800 font-medium mt-1">
+                    Avanço físico financeiro apurado
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    RETENÇÕES TÉCNICAS (5% / 11%)
+                  </div>
+                  <div className="text-2xl font-bold text-blue-700 mt-1 tabular-nums">
+                    {formatBRL(
+                      contratos.reduce(
+                        (acc, c) =>
+                          acc +
+                          c.medicoes.reduce(
+                            (bmAcc, bm) => bmAcc + bm.valorRetencao,
+                            0
+                          ),
+                        0
+                      )
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    Fundo de reserva de garantia retido
+                  </div>
+                </div>
+              </div>
+
+              {/* Barra de Ações e Filtro de Obra */}
+              <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                    Filtrar por Obra:
+                  </span>
+                  <select
+                    value={obraFiltro}
+                    onChange={(e) => setObraFiltro(e.target.value)}
+                    className="bg-slate-50 border border-slate-300 rounded-md px-3 py-1.5 text-xs font-medium text-slate-800"
+                  >
+                    <option value="ALL">Todas as Obras (Global)</option>
+                    {obras.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.nome} ({o.sigla})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowNovoContratoModal(true)}
+                  className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5"
+                >
+                  <span>+ Novo Contrato de Subempreitada</span>
+                </button>
+              </div>
+
+              {/* Lista Detalhada de Contratos e seus Boletins de Medição */}
+              <div className="space-y-5">
+                {contratos
+                  .filter(
+                    (c) => obraFiltro === "ALL" || c.obraId === obraFiltro
+                  )
+                  .map((contrato) => {
+                    const totalMedidoBruto = contrato.medicoes.reduce(
+                      (acc, bm) => acc + bm.valorBruto,
+                      0
+                    );
+                    const percentualTotalMedido =
+                      contrato.valorTotal > 0
+                        ? Math.min(
+                            100,
+                            (totalMedidoBruto / contrato.valorTotal) * 100
+                          )
+                        : 0;
+                    const saldoContratual = Math.max(
+                      0,
+                      contrato.valorTotal - totalMedidoBruto
+                    );
+
+                    return (
+                      <div
+                        key={contrato.id}
+                        className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden"
+                      >
+                        {/* Cabeçalho do Contrato */}
+                        <div className="p-5 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-start justify-between gap-4">
+                          <div>
+                            <div className="flex items-center gap-2.5">
+                              <span className="font-bold text-slate-900 text-base">
+                                {contrato.numeroContrato}
+                              </span>
+                              <span className="text-slate-400">•</span>
+                              <span className="font-semibold text-slate-900 text-base">
+                                {contrato.empreiteiro}
+                              </span>
+                              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                                {contrato.status}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-600 mt-1">
+                              <strong>Objeto:</strong> {contrato.objeto}
+                            </div>
+                            <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-3">
+                              <span>CNPJ: {contrato.cnpj}</span>
+                              <span>•</span>
+                              <span>Obra: <strong>{contrato.obraNome}</strong></span>
+                              <span>•</span>
+                              <span>Disciplina: {contrato.categoria}</span>
+                              <span>•</span>
+                              <span>Vigência: {contrato.dataInicio} a {contrato.previsaoFim}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <div className="text-xs text-slate-500 font-medium">
+                                Valor Total do Contrato
+                              </div>
+                              <div className="text-lg font-bold text-slate-900 tabular-nums">
+                                {formatBRL(contrato.valorTotal)}
+                              </div>
+                              <div className="text-[11px] text-slate-500">
+                                Retenção Técnica: {contrato.percentualRetencao}%
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setShowNovoBmModalContrato(contrato)}
+                              className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition flex items-center gap-1.5"
+                            >
+                              <span>+ Lançar Medição (BM)</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Barra de Progresso Físico-Financeiro */}
+                        <div className="px-5 py-3 bg-white border-b border-slate-100 flex items-center justify-between gap-4 text-xs">
+                          <div className="flex items-center gap-4 text-slate-700">
+                            <span>
+                              Medido:{" "}
+                              <strong className="text-emerald-700">
+                                {formatBRL(totalMedidoBruto)} (
+                                {percentualTotalMedido.toFixed(1)}%)
+                              </strong>
+                            </span>
+                            <span>•</span>
+                            <span>
+                              Saldo a Medir:{" "}
+                              <strong className="text-slate-900">
+                                {formatBRL(saldoContratual)}
+                              </strong>
+                            </span>
+                          </div>
+                          <div className="w-48 bg-slate-200 h-2 rounded-full overflow-hidden">
+                            <div
+                              className="bg-emerald-600 h-2 rounded-full transition-all"
+                              style={{ width: `${percentualTotalMedido}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Tabela de Boletins de Medição */}
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs border-collapse text-left">
+                            <thead>
+                              <tr className="bg-slate-50/90 border-b border-slate-200 font-semibold text-slate-600 uppercase">
+                                <th className="py-2.5 px-4">Nº BM</th>
+                                <th className="py-2.5 px-4">Data / Período</th>
+                                <th className="py-2.5 px-4 text-center">% Medido</th>
+                                <th className="py-2.5 px-4 text-right">Valor Bruto</th>
+                                <th className="py-2.5 px-4 text-right">Retenção ({contrato.percentualRetencao}%)</th>
+                                <th className="py-2.5 px-4 text-right">Valor Líquido</th>
+                                <th className="py-2.5 px-4">Engenheiro / Obra</th>
+                                <th className="py-2.5 px-4 text-center">Status</th>
+                                <th className="py-2.5 px-4 text-right">Ação</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {contrato.medicoes.length === 0 ? (
+                                <tr>
+                                  <td
+                                    colSpan={9}
+                                    className="py-4 text-center text-slate-400 italic"
+                                  >
+                                    Nenhum boletim de medição lançado ainda para este contrato.
+                                  </td>
+                                </tr>
+                              ) : (
+                                contrato.medicoes.map((bm) => (
+                                  <tr key={bm.id} className="hover:bg-slate-50">
+                                    <td className="py-3 px-4 font-bold text-slate-900 tabular-nums">
+                                      {bm.numeroBm}
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      <div className="font-medium text-slate-900">{bm.dataMedicao}</div>
+                                      <div className="text-[11px] text-slate-500">{bm.periodoReferencia}</div>
+                                    </td>
+                                    <td className="py-3 px-4 text-center">
+                                      <span className="font-semibold text-slate-800">
+                                        {bm.percentualMedidoPeriodo}%
+                                      </span>
+                                      <span className="text-[10px] text-slate-400 block">
+                                        (Acum. {bm.percentualAcumulado}%)
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-4 text-right font-medium text-slate-900 tabular-nums">
+                                      {formatBRL(bm.valorBruto)}
+                                    </td>
+                                    <td className="py-3 px-4 text-right text-blue-700 font-medium tabular-nums">
+                                      - {formatBRL(bm.valorRetencao)}
+                                    </td>
+                                    <td className="py-3 px-4 text-right font-bold text-emerald-800 tabular-nums">
+                                      {formatBRL(bm.valorLiquido)}
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      <div className="font-medium text-slate-900">{bm.engenheiroResponsavel}</div>
+                                      <div className="text-[11px] text-slate-500 truncate max-w-xs">{bm.observacoes}</div>
+                                    </td>
+                                    <td className="py-3 px-4 text-center whitespace-nowrap">
+                                      <span
+                                        className={`px-2 py-0.5 rounded-full text-[11px] font-bold inline-block ${
+                                          bm.status === "Pago"
+                                            ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                                            : bm.status === "Aprovado para Pagamento"
+                                            ? "bg-blue-100 text-blue-900 border border-blue-300"
+                                            : "bg-amber-100 text-amber-900 border border-amber-300"
+                                        }`}
+                                      >
+                                        {bm.status === "Pago"
+                                          ? "🟢 Pago"
+                                          : bm.status === "Aprovado para Pagamento"
+                                          ? "🔵 Aprovado"
+                                          : "🟡 Pendente"}
+                                      </span>
+                                      {bm.notaFiscal && (
+                                        <div className="text-[10px] text-slate-600 font-medium mt-0.5">
+                                          {bm.notaFiscal}
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                                      {bm.status === "Pendente Aprovação" && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleAprovarPagarBm(
+                                              contrato.id,
+                                              bm.id,
+                                              "Aprovado para Pagamento"
+                                            )
+                                          }
+                                          className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold transition"
+                                        >
+                                          Aprovar BM
+                                        </button>
+                                      )}
+                                      {bm.status === "Aprovado para Pagamento" && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleAprovarPagarBm(
+                                              contrato.id,
+                                              bm.id,
+                                              "Pago"
+                                            )
+                                          }
+                                          className="px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-semibold transition"
+                                        >
+                                          Confirmar Pagamento
+                                        </button>
+                                      )}
+                                      {bm.status === "Pago" && (
+                                        <span className="text-[11px] font-semibold text-emerald-800">
+                                          ✓ Liquidado
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================= */}
+          {/* ABA: CONTROLE ORÇAMENTÁRIO (Orçado vs. Realizado)             */}
+          {/* ============================================================= */}
+          {activeTab === "Orcamento" && (() => {
+            const orcamentosFiltrados = orcamentos.filter(
+              (o) => obraFiltro === "ALL" || o.obraId === obraFiltro
+            );
+            const dadosOrcamento = orcamentosFiltrados.map((item) => {
+              const saldo = calcularSaldoOrcamentario(
+                item.obraId,
+                item.categoria,
+                orcamentos,
+                ordens,
+                contratos
+              );
+              return { item, saldo };
+            });
+            const totalOrcado = dadosOrcamento.reduce((a, b) => a + b.saldo.valorOrcado, 0);
+            const totalComprometido = dadosOrcamento.reduce((a, b) => a + b.saldo.valorComprometido, 0);
+            const totalRealizado = dadosOrcamento.reduce((a, b) => a + b.saldo.valorRealizado, 0);
+            const totalSaldo = dadosOrcamento.reduce((a, b) => a + b.saldo.saldoDisponivel, 0);
+            const percGeral = totalOrcado > 0 ? Math.min(100, Math.round((totalComprometido / totalOrcado) * 100)) : 0;
+
+            return (
+              <div className="space-y-6">
+                {/* 4 KPIs do Orçamento */}
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      VALOR ORÇADO TOTAL
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                      {formatBRL(totalOrcado)}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Verba aprovada em planejamento
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      COMPROMETIDO (ORDENS + BM)
+                    </div>
+                    <div className="text-2xl font-bold text-amber-700 mt-1 tabular-nums">
+                      {formatBRL(totalComprometido)}
+                    </div>
+                    <div className="text-xs text-amber-800 font-medium mt-1">
+                      {percGeral}% do teto orçamentário
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      REALIZADO / LIQUIDADO
+                    </div>
+                    <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
+                      {formatBRL(totalRealizado)}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Pagamentos efetivados
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      SALDO DISPONÍVEL
+                    </div>
+                    <div className={`text-2xl font-bold mt-1 tabular-nums ${totalSaldo >= 0 ? "text-blue-700" : "text-red-700"}`}>
+                      {formatBRL(totalSaldo)}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {totalSaldo >= 0 ? "Margem de segurança positiva" : "⚠️ Orçamento com déficit"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Barra de Filtro e Ação */}
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                      Filtrar por Empreendimento:
+                    </span>
+                    <select
+                      value={obraFiltro}
+                      onChange={(e) => setObraFiltro(e.target.value)}
+                      className="bg-slate-50 border border-slate-300 rounded-md px-3 py-1.5 text-xs font-medium text-slate-800"
+                    >
+                      <option value="ALL">Todas as Obras (Consolidado)</option>
+                      {obras.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.nome} ({o.sigla})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowNovoOrcamentoModal(true)}
+                    className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5"
+                  >
+                    <span>+ Definir Nova Verba Orçamentária</span>
+                  </button>
+                </div>
+
+                {/* Tabela Comparativa de Verbas por Disciplina */}
+                <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                  <table className="w-full text-sm border-collapse text-left">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                        <th className="py-3 px-4">Disciplina / Categoria</th>
+                        <th className="py-3 px-4">Empreendimento</th>
+                        <th className="py-3 px-4 text-right">Orçado (R$)</th>
+                        <th className="py-3 px-4 text-right">Comprometido (R$)</th>
+                        <th className="py-3 px-4 text-right">Realizado (R$)</th>
+                        <th className="py-3 px-4 text-right">Saldo Disponível (R$)</th>
+                        <th className="py-3 px-4 w-48 text-center">% Consumido</th>
+                        <th className="py-3 px-4 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {dadosOrcamento.map(({ item, saldo }) => {
+                        const obraObj = obras.find((o) => o.id === item.obraId);
+                        const estourado = saldo.saldoDisponivel < 0;
+                        const alertaQuaseEstouro = !estourado && saldo.percentualConsumido > 85;
+                        const corBarra = estourado
+                          ? "bg-red-600"
+                          : alertaQuaseEstouro
+                          ? "bg-amber-500"
+                          : "bg-emerald-600";
+
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="py-3.5 px-4 font-bold text-slate-900">
+                              <div>{item.categoria}</div>
+                              {item.observacao && (
+                                <div className="text-xs font-normal text-slate-500 mt-0.5">
+                                  {item.observacao}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-700 font-medium">
+                              {obraObj ? obraObj.nome : item.obraId}
+                            </td>
+                            <td className="py-3.5 px-4 text-right font-semibold text-slate-900 tabular-nums">
+                              {formatBRL(saldo.valorOrcado)}
+                            </td>
+                            <td className="py-3.5 px-4 text-right font-medium text-amber-800 tabular-nums">
+                              {formatBRL(saldo.valorComprometido)}
+                            </td>
+                            <td className="py-3.5 px-4 text-right font-medium text-emerald-800 tabular-nums">
+                              {formatBRL(saldo.valorRealizado)}
+                            </td>
+                            <td className={`py-3.5 px-4 text-right font-bold tabular-nums ${estourado ? "text-red-700" : "text-blue-700"}`}>
+                              {formatBRL(saldo.saldoDisponivel)}
+                            </td>
+                            <td className="py-3.5 px-4 align-middle">
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between text-xs font-bold">
+                                  <span className={estourado ? "text-red-700" : alertaQuaseEstouro ? "text-amber-700" : "text-slate-700"}>
+                                    {saldo.percentualConsumido}%
+                                  </span>
+                                  {estourado && (
+                                    <span className="text-[10px] uppercase font-extrabold text-red-600">
+                                      Estouro!
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                                  <div
+                                    className={`h-full rounded-full transition-all ${corBarra}`}
+                                    style={{ width: `${Math.min(100, saldo.percentualConsumido)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => setShowNovoOrcamentoModal(true)}
+                                className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold transition"
+                              >
+                                Ajustar Verba
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ============================================================= */}
+          {/* ABA: CRONOGRAMA LOGÍSTICO & CARGAS NO CANTEIRO (`Logistica`)  */}
+          {/* ============================================================= */}
+          {activeTab === "Logistica" && (() => {
+            const totalCargas = cargasLogistica.reduce((acc, d) => acc + d.cargas.length, 0);
+            const entregasHoje = cargasLogistica.flatMap((d) => d.cargas).filter((c) => c.status === "Hoje").length;
+            const conflitosPortao = cargasLogistica.filter((d) => d.conflitoPortao).length;
+            const cargasRecebidas = cargasLogistica.flatMap((d) => d.cargas).filter((c) => c.status === "Entregue").length;
+
+            return (
+              <div className="space-y-6">
+                {/* 4 KPIs de Logística */}
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      TOTAL CARGAS NA SEMANA
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                      {totalCargas}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Caminhões e fretes previstos
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      DESCARGAS PREVISTAS HOJE
+                    </div>
+                    <div className="text-2xl font-bold text-blue-700 mt-1 tabular-nums">
+                      {entregasHoje}
+                    </div>
+                    <div className="text-xs text-blue-800 font-medium mt-1">
+                      Aguardando no portão da obra
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      ALERTAS DE GARGALO NO PORTÃO
+                    </div>
+                    <div className={`text-2xl font-bold mt-1 tabular-nums ${conflitosPortao > 0 ? "text-amber-600" : "text-emerald-700"}`}>
+                      {conflitosPortao}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {conflitosPortao > 0 ? "Dias com sobreposição pesada" : "Fluxo de descarregamento liberado"}
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      RECEBIDAS & BAIXADAS
+                    </div>
+                    <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
+                      {cargasRecebidas}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Conferidas pelo Almoxarifado
+                    </div>
+                  </div>
+                </div>
+
+                {/* Banner de Aviso de Gargalo se houver */}
+                {conflitosPortao > 0 && (
+                  <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">⚠️</span>
+                      <div>
+                        <h4 className="text-sm font-bold text-amber-950">
+                          Alerta Preventivo de Canteiro: Conflito de Acesso e Descarga Detectado
+                        </h4>
+                        <p className="text-xs text-amber-900 mt-0.5">
+                          Existem múltiplos veículos de grande porte agendados simultaneamente para o mesmo dia e portão. Recomenda-se alinhar com os fornecedores janelas de descarga alternadas para evitar filas na via pública.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("Ordens")}
+                      className="px-3.5 py-1.5 rounded-md bg-amber-900 hover:bg-amber-800 text-white text-xs font-bold transition whitespace-nowrap"
+                    >
+                      Ajustar Agendamentos
+                    </button>
+                  </div>
+                )}
+
+                {/* Grade Semanal de Logística (Segunda a Sábado) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {cargasLogistica.map((dia) => (
+                    <div
+                      key={dia.diaSemana}
+                      className={`bg-white rounded-lg border shadow-sm p-4 space-y-3 ${
+                        dia.conflitoPortao ? "border-amber-300 ring-1 ring-amber-200" : "border-slate-200"
+                      }`}
+                    >
+                      {/* Cabeçalho do Dia */}
+                      <div className="flex items-start justify-between border-b border-slate-200 pb-2.5">
+                        <div>
+                          <h3 className="font-bold text-sm text-slate-900">
+                            {dia.diaSemana}
+                          </h3>
+                          <span className="text-xs text-slate-500">{dia.dataLabel}</span>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 text-xs font-bold">
+                            {dia.cargas.length} {dia.cargas.length === 1 ? "carga" : "cargas"}
+                          </span>
+                          {dia.conflitoPortao && (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-extrabold border border-amber-300">
+                              ⚠️ Conflito Portão
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Lista de Cargas do Dia */}
+                      {dia.cargas.length === 0 ? (
+                        <div className="py-8 text-center text-xs text-slate-400">
+                          Nenhuma entrega programada para este dia.
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {dia.cargas.map((carga) => (
+                            <div
+                              key={carga.id}
+                              className="bg-slate-50 rounded-lg border border-slate-200 p-3 space-y-2 hover:bg-slate-100/80 transition"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <span className="font-bold text-xs text-slate-900">
+                                  {carga.fornecedorNome}
+                                </span>
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    carga.status === "Entregue"
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : carga.status === "Hoje"
+                                      ? "bg-blue-100 text-blue-800"
+                                      : "bg-slate-200 text-slate-800"
+                                  }`}
+                                >
+                                  {carga.status === "Entregue" ? "✓ Entregue" : carga.status === "Hoje" ? "🔵 Previsto Hoje" : "Agendado"}
+                                </span>
+                              </div>
+
+                              <div className="text-xs text-slate-700 font-medium">
+                                {carga.insumoDescricao}
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 bg-white p-2 rounded border border-slate-200">
+                                <div>
+                                  <span className="text-slate-400">Janela: </span>
+                                  <strong className="text-slate-800">{carga.horarioJanela}</strong>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Veículo: </span>
+                                  <strong className="text-slate-800">{carga.tipoVeiculo}</strong>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Frete: </span>
+                                  <strong className="text-slate-800">{carga.tipoFrete}</strong>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Canteiro: </span>
+                                  <strong className="text-slate-800 truncate block">{carga.obraNome}</strong>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ============================================================= */}
+          {/* ABA 5: IMPORTAR PLANILHAS (`Importacao`)                      */}
+          {/* ============================================================= */}
+          {activeTab === "Importacao" && (
+            <div>
+              {/* Topo com 3 Cards de Números Simples (Regra do Número Único) */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    LINHAS LIDAS
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                    1.450
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    Histórico de 15 anos (.xlsx / .csv)
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    FORNECEDORES IDENTIFICADOS
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                    120
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    Cadastros extraídos das abas
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    PENDÊNCIAS PARA REVISÃO
+                  </div>
+                  <div className="text-2xl font-bold text-amber-700 mt-1 tabular-nums">
+                    {pendenciasImportacaoCount || 10}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 truncate">
+                    Itens aguardando aprovação
+                  </div>
+                </div>
+              </div>
+
+              {/* Área de Upload Funcional */}
+              <div className="bg-white rounded-lg border border-slate-200 p-5 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">
+                    Importar Planilhas Antigas (.xlsx, .xls, .csv)
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Selecione uma planilha do computador para higienizar
+                    fornecedores, insumos e histórico de preços
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={(e) => handleUploadPlanilha(e.target.files)}
+                    className="text-xs text-slate-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-white hover:file:bg-slate-800 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Sub-Abas Simples: Itens Lidos | Fornecedores Duplicados | Colaboradores */}
+              <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
+                  <button
+                    onClick={() => setSubAbaImportacao("itens")}
+                    className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition ${
+                      subAbaImportacao === "itens"
+                        ? "bg-slate-900 text-white"
+                        : "bg-white text-slate-700 border border-slate-300"
+                    }`}
+                  >
+                    Itens Lidos ({itensPlanilha.length})
+                  </button>
+                  <button
+                    onClick={() => setSubAbaImportacao("duplicados")}
+                    className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition ${
+                      subAbaImportacao === "duplicados"
+                        ? "bg-slate-900 text-white"
+                        : "bg-white text-slate-700 border border-slate-300"
+                    }`}
+                  >
+                    Fornecedores Duplicados ({duplicidades.length})
+                  </button>
+                  <button
+                    onClick={() => setSubAbaImportacao("colaboradores")}
+                    className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition ${
+                      subAbaImportacao === "colaboradores"
+                        ? "bg-slate-900 text-white"
+                        : "bg-white text-slate-700 border border-slate-300"
+                    }`}
+                  >
+                    Colaboradores ({colaboradores.length})
+                  </button>
+                </div>
+
+                {/* Sub-aba 1: Itens Lidos */}
+                {subAbaImportacao === "itens" && (
+                  <table className="w-full text-sm border-collapse text-left">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                        <th className="py-3 px-4">Data</th>
+                        <th className="py-3 px-4">Fornecedor</th>
+                        <th className="py-3 px-4">Insumo / Material</th>
+                        <th className="py-3 px-4 text-center">Qtd / Unid</th>
+                        <th className="py-3 px-4 text-right">Preço Unit.</th>
+                        <th className="py-3 px-4 text-center">Status</th>
+                        <th className="py-3 px-4 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {itensPlanilha.map((item) => {
+                        const editando = editingImportRowId === item.id;
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50">
+                            <td className="py-3 px-4 whitespace-nowrap tabular-nums text-slate-700">
+                              {item.data}
+                            </td>
+                            <td className="py-3 px-4 font-semibold text-slate-900">
+                              {editando ? (
+                                <input
+                                  value={item.fornecedor}
+                                  onChange={(e) =>
+                                    setItensPlanilha((prev) =>
+                                      prev.map((r) =>
+                                        r.id === item.id
+                                          ? { ...r, fornecedor: e.target.value }
+                                          : r
+                                      )
+                                    )
+                                  }
+                                  className="border border-slate-400 rounded-sm px-2 py-1 text-xs w-full"
+                                />
+                              ) : (
+                                item.fornecedor
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-slate-800">
+                              {editando ? (
+                                <input
+                                  value={item.insumo}
+                                  onChange={(e) =>
+                                    setItensPlanilha((prev) =>
+                                      prev.map((r) =>
+                                        r.id === item.id
+                                          ? { ...r, insumo: e.target.value }
+                                          : r
+                                      )
+                                    )
+                                  }
+                                  className="border border-slate-400 rounded-sm px-2 py-1 text-xs w-full"
+                                />
+                              ) : (
+                                item.insumo
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-center whitespace-nowrap tabular-nums">
+                              {item.quantidade} {item.unidade}
+                            </td>
+                            <td className="py-3 px-4 text-right font-semibold text-slate-900 whitespace-nowrap tabular-nums">
+                              {formatBRL(item.precoUnitario)}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                  item.status === "Aprovado"
+                                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                    : "bg-amber-50 text-amber-800 border border-amber-200"
+                                }`}
+                              >
+                                {item.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right whitespace-nowrap">
+                              <div className="inline-flex items-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    setItensPlanilha((prev) =>
+                                      prev.map((r) =>
+                                        r.id === item.id
+                                          ? { ...r, status: "Aprovado" }
+                                          : r
+                                      )
+                                    );
+                                    setEditingImportRowId(null);
+                                  }}
+                                  className="px-2.5 py-1 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
+                                >
+                                  Aprovar
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    setEditingImportRowId(
+                                      editando ? null : item.id
+                                    )
+                                  }
+                                  className="px-2.5 py-1 rounded-sm bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold"
+                                >
+                                  {editando ? "Salvar" : "Corrigir"}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+
+                {/* Sub-aba 2: Fornecedores Duplicados */}
+                {subAbaImportacao === "duplicados" && (
+                  <table className="w-full text-sm border-collapse text-left">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                        <th className="py-3 px-4">Cadastro Unificado</th>
+                        <th className="py-3 px-4">CNPJ</th>
+                        <th className="py-3 px-4">Variações nas Planilhas</th>
+                        <th className="py-3 px-4 text-center">Similaridade</th>
+                        <th className="py-3 px-4 text-center">Status</th>
+                        <th className="py-3 px-4 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {duplicidades.map((d) => (
+                        <tr key={d.id} className="hover:bg-slate-50">
+                          <td className="py-3 px-4 font-bold text-slate-900">
+                            {d.nomeSugerido}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap tabular-nums text-slate-700">
+                            {d.cnpj}
+                          </td>
+                          <td className="py-3 px-4 text-slate-700">
+                            {d.variacoesPlanilha}
+                          </td>
+                          <td className="py-3 px-4 text-center font-bold text-emerald-700">
+                            {d.similaridade}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                d.status === "Unificado"
+                                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                  : "bg-amber-50 text-amber-800 border border-amber-200"
+                              }`}
+                            >
+                              {d.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                            <button
+                              onClick={() =>
+                                setDuplicidades((prev) =>
+                                  prev.map((x) =>
+                                    x.id === d.id
+                                      ? { ...x, status: "Unificado" }
+                                      : x
+                                  )
+                                )
+                              }
+                              className="px-3 py-1 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
+                            >
+                              Aprovar Unificação
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {/* Sub-aba 3: Colaboradores */}
+                {subAbaImportacao === "colaboradores" && (
+                  <table className="w-full text-sm border-collapse text-left">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                        <th className="py-3 px-4">Colaborador</th>
+                        <th className="py-3 px-4">Cargo / Função</th>
+                        <th className="py-3 px-4">Obra Principal</th>
+                        <th className="py-3 px-4 text-right">
+                          Pedidos Históricos
+                        </th>
+                        <th className="py-3 px-4 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {colaboradores.map((c) => (
+                        <tr key={c.id} className="hover:bg-slate-50">
+                          <td className="py-3 px-4 font-bold text-slate-900">
+                            {c.nome}
+                          </td>
+                          <td className="py-3 px-4 text-slate-700">
+                            {c.cargo}
+                          </td>
+                          <td className="py-3 px-4 text-slate-700">
+                            {c.obraPrincipal}
+                          </td>
+                          <td className="py-3 px-4 text-right font-semibold text-slate-900 tabular-nums">
+                            {c.pedidosHistoricos}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              onClick={() =>
+                                setColaboradores((prev) =>
+                                  prev.map((x) =>
+                                    x.id === c.id
+                                      ? { ...x, status: "Validado" }
+                                      : x
+                                  )
+                                )
+                              }
+                              className="px-3 py-1 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
+                            >
+                              {c.status === "Validado"
+                                ? "Validado ✓"
+                                : "Aprovar"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================= */}
+          {/* ABA 6: CONFIGURAÇÕES DO USUÁRIO E DA CONSTRUTORA              */}
+          {/* ============================================================= */}
+          {activeTab === "Configuracoes" && (
+            <div className="space-y-6 max-w-6xl">
+              {/* SEÇÃO 1: GESTÃO DE ACESSOS DA EQUIPE (ENGENHEIROS, ALMOXARIFADO E ENCARREGADOS) */}
+              <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900">
+                      Gestão de Acessos da Equipe (Engenheiros, Almoxarifado e
+                      Encarregados)
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Cadastre logins e senhas exclusivos para cada canteiro de
+                      obra. Solicitantes da obra possuem acesso restrito apenas
+                      a pedidos e recebimento de materiais (sem acesso a preços
+                      negociados, saving ou fornecedores).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowNovoUsuarioModal(true)}
+                    className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition whitespace-nowrap"
+                  >
+                    + Cadastrar Novo Acesso da Obra
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse text-left">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                        <th className="py-3 px-4">Nome</th>
+                        <th className="py-3 px-4">Cargo / Função</th>
+                        <th className="py-3 px-4">Obra Vinculada</th>
+                        <th className="py-3 px-4">Login / E-mail</th>
+                        <th className="py-3 px-4">Senha</th>
+                        <th className="py-3 px-4 text-center">Status</th>
+                        <th className="py-3 px-4 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {usuarios.map((u) => (
+                        <tr key={u.id} className="hover:bg-slate-50">
+                          <td className="py-3 px-4 font-bold text-slate-900">
+                            {u.nome}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`px-2.5 py-1 rounded-md text-xs font-semibold ${
+                                u.cargo === "Administrador"
+                                  ? "bg-slate-900 text-white"
+                                  : u.cargo === "Engenheiro"
+                                  ? "bg-blue-50 text-blue-800 border border-blue-200"
+                                  : u.cargo === "Almoxarife"
+                                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                  : "bg-amber-50 text-amber-800 border border-amber-200"
+                              }`}
+                            >
+                              {u.cargo}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 font-medium text-slate-800">
+                            {u.obraNome}
+                          </td>
+                          <td className="py-3 px-4 text-slate-700 font-mono text-xs">
+                            {u.email}
+                          </td>
+                          <td className="py-3 px-4 text-slate-700 font-mono text-xs">
+                            {u.senha}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                u.status === "Ativo"
+                                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                  : "bg-red-50 text-red-800 border border-red-200"
+                              }`}
+                            >
+                              {u.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                            {u.cargo !== "Administrador" ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setUsuarios((prev) =>
+                                    prev.map((item) =>
+                                      item.id === u.id
+                                        ? {
+                                            ...item,
+                                            status:
+                                              item.status === "Ativo"
+                                                ? "Bloqueado"
+                                                : "Ativo",
+                                          }
+                                        : item
+                                    )
+                                  );
+                                  dispararAviso(
+                                    `Status de ${u.nome} alterado com sucesso!`
+                                  );
+                                }}
+                                className="px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs font-semibold text-slate-800"
+                              >
+                                {u.status === "Ativo"
+                                  ? "Bloquear Acesso"
+                                  : "Reativar Acesso"}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-slate-400 font-medium">
+                                Acesso Mestre
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* SEÇÃO 2: DADOS DO COMPRADOR E DA CONSTRUTORA */}
+              <form
+                onSubmit={handleSalvarConfiguracoes}
+                className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm space-y-6"
+              >
+                <div className="border-b border-slate-200 pb-4">
+                  <h2 className="text-base font-bold text-slate-900">
+                    Perfil do Administrador e Dados da Construtora
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    As informações salvas abaixo atualizam imediatamente o
+                    rodapé da barra lateral e o cabeçalho/assinatura de todos os
+                    relatórios em PDF.
+                  </p>
+                </div>
+
+                {/* Bloco 1: Dados Pessoais do Comprador / Diretor */}
+                <div className="space-y-4">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    1. Identificação do Usuário (Assinatura nos Relatórios e
+                    Sidebar)
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Meu Nome Completo *
+                      </label>
+                      <input
+                        required
+                        type="text"
+                        value={formSettings.userName}
+                        onChange={(e) =>
+                          setFormSettings((prev) => ({
+                            ...prev,
+                            userName: e.target.value,
+                          }))
+                        }
+                        placeholder="Ex: João Carlos Bauer"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-slate-900 font-medium focus:outline-none focus:border-slate-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Meu Cargo / Setor *
+                      </label>
+                      <input
+                        required
+                        type="text"
+                        value={formSettings.userRole}
+                        onChange={(e) =>
+                          setFormSettings((prev) => ({
+                            ...prev,
+                            userRole: e.target.value,
+                          }))
+                        }
+                        placeholder="Ex: Diretor / Coordenador de Suprimentos"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-slate-900 font-medium focus:outline-none focus:border-slate-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        E-mail Corporativo
+                      </label>
+                      <input
+                        type="email"
+                        value={formSettings.userEmail}
+                        onChange={(e) =>
+                          setFormSettings((prev) => ({
+                            ...prev,
+                            userEmail: e.target.value,
+                          }))
+                        }
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Telefone / WhatsApp
+                      </label>
+                      <input
+                        type="text"
+                        value={formSettings.userPhone}
+                        onChange={(e) =>
+                          setFormSettings((prev) => ({
+                            ...prev,
+                            userPhone: e.target.value,
+                          }))
+                        }
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-slate-900 tabular-nums focus:outline-none focus:border-slate-900"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bloco 2: Dados Institucionais da Construtora */}
+                <div className="space-y-4 pt-2 border-t border-slate-200">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    2. Dados da Construtora (Cabeçalho de Pedidos e PDF)
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Razão Social / Nome da Construtora *
+                      </label>
+                      <input
+                        required
+                        type="text"
+                        value={formSettings.companyName}
+                        onChange={(e) =>
+                          setFormSettings((prev) => ({
+                            ...prev,
+                            companyName: e.target.value,
+                          }))
+                        }
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-slate-900 font-medium focus:outline-none focus:border-slate-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        CNPJ da Construtora *
+                      </label>
+                      <input
+                        required
+                        type="text"
+                        value={formSettings.companyCnpj}
+                        onChange={(e) =>
+                          setFormSettings((prev) => ({
+                            ...prev,
+                            companyCnpj: e.target.value,
+                          }))
+                        }
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-slate-900 font-medium tabular-nums focus:outline-none focus:border-slate-900"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bloco 3: Segurança e Backup Geral (JSON) */}
+                <div className="space-y-4 pt-4 border-t border-slate-200">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    3. Governança de Dados, Backup & Restauração Geral (JSON)
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Exporte todo o banco de dados do sistema (pedidos de compras, cotações equalizadas, fornecedores homologados, contratos de subempreitada, medições BM e acessos) para um único arquivo JSON portátil.
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleExportarBackupCompleto}
+                      className="px-4 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center gap-2"
+                    >
+                      <span>📥 Baixar Backup Completo (.json)</span>
+                    </button>
+
+                    <label className="px-4 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-bold transition cursor-pointer flex items-center gap-2">
+                      <span>📤 Restaurar Base de Dados (.json)</span>
+                      <input
+                        ref={backupInputRef}
+                        type="file"
+                        accept=".json"
+                        className="hidden"
+                        onChange={(e) => handleRestaurarBackupCompleto(e.target.files)}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+                  <span className="text-xs text-slate-500">
+                    Salvo automaticamente no navegador (`localStorage`).
+                  </span>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold transition"
+                  >
+                    💾 Salvar Configurações
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* ================================================================= */}
+      {/* MODAL DE CADASTRO DE NOVO USUÁRIO / ACESSO DA OBRA                */}
+      {/* ================================================================= */}
+      {showNovoUsuarioModal && (
+        <ModalNovoUsuarioObra
+          obras={obras}
+          onClose={() => setShowNovoUsuarioModal(false)}
+          onSalvar={(novoUser) => {
+            setUsuarios((prev) => [...prev, novoUser]);
+            setShowNovoUsuarioModal(false);
+            dispararAviso(
+              `Acesso criado para ${novoUser.nome} (${novoUser.cargo} — ${novoUser.obraNome})! Já disponível para Login.`
+            );
+          }}
+        />
+      )}
+
+      {/* ================================================================= */}
+      {/* MODAL 1: NOVA SOLICITAÇÃO DE COMPRA                               */}
+      {/* ================================================================= */}
+      {showNovaScModal && (
+        <ModalNovaSolicitacao
+          obras={obras}
+          defaultSolicitante={settings.userName}
+          onClose={() => setShowNovaScModal(false)}
+          onCriar={(novaSc) => {
+            setSolicitacoes((prev) => [novaSc, ...prev]);
+            setSelectedScId(novaSc.id);
+            setShowNovaScModal(false);
+            setActiveTab("Cotacoes");
+            dispararAviso(
+              `Solicitação ${novaSc.codigo} criada e aberta no Mapa de Cotações!`
+            );
+          }}
+        />
+      )}
+
+      {/* ================================================================= */}
+      {/* MODAL 2: NOVO FORNECEDOR                                          */}
+      {/* ================================================================= */}
+      {showNovoFornecedorModal && (
+        <ModalNovoFornecedor
+          onClose={() => setShowNovoFornecedorModal(false)}
+          onSalvar={(novoForn) => {
+            setFornecedores((prev) => [novoForn, ...prev]);
+            setShowNovoFornecedorModal(false);
+            dispararAviso(
+              `Fornecedor ${novoForn.empresa} cadastrado com sucesso!`
+            );
+          }}
+        />
+      )}
+
+      {/* ================================================================= */}
+      {/* MODAL 3: FICHA COMPLETA DO FORNECEDOR                             */}
+      {/* ================================================================= */}
+      {fornecedorFichaModal && (
+        <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-slate-200 max-w-xl w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-start justify-between border-b border-slate-200 pb-3">
+              <div>
+                <span className="text-xs font-semibold text-emerald-700 uppercase">
+                  Ficha Homologada de Fornecedor
+                </span>
+                <h3 className="text-lg font-bold text-slate-900 mt-0.5">
+                  {fornecedorFichaModal.empresa}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {fornecedorFichaModal.razaoSocial}
+                </p>
+              </div>
+              <button
+                onClick={() => setFornecedorFichaModal(null)}
+                className="px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-sm bg-slate-50 p-4 rounded-lg border border-slate-200">
+              <div>
+                <div className="text-xs text-slate-500">CNPJ</div>
+                <div className="font-semibold text-slate-900 tabular-nums">
+                  {fornecedorFichaModal.cnpj}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">Cidade / UF</div>
+                <div className="font-semibold text-slate-900">
+                  {fornecedorFichaModal.cidade}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">Vendedor</div>
+                <div className="font-semibold text-slate-900">
+                  {fornecedorFichaModal.vendedor}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">Telefone / WhatsApp</div>
+                <div className="font-semibold text-slate-900 tabular-nums">
+                  {fornecedorFichaModal.telefone}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">E-mail Comercial</div>
+                <div className="font-medium text-slate-900 truncate">
+                  {fornecedorFichaModal.email}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">
+                  Chave PIX / Faturamento
+                </div>
+                <div className="font-semibold text-emerald-800 tabular-nums">
+                  {fornecedorFichaModal.chavePix}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-semibold text-slate-500 uppercase mb-1.5">
+                Especialidades e Categorias Atendidas
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <span className="px-2.5 py-1 rounded-md bg-slate-900 text-white text-xs font-medium">
+                  {fornecedorFichaModal.categoriaPrincipal}
+                </span>
+                {fornecedorFichaModal.especialidades.map((esp) => (
+                  <span
+                    key={esp}
+                    className="px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-xs text-slate-800"
+                  >
+                    {esp}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+                Condições Comerciais e Observações
+              </div>
+              <p className="text-sm text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <strong>Pagamento Padrão:</strong>{" "}
+                {fornecedorFichaModal.condicaoPadrao} —{" "}
+                {fornecedorFichaModal.observacoes}
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <a
+                href={`https://wa.me/${fornecedorFichaModal.whatsapp}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
+              >
+                Chamar Vendedor no WhatsApp
+              </a>
+              <button
+                onClick={() => setFornecedorFichaModal(null)}
+                className="px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold"
+              >
+                Concluído
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* MODAL 4: INSERIR PREÇO DE FORNECEDOR NA COTAÇÃO                   */}
+      {/* ================================================================= */}
+      {showInserirPrecoModal && scAtiva && (
+        <ModalInserirFornecedorCotacao
+          sc={scAtiva}
+          fornecedores={fornecedores}
+          onClose={() => setShowInserirPrecoModal(false)}
+          onAdicionarProposta={(novaProp) => {
+            setSolicitacoes((prev) =>
+              prev.map((s) =>
+                s.id === scAtiva.id
+                  ? { ...s, propostas: [...s.propostas, novaProp] }
+                  : s
+              )
+            );
+            setShowInserirPrecoModal(false);
+            dispararAviso(
+              `Proposta de ${novaProp.fornecedorNome} adicionada ao Mapa de Cotações!`
+            );
+          }}
+        />
+      )}
+
+      {/* ================================================================= */}
+      {/* MODAL 5: VISUALIZAR PEDIDO / ORDEM DE COMPRA (ABA 4)              */}
+      {/* ================================================================= */}
+      {ordemVisualizarModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl border border-slate-300 max-w-3xl w-full p-6 shadow-2xl space-y-5 my-6">
+            <div className="no-print flex items-center justify-between border-b border-slate-200 pb-3">
+              <span className="text-xs font-bold text-slate-500 uppercase">
+                Pedido Formal de Compra — {ordemVisualizarModal.numeroOc}
+              </span>
+              <div className="flex items-center gap-2.5">
+                <a
+                  href={`https://wa.me/${ordemVisualizarModal.whatsapp}?text=${encodeURIComponent(
+                    `Olá ${ordemVisualizarModal.vendedorNome}, a Ordem de Compra ${ordemVisualizarModal.numeroOc} (${ordemVisualizarModal.obraNome}) no valor de ${formatBRL(
+                      ordemVisualizarModal.valorTotal
+                    )} foi emitida por ${settings.userName} (${settings.companyName}).`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
+                >
+                  Enviar no WhatsApp
+                </a>
+                <button
+                  onClick={() => window.print()}
+                  className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold"
+                >
+                  Gerar PDF
+                </button>
+                <button
+                  onClick={() => setOrdemVisualizarModal(null)}
+                  className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+
+            {/* Cabeçalho da OC */}
+            <div className="flex items-start justify-between border-b-2 border-slate-900 pb-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 uppercase">
+                  {settings.companyName}
+                </h2>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  CNPJ: {settings.companyCnpj} • Responsável:{" "}
+                  {settings.userName}
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-xs font-semibold text-slate-500 uppercase">
+                  ORDEM DE COMPRA
+                </div>
+                <div className="text-xl font-bold text-slate-900 tabular-nums">
+                  {ordemVisualizarModal.numeroOc}
+                </div>
+                <div className="text-xs text-slate-600">
+                  Data: {ordemVisualizarModal.dataEmissao} • Ref:{" "}
+                  {ordemVisualizarModal.scCodigo}
+                </div>
+              </div>
+            </div>
+
+            {/* Dados do Fornecedor e da Obra */}
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-1">
+                <div className="text-xs font-bold text-slate-500 uppercase">
+                  1. Fornecedor Contratado
+                </div>
+                <div className="font-bold text-slate-900">
+                  {ordemVisualizarModal.fornecedorNome}
+                </div>
+                <div className="text-xs text-slate-600">
+                  CNPJ: {ordemVisualizarModal.fornecedorCnpj}
+                </div>
+                <div className="text-xs text-slate-700">
+                  Vendedor: {ordemVisualizarModal.vendedorNome} • PIX:{" "}
+                  {ordemVisualizarModal.chavePix}
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-1">
+                <div className="text-xs font-bold text-slate-500 uppercase">
+                  2. Local de Entrega e Faturamento
+                </div>
+                <div className="font-bold text-slate-900">
+                  {ordemVisualizarModal.obraNome}
+                </div>
+                <div className="text-xs text-slate-600">
+                  {ordemVisualizarModal.obraEndereco}
+                </div>
+                <div className="text-xs text-slate-700">
+                  {ordemVisualizarModal.prazoPagamento}
+                </div>
+              </div>
+            </div>
+
+            {/* Tabela de Itens da OC */}
+            <table className="w-full text-sm border-collapse text-left">
+              <thead>
+                <tr className="bg-slate-100 border-b border-slate-300 text-xs font-bold text-slate-700 uppercase">
+                  <th className="p-2.5 border border-slate-300">Código</th>
+                  <th className="p-2.5 border border-slate-300">
+                    Especificação do Material / Serviço
+                  </th>
+                  <th className="p-2.5 border border-slate-300 text-center">
+                    Qtd / Unid
+                  </th>
+                  <th className="p-2.5 border border-slate-300 text-right">
+                    Preço Unit.
+                  </th>
+                  <th className="p-2.5 border border-slate-300 text-right">
+                    Subtotal
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {ordemVisualizarModal.itens.map((it, idx) => (
+                  <tr key={idx} className="border-b border-slate-200">
+                    <td className="p-2.5 border border-slate-300 font-semibold text-slate-700 tabular-nums">
+                      {it.codigo}
+                    </td>
+                    <td className="p-2.5 border border-slate-300 font-medium text-slate-900">
+                      {it.descricao}
+                    </td>
+                    <td className="p-2.5 border border-slate-300 text-center tabular-nums">
+                      {it.quantidade} {it.unidade}
+                    </td>
+                    <td className="p-2.5 border border-slate-300 text-right tabular-nums">
+                      {formatBRL(it.precoUnitario)}
+                    </td>
+                    <td className="p-2.5 border border-slate-300 text-right font-bold text-slate-900 tabular-nums">
+                      {formatBRL(it.subtotal)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-100 font-bold">
+                  <td
+                    colSpan={4}
+                    className="p-3 border border-slate-300 text-right"
+                  >
+                    VALOR TOTAL DA ORDEM (Frete {ordemVisualizarModal.tipoFrete}{" "}
+                    incluso):
+                  </td>
+                  <td className="p-3 border border-slate-300 text-right text-base text-emerald-800 bg-emerald-50 tabular-nums">
+                    {formatBRL(ordemVisualizarModal.valorTotal)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL NOVO CONTRATO DE SUBEMPREITADA */}
+      {showNovoContratoModal && (
+        <ModalNovoContrato
+          obras={obras}
+          onClose={() => setShowNovoContratoModal(false)}
+          onSalvar={handleCriarContrato}
+        />
+      )}
+
+      {/* MODAL NOVO BOLETIM DE MEDIÇÃO (BM) */}
+      {showNovoBmModalContrato && (
+        <ModalNovoBoletimMedicao
+          contrato={showNovoBmModalContrato}
+          usuarioLogado={usuarioLogado}
+          onClose={() => setShowNovoBmModalContrato(null)}
+          onSalvar={(novoBm) =>
+            handleCriarBoletimMedicao(showNovoBmModalContrato.id, novoBm)
+          }
+        />
+      )}
+
+      {/* MODAL LINHA DO TEMPO & MENSAGENS (CANTEIRO ⇄ COMPRAS) */}
+      {scMensagensModal && (
+        <ModalMensagensPedido
+          sc={scMensagensModal}
+          usuarioLogado={usuarioLogado}
+          onClose={() => setScMensagensModal(null)}
+          onEnviar={(texto) =>
+            handleEnviarMensagemSC(scMensagensModal.id, texto)
+          }
+        />
+      )}
+
+      {/* MODAL DE ALÇADA DE APROVAÇÃO DA DIRETORIA EXECUTIVA / CFO (> R$ 100.000) */}
+      {diretoriaAprovacaoModal && (
+        <ModalAprovacaoDiretoria
+          data={diretoriaAprovacaoModal}
+          onClose={() => setDiretoriaAprovacaoModal(null)}
+          onConfirmar={handleConfirmarAprovacaoDiretoria}
+        />
+      )}
+
+      {/* MODAL CENTRAL DE NOTIFICAÇÕES & ALERTAS PREVENTIVOS */}
+      {showNotificacoesModal && (
+        <ModalNotificacoesSistema
+          notificacoes={notificacoesSistema}
+          onClose={() => setShowNotificacoesModal(false)}
+          onNavegar={handleNavegarNotificacao}
+        />
+      )}
+
+      {/* MODAL AUDITORIA DE IQF & HISTÓRICO DE ENTREGAS DO FORNECEDOR */}
+      {fornecedorIqfModal && (
+        <ModalDetalhesIqf
+          fornecedorNome={fornecedorIqfModal}
+          ordens={ordens}
+          onClose={() => setFornecedorIqfModal(null)}
+        />
+      )}
+
+      {/* MODAL DEFINIR / AJUSTAR VERBA ORÇAMENTÁRIA */}
+      {showNovoOrcamentoModal && (
+        <ModalNovoOrcamento
+          obras={obras}
+          obraFiltro={obraFiltro}
+          onClose={() => setShowNovoOrcamentoModal(false)}
+          onSalvar={handleSalvarOrcamento}
+        />
+      )}
+
+      {/* MODAL 1: REGISTRAR NOVA MOVIMENTAÇÃO DE ESTOQUE */}
+      {showNovaMovimentacaoModal && (
+        <ModalMovimentacaoEstoque
+          estoque={estoque}
+          obras={obras}
+          usuarioLogado={usuarioLogado}
+          onClose={() => setShowNovaMovimentacaoModal(false)}
+          onSalvar={handleRegistrarMovimentacao}
+        />
+      )}
+
+      {/* MODAL 2: PROGRAMAR NOVA PUXADA DE CONTRATO CONTÍNUO */}
+      {showProgramarPuxadaModal && (
+        <ModalProgramarPuxada
+          contratos={puxadasFornecimento}
+          onClose={() => setShowProgramarPuxadaModal(false)}
+          onSalvar={handleProgramarPuxada}
+        />
+      )}
+
+      {/* MODAL 3: FICHA KARDEX COMPLETA DO INSUMO */}
+      {kardexModalItem && (
+        <ModalFichaKardex
+          item={kardexModalItem}
+          movimentacoes={movimentacoesEstoque.filter(
+            (m) =>
+              m.itemId === kardexModalItem.id ||
+              m.codigoInsumo === kardexModalItem.codigo
+          )}
+          onClose={() => setKardexModalItem(null)}
+          onRepor={() => {
+            handleGerarSolicitacaoReposicao(kardexModalItem);
+            setKardexModalItem(null);
+          }}
+        />
+      )}
+
+      {/* MODAL 4: CENTRALIZADOR DE COMPRAS EM LOTE CORPORATIVO */}
+      {showAgruparDemandasModal && (
+        <ModalAgruparDemandas
+          demandas={demandasAgrupaveis}
+          onClose={() => setShowAgruparDemandasModal(false)}
+          onCriarLote={handleCriarCompraAgrupada}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* SUB-MODAIS AUXILIARES LIMPOS E FUNCIONAIS                                 */
+/* ========================================================================= */
+
+function ModalNovaSolicitacao({
+  obras,
+  defaultSolicitante,
+  onClose,
+  onCriar,
+}: {
+  obras: Obra[];
+  defaultSolicitante: string;
+  onClose: () => void;
+  onCriar: (sc: SolicitacaoCompra) => void;
+}) {
+  const [obraId, setObraId] = useState(obras[0]?.id || "obra-1");
+  const [categoria, setCategoria] = useState<string>(CATEGORIAS_CONSTRUCAO[0]);
+  const [solicitante, setSolicitante] = useState(defaultSolicitante);
+  const [descricaoItem, setDescricaoItem] = useState(
+    "Concreto Usinado Bombeável fck 35 MPa Brita 0/1"
+  );
+  const [unidade, setUnidade] = useState("m³");
+  const [quantidade, setQuantidade] = useState(120);
+  const [orcamentoUnitario, setOrcamentoUnitario] = useState(495);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const itemId = `it-${Date.now()}`;
+    const scId = `sc-${Date.now()}`;
+
+    const novaSc: SolicitacaoCompra = {
+      id: scId,
+      codigo: `SC-2026-0${Math.floor(155 + Math.random() * 80)}`,
+      obraId,
+      categoria,
+      solicitante,
+      dataAbertura: new Date().toLocaleDateString("pt-BR"),
+      status: "Em Cotação",
+      itens: [
+        {
+          id: itemId,
+          codigo: `INS-${Math.floor(1000 + Math.random() * 9000)}`,
+          descricao: descricaoItem,
+          unidade,
+          quantidade,
+          orcamentoUnitario,
+        },
+      ],
+      propostas: [
+        {
+          id: `prop-a-${Date.now()}`,
+          vendorId: "forn-1",
+          fornecedorNome: "Fornecedor Homologado A",
+          vendedorNome: "Consultor Comercial 1",
+          whatsapp: "5547999123401",
+          precosUnitarios: {
+            [itemId]: Number((orcamentoUnitario * 0.92).toFixed(2)),
+          },
+          freteValor: 0,
+          tipoFrete: "CIF",
+          prazoPagamento: "5 dias úteis • 28/56 ddl Boleto",
+        },
+        {
+          id: `prop-b-${Date.now()}`,
+          vendorId: "forn-2",
+          fornecedorNome: "Fornecedor Homologado B",
+          vendedorNome: "Consultor Comercial 2",
+          whatsapp: "5547998441120",
+          precosUnitarios: {
+            [itemId]: Number((orcamentoUnitario * 0.96).toFixed(2)),
+          },
+          freteValor: 650,
+          tipoFrete: "FOB",
+          prazoPagamento: "7 dias úteis • 28/42 ddl Boleto",
+        },
+        {
+          id: `prop-c-${Date.now()}`,
+          vendorId: "forn-3",
+          fornecedorNome: "Fornecedor Homologado C",
+          vendedorNome: "Consultor Comercial 3",
+          whatsapp: "5547997018890",
+          precosUnitarios: {
+            [itemId]: Number((orcamentoUnitario * 1.01).toFixed(2)),
+          },
+          freteValor: 900,
+          tipoFrete: "FOB",
+          prazoPagamento: "8 dias úteis • 30/60 ddl Boleto",
+        },
+      ],
+    };
+
+    onCriar(novaSc);
+  };
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4 text-sm"
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <h3 className="text-base font-bold text-slate-900">
+            Nova Solicitação de Compra (SC)
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+          >
+            Fechar
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Obra Destino
+            </label>
+            <select
+              value={obraId}
+              onChange={(e) => setObraId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            >
+              {obras.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Categoria / Disciplina
+              </label>
+              <select
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+              >
+                {CATEGORIAS_CONSTRUCAO.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Solicitante
+              </label>
+              <input
+                required
+                value={solicitante}
+                onChange={(e) => setSolicitante(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Descrição do Insumo ou Pacote de Serviço
+            </label>
+            <input
+              required
+              value={descricaoItem}
+              onChange={(e) => setDescricaoItem(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Quantidade
+              </label>
+              <input
+                type="number"
+                required
+                value={quantidade}
+                onChange={(e) => setQuantidade(Number(e.target.value) || 1)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 tabular-nums"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Unidade
+              </label>
+              <input
+                required
+                value={unidade}
+                onChange={(e) => setUnidade(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Meta Unitária (R$)
+              </label>
+              <input
+                type="number"
+                step="0.10"
+                required
+                value={orcamentoUnitario}
+                onChange={(e) =>
+                  setOrcamentoUnitario(Number(e.target.value) || 1)
+                }
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 tabular-nums"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2.5 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold"
+          >
+            Cadastrar e Abrir Mapa de Cotações
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ModalNovoFornecedor({
+  onClose,
+  onSalvar,
+}: {
+  onClose: () => void;
+  onSalvar: (f: FornecedorCadastro) => void;
+}) {
+  const [empresa, setEmpresa] = useState("");
+  const [razaoSocial, setRazaoSocial] = useState("");
+  const [cnpj, setCnpj] = useState("");
+  const [cidade, setCidade] = useState("Joinville / SC");
+  const [categoriaPrincipal, setCategoriaPrincipal] = useState<string>(
+    CATEGORIAS_CONSTRUCAO[0]
+  );
+  const [vendedor, setVendedor] = useState("");
+  const [telefone, setTelefone] = useState("(47) 99911-2233");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!empresa.trim()) return;
+    onSalvar({
+      id: `forn-${Date.now()}`,
+      empresa,
+      razaoSocial: razaoSocial || `${empresa} Comércio de Materiais Ltda`,
+      cnpj: cnpj || "19.301.440/0001-80",
+      cidade,
+      categoriaPrincipal,
+      especialidades: [categoriaPrincipal],
+      vendedor: vendedor || "Consultor Comercial",
+      telefone,
+      whatsapp: telefone.replace(/\D/g, "") || "5547999112233",
+      email: `contato@${empresa.toLowerCase().replace(/\s+/g, "")}.com.br`,
+      chavePix: cnpj || "CNPJ",
+      condicaoPadrao: "28/56 ddl Boleto",
+      observacoes: "Fornecedor homologado no sistema.",
+    });
+  };
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4 text-sm"
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <h3 className="text-base font-bold text-slate-900">
+            Cadastrar Novo Fornecedor
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+          >
+            Fechar
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Nome Fantasia *
+            </label>
+            <input
+              required
+              value={empresa}
+              onChange={(e) => setEmpresa(e.target.value)}
+              placeholder="Ex: Catarinense Esquadrias"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              CNPJ
+            </label>
+            <input
+              value={cnpj}
+              onChange={(e) => setCnpj(e.target.value)}
+              placeholder="00.000.000/0001-00"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 tabular-nums"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Cidade / UF
+            </label>
+            <input
+              required
+              value={cidade}
+              onChange={(e) => setCidade(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Categoria Principal
+            </label>
+            <select
+              value={categoriaPrincipal}
+              onChange={(e) => setCategoriaPrincipal(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            >
+              {CATEGORIAS_CONSTRUCAO.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Nome do Vendedor *
+            </label>
+            <input
+              required
+              value={vendedor}
+              onChange={(e) => setVendedor(e.target.value)}
+              placeholder="Ex: Marcos Oliveira"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Telefone / WhatsApp *
+            </label>
+            <input
+              required
+              value={telefone}
+              onChange={(e) => setTelefone(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 tabular-nums"
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Razão Social Completa
+            </label>
+            <input
+              value={razaoSocial}
+              onChange={(e) => setRazaoSocial(e.target.value)}
+              placeholder="Opcional"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2.5 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold"
+          >
+            Salvar Fornecedor
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ModalInserirFornecedorCotacao({
+  sc,
+  fornecedores,
+  onClose,
+  onAdicionarProposta,
+}: {
+  sc: SolicitacaoCompra;
+  fornecedores: FornecedorCadastro[];
+  onClose: () => void;
+  onAdicionarProposta: (p: PropostaFornecedor) => void;
+}) {
+  const [fornecedorId, setFornecedorId] = useState(
+    fornecedores[0]?.id || "forn-1"
+  );
+  const [freteValor, setFreteValor] = useState(0);
+  const [prazoPagamento, setPrazoPagamento] = useState(
+    "5 dias úteis • 28/56 ddl Boleto"
+  );
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const forn =
+      fornecedores.find((f) => f.id === fornecedorId) || fornecedores[0];
+    const precosIniciais: Record<string, number> = {};
+    sc.itens.forEach((it) => {
+      precosIniciais[it.id] = Number((it.orcamentoUnitario * 0.94).toFixed(2));
+    });
+
+    onAdicionarProposta({
+      id: `prop-${Date.now()}`,
+      vendorId: forn.id,
+      fornecedorNome: forn.empresa,
+      vendedorNome: forn.vendedor,
+      whatsapp: forn.whatsapp,
+      precosUnitarios: precosIniciais,
+      freteValor,
+      tipoFrete: freteValor > 0 ? "FOB" : "CIF",
+      prazoPagamento,
+    });
+  };
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-xl border border-slate-200 max-w-md w-full p-6 shadow-xl space-y-4 text-sm"
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <h3 className="text-base font-bold text-slate-900">
+            Inserir Fornecedor no Mapa ({sc.codigo})
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+          >
+            Fechar
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Escolher Fornecedor Homologado
+            </label>
+            <select
+              value={fornecedorId}
+              onChange={(e) => setFornecedorId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            >
+              {fornecedores.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.empresa} ({f.vendedor})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Frete Inicial (R$)
+            </label>
+            <input
+              type="number"
+              step="50"
+              value={freteValor}
+              onChange={(e) => setFreteValor(Number(e.target.value) || 0)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 tabular-nums"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Prazo e Condição de Pagamento
+            </label>
+            <input
+              required
+              value={prazoPagamento}
+              onChange={(e) => setPrazoPagamento(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2.5 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold"
+          >
+            Adicionar ao Mapa
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* TELA DE LOGIN CORPORATIVA E ACESSO RÁPIDO (DEMONSTRAÇÃO 1 CLIQUE)         */
+/* ========================================================================= */
+
+function TelaLoginCorporativa({
+  companyName,
+  loginInput,
+  setLoginInput,
+  senhaInput,
+  setSenhaInput,
+  erroLogin,
+  onSubmit,
+  onQuickLogin,
+  usuarios,
+}: {
+  companyName: string;
+  loginInput: string;
+  setLoginInput: (v: string) => void;
+  senhaInput: string;
+  setSenhaInput: (v: string) => void;
+  erroLogin: string | null;
+  onSubmit: (e: React.FormEvent) => void;
+  onQuickLogin: (userId: string) => void;
+  usuarios: UsuarioSistema[];
+}) {
+  const usuariosExtras = usuarios.filter(
+    (u) =>
+      !["user-admin", "user-eng-1", "user-almox-2", "user-enc-3"].includes(
+        u.id
+      ) && u.status === "Ativo"
+  );
+
+  return (
+    <div className="min-h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-lg p-7 space-y-6">
+        {/* Cabeçalho Corporativo com Logotipo */}
+        <div className="flex items-center gap-3.5 border-b border-slate-200 pb-5">
+          <div className="w-11 h-11 rounded-lg bg-slate-900 flex items-center justify-center font-extrabold text-base text-emerald-400 shrink-0 shadow-xs">
+            JB
+          </div>
+          <div>
+            <h1 className="text-base font-bold text-slate-900 leading-tight">
+              {companyName}
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Portal Corporativo de Suprimentos & Canteiro de Obras
+            </p>
+          </div>
+        </div>
+
+        {/* Formulário de Autenticação */}
+        <form onSubmit={onSubmit} className="space-y-4 text-sm">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              E-mail Corporativo ou Usuário
+            </label>
+            <input
+              required
+              type="text"
+              value={loginInput}
+              onChange={(e) => setLoginInput(e.target.value)}
+              placeholder="ex: suprimentos@jcbauer.eng.br"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Senha de Acesso
+            </label>
+            <input
+              required
+              type="password"
+              value={senhaInput}
+              onChange={(e) => setSenhaInput(e.target.value)}
+              placeholder="••••••••"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
+            />
+          </div>
+
+          {erroLogin && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs font-semibold text-red-800">
+              {erroLogin}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            className="w-full py-2.5 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold transition shadow-xs"
+          >
+            Entrar no Sistema
+          </button>
+        </form>
+
+        {/* Área Discreta de Acesso Rápido (Demonstração 1 Clique) */}
+        <div className="pt-4 border-t border-slate-200 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Acesso Rápido (Demonstração)
+            </span>
+            <span className="text-[11px] text-slate-400">
+              1 clique para testar cada visão
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2">
+            <button
+              type="button"
+              onClick={() => onQuickLogin("user-admin")}
+              className="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold text-left flex items-center justify-between transition"
+            >
+              <span>👑 Administrador (Compras - Acesso Total)</span>
+              <span className="text-[11px] text-emerald-300 font-normal">
+                Diretoria / Suprimentos
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onQuickLogin("user-eng-1")}
+              className="w-full px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold text-left flex items-center justify-between transition"
+            >
+              <span>👷 Engenheiro de Obra (Horizon Tower)</span>
+              <span className="text-[11px] text-slate-500 font-normal">
+                Eng. Marcos Viana
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onQuickLogin("user-almox-2")}
+              className="w-full px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold text-left flex items-center justify-between transition"
+            >
+              <span>📦 Almoxarifado (Atrium Bauer)</span>
+              <span className="text-[11px] text-slate-500 font-normal">
+                Carlos Silva
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onQuickLogin("user-enc-3")}
+              className="w-full px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold text-left flex items-center justify-between transition"
+            >
+              <span>🚧 Encarregado de Obra (Parque Logístico)</span>
+              <span className="text-[11px] text-slate-500 font-normal">
+                José Santos
+              </span>
+            </button>
+
+            {usuariosExtras.map((u) => (
+              <button
+                key={u.id}
+                type="button"
+                onClick={() => onQuickLogin(u.id)}
+                className="w-full px-3.5 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-950 text-xs font-semibold text-left flex items-center justify-between transition"
+              >
+                <span>
+                  🔑 {u.cargo} ({u.obraNome})
+                </span>
+                <span className="text-[11px] text-emerald-800 font-normal">
+                  {u.nome}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* MODAL DE CADASTRO DE NOVO ACESSO DA OBRA (SOMENTE ADMIN)                  */
+/* ========================================================================= */
+
+function ModalNovoUsuarioObra({
+  obras,
+  onClose,
+  onSalvar,
+}: {
+  obras: Obra[];
+  onClose: () => void;
+  onSalvar: (u: UsuarioSistema) => void;
+}) {
+  const [nome, setNome] = useState("");
+  const [cargo, setCargo] = useState<PerfilAcesso>("Engenheiro");
+  const [obraId, setObraId] = useState(obras[0]?.id || "obra-1");
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("obra123");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nome.trim() || !email.trim() || !senha.trim()) return;
+    const obraObj = obras.find((o) => o.id === obraId);
+    onSalvar({
+      id: `user-${Date.now()}`,
+      nome: nome.trim(),
+      cargo,
+      obraId: cargo === "Administrador" ? "ALL" : obraId,
+      obraNome:
+        cargo === "Administrador"
+          ? "Todas as Obras (Acesso Total)"
+          : obraObj?.nome || "Obra Vinculada",
+      email: email.trim(),
+      senha: senha.trim(),
+      status: "Ativo",
+    });
+  };
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4 text-sm"
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <h3 className="text-base font-bold text-slate-900">
+            Cadastrar Novo Acesso da Obra
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+          >
+            Fechar
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Nome Completo do Colaborador *
+            </label>
+            <input
+              required
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Ex: Eng. Fernanda Costa"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Cargo / Perfil de Permissão *
+            </label>
+            <select
+              value={cargo}
+              onChange={(e) => setCargo(e.target.value as PerfilAcesso)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            >
+              <option value="Engenheiro">Engenheiro de Obra</option>
+              <option value="Almoxarife">Almoxarife</option>
+              <option value="Encarregado">Encarregado de Obra</option>
+              <option value="Administrador">Administrador (Compras)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Obra Vinculada *
+            </label>
+            <select
+              disabled={cargo === "Administrador"}
+              value={obraId}
+              onChange={(e) => setObraId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 disabled:opacity-60"
+            >
+              {obras.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Login / E-mail *
+            </label>
+            <input
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="fernanda@jcbauer.eng.br"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Senha de Acesso *
+            </label>
+            <input
+              required
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              placeholder="Ex: obra123"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2.5 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold"
+          >
+            Salvar Acesso e Liberar Login
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* VISÃO RESTRITA DO SOLICITANTE DA OBRA (ENGENHEIRO, ALMOXARIFE, ENCARREGADO)*/
+/* ========================================================================= */
+
+function VisaoRestritaObra({
+  usuarioLogado,
+  companyName,
+  obras,
+  fornecedores,
+  solicitacoes,
+  ordens,
+  contratos,
+  obraActiveTab,
+  setObraActiveTab,
+  notificacao,
+  setNotificacao,
+  onLogout,
+  onCriarPedidoCanteiro,
+  ocConfirmarRecebimentoModal,
+  setOcConfirmarRecebimentoModal,
+  onConfirmarRecebimentoObra,
+  onCriarBoletimMedicao,
+  onEnviarMensagemSC,
+  estoque = [],
+  movimentacoesEstoque = [],
+  onRegistrarMovimentacao,
+  diariosObra = [],
+  onSalvarDiarioObra,
+}: {
+  usuarioLogado: UsuarioSistema;
+  companyName: string;
+  obras: Obra[];
+  fornecedores: FornecedorCadastro[];
+  solicitacoes: SolicitacaoCompra[];
+  ordens: OrdemCompra[];
+  contratos: ContratoSubempreitada[];
+  obraActiveTab: ObraTabId;
+  setObraActiveTab: (t: ObraTabId) => void;
+  notificacao: string | null;
+  setNotificacao: (n: string | null) => void;
+  onLogout: () => void;
+  onCriarPedidoCanteiro: (novaSc: SolicitacaoCompra) => void;
+  ocConfirmarRecebimentoModal: OrdemCompra | null;
+  setOcConfirmarRecebimentoModal: (oc: OrdemCompra | null) => void;
+  onConfirmarRecebimentoObra: (
+    ocId: string,
+    notaFiscal: string,
+    condicao: string
+  ) => void;
+  onCriarBoletimMedicao: (contratoId: string, bm: BoletimMedicao) => void;
+  onEnviarMensagemSC: (scId: string, texto: string) => void;
+  estoque?: ItemEstoque[];
+  movimentacoesEstoque?: MovimentacaoEstoque[];
+  onRegistrarMovimentacao?: (mov: MovimentacaoEstoque) => void;
+  diariosObra?: DiarioObraRegistro[];
+  onSalvarDiarioObra?: (novoDiario: DiarioObraRegistro) => void;
+}) {
+  // Estado local para modais do Canteiro
+  const [novoBmModalContrato, setNovoBmModalContrato] =
+    useState<ContratoSubempreitada | null>(null);
+  const [scChatModal, setScChatModal] = useState<SolicitacaoCompra | null>(null);
+
+  // Estados locais para a Rotina Diária do Canteiro & Checklist
+  const [baixaItemEstoqueId, setBaixaItemEstoqueId] = useState<string>("");
+  const [baixaQtd, setBaixaQtd] = useState<number>(10);
+  const [baixaEtapa, setBaixaEtapa] = useState<string>("Concretagem / Estrutura");
+  const [baixaObs, setBaixaObs] = useState<string>("Aplicação regular na frente de serviço");
+
+  // Estados para RDO Express
+  const [rdoClima, setRdoClima] = useState<
+    "Ensolarado" | "Nublado" | "Chuvoso" | "Chuva c/ Paralisação"
+  >("Ensolarado");
+  const [rdoEfetivoProprio, setRdoEfetivoProprio] = useState<number>(16);
+  const [rdoEfetivoTerc, setRdoEfetivoTerc] = useState<number>(28);
+  const [rdoFrentes, setRdoFrentes] = useState<string>(
+    "Concretagem da laje superior; alvenaria nos pavimentos intermediários; passagens hidrossanitárias."
+  );
+  const [rdoOcorrencias, setRdoOcorrencias] = useState<string>(
+    "Entregas de insumos conferidas com NF pelo Almoxarifado. Ensaios de controle tecnológico realizados sem desvios."
+  );
+
+  // Estado do formulário "Novo Pedido de Material"
+  const [obraIdForm, setObraIdForm] = useState<string>(
+    usuarioLogado.obraId !== "ALL"
+      ? usuarioLogado.obraId
+      : obras[0]?.id || "obra-1"
+  );
+  const [categoriaForm, setCategoriaForm] = useState<string>(
+    CATEGORIAS_CONSTRUCAO[0]
+  );
+  const [urgenciaForm, setUrgenciaForm] = useState<UrgenciaPedido>("Normal");
+  const [dataNecessariaForm, setDataNecessariaForm] = useState<string>(() => {
+    const d = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+    return d.toISOString().split("T")[0];
+  });
+
+  const [itensGrade, setItensGrade] = useState<
+    {
+      id: string;
+      descricao: string;
+      quantidade: number;
+      unidade: string;
+      observacaoObra: string;
+    }[]
+  >([
+    {
+      id: "item-1",
+      descricao: "Cimento Portland CP-II-Z 32 (Saco 50kg)",
+      quantidade: 150,
+      unidade: "sc",
+      observacaoObra: "Descarregar no portão B (Almoxarifado Central)",
+    },
+  ]);
+
+  // Estado do Modal de Confirmação de Recebimento (Nota Fiscal + Condição)
+  const [notaFiscalInput, setNotaFiscalInput] = useState("NF-e 000.482.910");
+  const [condicaoInput, setCondicaoInput] = useState(
+    "Material completo e sem avarias"
+  );
+
+  const adicionarLinhaGrade = () => {
+    setItensGrade((prev) => [
+      ...prev,
+      {
+        id: `item-${Date.now()}-${prev.length + 1}`,
+        descricao: "",
+        quantidade: 10,
+        unidade: "un",
+        observacaoObra: "",
+      },
+    ]);
+  };
+
+  const removerLinhaGrade = (id: string) => {
+    if (itensGrade.length <= 1) return;
+    setItensGrade((prev) => prev.filter((i) => i.id !== id));
+  };
+
+  const handleEnviarPedidoCanteiro = (e: React.FormEvent) => {
+    e.preventDefault();
+    const itensValidos = itensGrade.filter((i) => i.descricao.trim() !== "");
+    if (itensValidos.length === 0) return;
+
+    const scId = `sc-canteiro-${Date.now()}`;
+    const dataFormatada = new Date().toLocaleDateString("pt-BR");
+    const horaFormatada = new Date().toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const dataNecFormatada = dataNecessariaForm.includes("-")
+      ? dataNecessariaForm.split("-").reverse().join("/")
+      : dataNecessariaForm;
+
+    const itensSc: ItemSolicitacao[] = itensValidos.map((it, idx) => ({
+      id: `it-${Date.now()}-${idx}`,
+      codigo: `REQ-${Math.floor(1000 + Math.random() * 9000)}`,
+      descricao: it.descricao.trim(),
+      unidade: it.unidade,
+      quantidade: Number(it.quantidade) || 1,
+      // Meta interna estimada para o Mapa de Cotações do Admin (oculta para a obra)
+      orcamentoUnitario: 120,
+      observacaoObra: it.observacaoObra.trim() || "Entrega padrão no canteiro",
+    }));
+
+    // Prepara 3 colunas de fornecedores no Mapa de Cotações para o Admin cotar imediatamente
+    const forn1 = fornecedores[0] || {
+      id: "forn-1",
+      empresa: "Fornecedor Homologado A",
+      vendedor: "Consultor 1",
+      whatsapp: "5547999123401",
+    };
+    const forn2 = fornecedores[1] || {
+      id: "forn-2",
+      empresa: "Fornecedor Homologado B",
+      vendedor: "Consultor 2",
+      whatsapp: "5547998441120",
+    };
+    const forn3 = fornecedores[2] || {
+      id: "forn-3",
+      empresa: "Fornecedor Homologado C",
+      vendedor: "Consultor 3",
+      whatsapp: "5547997018890",
+    };
+
+    const mapPrecos = (fator: number) => {
+      const rec: Record<string, number> = {};
+      itensSc.forEach((i) => {
+        rec[i.id] = Number((i.orcamentoUnitario * fator).toFixed(2));
+      });
+      return rec;
+    };
+
+    const novaSc: SolicitacaoCompra = {
+      id: scId,
+      codigo: `SC-2026-0${Math.floor(160 + Math.random() * 80)}`,
+      obraId: obraIdForm,
+      categoria: categoriaForm,
+      solicitante: usuarioLogado.nome,
+      solicitanteCargo: usuarioLogado.cargo,
+      urgencia: urgenciaForm,
+      dataNecessaria: dataNecFormatada,
+      dataAbertura: dataFormatada,
+      horarioPedido: `${dataFormatada} às ${horaFormatada}`,
+      origemCanteiro: true,
+      novoAlertaAdmin: true,
+      status: "Enviado / Aguardando Compras",
+      itens: itensSc,
+      propostas: [
+        {
+          id: `prop-a-${Date.now()}`,
+          vendorId: forn1.id,
+          fornecedorNome: forn1.empresa,
+          vendedorNome: forn1.vendedor,
+          whatsapp: forn1.whatsapp,
+          precosUnitarios: mapPrecos(0.92),
+          freteValor: 0,
+          tipoFrete: "CIF",
+          prazoPagamento: "5 dias úteis • 28/56 ddl Boleto",
+        },
+        {
+          id: `prop-b-${Date.now()}`,
+          vendorId: forn2.id,
+          fornecedorNome: forn2.empresa,
+          vendedorNome: forn2.vendedor,
+          whatsapp: forn2.whatsapp,
+          precosUnitarios: mapPrecos(0.96),
+          freteValor: 450,
+          tipoFrete: "FOB",
+          prazoPagamento: "7 dias úteis • 28/42 ddl Boleto",
+        },
+        {
+          id: `prop-c-${Date.now()}`,
+          vendorId: forn3.id,
+          fornecedorNome: forn3.empresa,
+          vendedorNome: forn3.vendedor,
+          whatsapp: forn3.whatsapp,
+          precosUnitarios: mapPrecos(1.02),
+          freteValor: 680,
+          tipoFrete: "FOB",
+          prazoPagamento: "8 dias úteis • 30/60 ddl Boleto",
+        },
+      ],
+    };
+
+    onCriarPedidoCanteiro(novaSc);
+    setItensGrade([
+      {
+        id: `item-${Date.now()}`,
+        descricao: "",
+        quantidade: 10,
+        unidade: "un",
+        observacaoObra: "",
+      },
+    ]);
+  };
+
+  // Filtra pedidos e ordens vinculados à obra selecionada/do usuário
+  const pedidosDaObra = solicitacoes.filter(
+    (s) => s.obraId === obraIdForm || s.obraId === usuarioLogado.obraId
+  );
+
+  const ordensDaObra = ordens.filter(
+    (o) => o.obraId === obraIdForm || o.obraId === usuarioLogado.obraId
+  );
+
+  const contratosDaObra = contratos.filter(
+    (c) =>
+      c.obraId === obraIdForm ||
+      c.obraId === usuarioLogado.obraId ||
+      usuarioLogado.obraId === "ALL"
+  );
+
+  const cargasDaObraSemana = useMemo(
+    () =>
+      agruparCargasLogistica(
+        ordens,
+        usuarioLogado.obraId !== "ALL" ? usuarioLogado.obraId : obraIdForm
+      ),
+    [ordens, usuarioLogado.obraId, obraIdForm]
+  );
+  const totalCargasObra = cargasDaObraSemana.reduce((a, d) => a + d.cargas.length, 0);
+
+  const obraIdEfetivo =
+    usuarioLogado.obraId !== "ALL" ? usuarioLogado.obraId : obraIdForm;
+  const dataHojeStr = new Date().toLocaleDateString("pt-BR");
+  const diarioHojeEfetivo = diariosObra.find(
+    (d) =>
+      (d.obraId === obraIdEfetivo || usuarioLogado.obraId === "ALL") &&
+      d.data === dataHojeStr
+  );
+  const entregasHojePendentes = ordensDaObra.filter(
+    (o) => o.status === "Emitida" || o.status === "Aguardando Entrega"
+  );
+  const estoqueDestaObra = estoque.filter(
+    (it) => it.obraId === obraIdEfetivo || usuarioLogado.obraId === "ALL"
+  );
+  const diariosDestaObra = diariosObra.filter(
+    (d) => d.obraId === obraIdEfetivo || usuarioLogado.obraId === "ALL"
+  );
+
+  const tituloObraTab: Record<ObraTabId, string> = {
+    PainelDiario: "📋 Painel Diário do Canteiro & Checklist Operacional",
+    NovoPedido: "📝 Novo Pedido de Material (Requisição de Canteiro)",
+    MeusPedidos: "📋 Meus Pedidos da Obra (Acompanhamento em Tempo Real)",
+    Recebimento: "📦 Recebimento & Controle Interno (Almoxarifado)",
+    Estoque: "🧱 Estoque do Canteiro & Almoxarifado",
+    Medicoes: "📐 Contratos de Subempreitada & Boletins de Medição (BM)",
+    Logistica: "🚚 Calendário de Cargas & Descargas no Canteiro",
+  };
+
+  return (
+    <div className="flex h-screen w-full overflow-hidden bg-[#F4F6F8] text-slate-900 font-sans">
+      {/* SIDEBAR RESTRITA DA OBRA (ABAS PERMITIDAS) */}
+      <aside className="w-60 shrink-0 bg-slate-900 text-white flex flex-col justify-between h-full">
+        <div>
+          <div className="h-16 px-4 border-b border-slate-800 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-md bg-emerald-600 flex items-center justify-center font-bold text-sm text-white shrink-0">
+              JB
+            </div>
+            <div className="min-w-0">
+              <div className="font-bold text-sm text-white truncate">
+                {companyName.split(" ")[0]}{" "}
+                {companyName.split(" ")[1] || "BAUER"}
+              </div>
+              <div className="text-xs text-emerald-400 font-medium truncate">
+                Portal do Canteiro de Obras
+              </div>
+            </div>
+          </div>
+
+          <nav className="p-3 space-y-1.5">
+            {(
+              [
+                {
+                  id: "PainelDiario",
+                  label: "📋 Rotina Diária & Checklist",
+                },
+                { id: "NovoPedido", label: "📝 Novo Pedido de Material" },
+                { id: "MeusPedidos", label: "📋 Meus Pedidos da Obra" },
+                {
+                  id: "Recebimento",
+                  label: "📦 Recebimento & Controle Interno",
+                },
+                {
+                  id: "Estoque",
+                  label: "🧱 Almoxarifado da Obra",
+                },
+                {
+                  id: "Medicoes",
+                  label: "📐 Contratos & Medições (BM)",
+                },
+                {
+                  id: "Logistica",
+                  label: "🚚 Calendário de Cargas",
+                },
+              ] as { id: ObraTabId; label: string }[]
+            ).map((item) => {
+              const ativo = obraActiveTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setObraActiveTab(item.id)}
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition text-left ${
+                    ativo
+                      ? "bg-emerald-600 text-white font-semibold shadow-xs"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  }`}
+                >
+                  <span className="truncate">{item.label}</span>
+                  {item.id === "PainelDiario" && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        diarioHojeEfetivo
+                          ? "bg-emerald-950 text-emerald-300 border border-emerald-700"
+                          : "bg-amber-900 text-amber-200 border border-amber-600 animate-pulse"
+                      }`}
+                    >
+                      {diarioHojeEfetivo ? "🟢 Em Dia" : "🟡 Pendente"}
+                    </span>
+                  )}
+                  {item.id === "MeusPedidos" && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-200 text-xs font-bold">
+                      {pedidosDaObra.length}
+                    </span>
+                  )}
+                  {item.id === "Recebimento" && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-emerald-300 text-xs font-bold">
+                      {ordensDaObra.length}
+                    </span>
+                  )}
+                  {item.id === "Estoque" && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-teal-300 text-xs font-bold">
+                      {
+                        estoque.filter(
+                          (it) =>
+                            it.obraId === usuarioLogado.obraId ||
+                            usuarioLogado.obraId === "ALL"
+                        ).length
+                      }
+                    </span>
+                  )}
+                  {item.id === "Medicoes" && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-blue-300 text-xs font-bold">
+                      {contratosDaObra.length}
+                    </span>
+                  )}
+                  {item.id === "Logistica" && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-amber-300 text-xs font-bold">
+                      {totalCargasObra}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Aviso de Segurança RBAC */}
+          <div className="mx-3 mt-3 p-3 rounded-lg bg-slate-800/80 border border-slate-700 text-xs text-slate-300 space-y-1">
+            <div className="font-bold text-emerald-400">
+              🔒 Acesso Restrito de Campo
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Visão exclusiva para requisições e conferência física de entregas
+              no canteiro.
+            </p>
+          </div>
+        </div>
+
+        {/* Rodapé da Sidebar com Perfil + Obra + Botão Sair / Trocar Conta */}
+        <div className="p-3 border-t border-slate-800 space-y-2">
+          <div className="p-2 rounded-lg bg-slate-800/60">
+            <div className="flex items-center gap-1.5">
+              <span className="px-1.5 py-0.5 rounded bg-emerald-700 text-white text-[11px] font-bold">
+                {usuarioLogado.cargo.toUpperCase()}
+              </span>
+              <span className="font-semibold text-xs text-white truncate">
+                {usuarioLogado.nome}
+              </span>
+            </div>
+            <div className="text-xs text-slate-300 truncate mt-1 font-medium">
+              📍 {usuarioLogado.obraNome}
+            </div>
+          </div>
+
+          <button
+            onClick={onLogout}
+            className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-red-900/80 text-slate-200 hover:text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-slate-700"
+          >
+            <span>🚪</span> Sair / Trocar Conta
+          </button>
+        </div>
+      </aside>
+
+      {/* ÁREA PRINCIPAL DA OBRA */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        {/* HEADER SUPERIOR */}
+        <header className="h-16 shrink-0 bg-white border-b border-slate-200 px-6 flex items-center justify-between gap-4">
+          <h1 className="text-lg font-bold text-slate-900 truncate">
+            {tituloObraTab[obraActiveTab]}
+          </h1>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs">
+              <span className="font-bold text-slate-900">
+                {usuarioLogado.nome}
+              </span>
+              <span className="text-slate-400">•</span>
+              <span className="font-semibold text-emerald-800">
+                {usuarioLogado.cargo}
+              </span>
+              <span className="text-slate-400">•</span>
+              <span className="font-medium text-slate-700">
+                📍 {usuarioLogado.obraNome}
+              </span>
+            </div>
+
+            <button
+              onClick={onLogout}
+              className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition whitespace-nowrap"
+            >
+              Sair / Trocar Conta
+            </button>
+          </div>
+        </header>
+
+        {notificacao && (
+          <div className="bg-emerald-800 text-white px-6 py-2.5 text-sm font-medium flex items-center justify-between shrink-0">
+            <span>{notificacao}</span>
+            <button
+              onClick={() => setNotificacao(null)}
+              className="text-xs underline ml-4"
+            >
+              Fechar
+            </button>
+          </div>
+        )}
+
+        {/* CONTEÚDO DAS ABAS DA OBRA */}
+        <main className="flex-1 overflow-y-auto p-6">
+          {/* =============================================================== */}
+          {/* ABA 0: PAINEL DIÁRIO DO CANTEIRO & CHECKLIST OPERACIONAL        */}
+          {/* =============================================================== */}
+          {obraActiveTab === "PainelDiario" && (
+            <div className="max-w-6xl space-y-6">
+              {/* BANNER DE BOAS-VINDAS & STATUS DE HOJE */}
+              <div className="bg-slate-900 text-white rounded-xl p-6 shadow-md border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🏗️</span>
+                    <h2 className="text-lg font-bold text-white">
+                      Painel Diário de Canteiro & Checklist Operacional
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-semibold">
+                      Sincronização Ativa com Compras
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                    Olá, <strong className="text-white">{usuarioLogado.nome}</strong> ({usuarioLogado.cargo}). 
+                    Mantenha o canteiro alinhado executando os 3 passos diários: confirme cargas com NF, baixe consumos físicos e registre o RDO.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 shrink-0">
+                  <div className={`px-4 py-2.5 rounded-lg border text-xs font-medium flex items-center gap-2.5 ${
+                    diarioHojeEfetivo
+                      ? "bg-emerald-950/80 border-emerald-600 text-emerald-200"
+                      : "bg-amber-950/80 border-amber-500 text-amber-200 animate-pulse"
+                  }`}>
+                    <span className={`w-2.5 h-2.5 rounded-full ${diarioHojeEfetivo ? "bg-emerald-400" : "bg-amber-400"}`}></span>
+                    <div>
+                      <div className="font-bold">
+                        {diarioHojeEfetivo ? "🟢 Diário de Hoje Preenchido" : "🟡 RDO Pendente Hoje"}
+                      </div>
+                      <div className="text-[11px] opacity-80">
+                        {diarioHojeEfetivo
+                          ? `Transmitido às ${diarioHojeEfetivo.hora} por ${diarioHojeEfetivo.responsavelNome}`
+                          : `Data: ${dataHojeStr} (Aguardando preenchimento)`}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3 CARDS DE KPI OPERACIONAL RÁPIDO */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-500 uppercase">
+                      Cargas Programadas
+                    </span>
+                    <span className="text-base">🚚</span>
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1">
+                    {entregasHojePendentes.length}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {entregasHojePendentes.length === 0
+                      ? "Tudo conferido hoje"
+                      : "Aguardando conferência física e NF"}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-500 uppercase">
+                      Insumos em Almoxarifado
+                    </span>
+                    <span className="text-base">🧱</span>
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1">
+                    {estoqueDestaObra.length}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    Saldo físico sob custódia do canteiro
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-500 uppercase">
+                      Requisições da Obra
+                    </span>
+                    <span className="text-base">📋</span>
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1">
+                    {pedidosDaObra.length}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    Pedidos emitidos para Suprimentos
+                  </div>
+                </div>
+              </div>
+
+              {/* ========================================================= */}
+              {/* PASSO 1: CONFIRMAÇÃO DE CARGAS & RECEBIMENTO COM NF       */}
+              {/* ========================================================= */}
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center">
+                        1
+                      </span>
+                      <h3 className="text-base font-bold text-slate-900">
+                        Passo 1: Recebimento de Cargas & Registro de Nota Fiscal
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold">
+                        Almoxarifado
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Ao confirmar a entrega física, o sistema incrementa o estoque automaticamente, calcula o preço médio e notifica Compras.
+                    </p>
+                  </div>
+                </div>
+
+                {entregasHojePendentes.length === 0 ? (
+                  <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-3">
+                    <span className="text-lg">✅</span>
+                    <div>
+                      <p className="font-bold">
+                        Nenhuma carga com entrega pendente no momento para este canteiro.
+                      </p>
+                      <p className="text-emerald-700 mt-0.5">
+                        Todas as ordens de compra em trânsito já foram recebidas e incorporadas ao estoque físico.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {entregasHojePendentes.map((oc) => (
+                      <div
+                        key={oc.id}
+                        className="p-4 rounded-lg border border-amber-200 bg-amber-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 text-sm">
+                              {oc.numeroOc}
+                            </span>
+                            <span className="text-slate-400">•</span>
+                            <span className="font-semibold text-slate-800 text-xs">
+                              {oc.fornecedorNome}
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-extrabold uppercase">
+                              {oc.status}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-600">
+                            Previsão: <strong>{oc.dataPrevistaEntrega || "A combinar"}</strong> • Categoria: {oc.categoria} • Valor: {formatBRL(oc.valorTotal)}
+                          </div>
+                          <div className="text-xs text-slate-500 bg-white/80 p-2 rounded border border-slate-200 mt-1.5">
+                            <strong>Itens a descarregar:</strong>{" "}
+                            {oc.itens.map((it) => `${it.quantidade} ${it.unidade} de ${it.descricao}`).join(" | ")}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setOcConfirmarRecebimentoModal(oc)}
+                          className="px-4 py-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition flex items-center justify-center gap-2 shrink-0"
+                        >
+                          <span>📦</span>
+                          <span>Conferir & Registrar Entrada com NF</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ========================================================= */}
+              {/* PASSO 2: BAIXA RÁPIDA DE CONSUMO POR ETAPA / FRENTE        */}
+              {/* ========================================================= */}
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center">
+                        2
+                      </span>
+                      <h3 className="text-base font-bold text-slate-900">
+                        Passo 2: Baixa Rápida de Consumo por Etapa / Frente de Obra
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold">
+                        Almoxarifado & Encarregado
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Libere materiais para as equipes em menos de 20 segundos. O saldo físico é atualizado e registrado no Kardex instantaneamente.
+                    </p>
+                  </div>
+                </div>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!baixaItemEstoqueId) {
+                      setNotificacao("Selecione um insumo para registrar a saída.");
+                      return;
+                    }
+                    const itemAlvo = estoqueDestaObra.find((it) => it.id === baixaItemEstoqueId);
+                    if (!itemAlvo) return;
+                    if (Number(baixaQtd) <= 0) {
+                      setNotificacao("Informe uma quantidade válida maior que zero.");
+                      return;
+                    }
+                    if (Number(baixaQtd) > itemAlvo.saldoAtual) {
+                      setNotificacao(`Quantidade excede o saldo disponível (${itemAlvo.saldoAtual} ${itemAlvo.unidade}).`);
+                      return;
+                    }
+
+                    if (onRegistrarMovimentacao) {
+                      const dataHoraFormatada = `${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+                      onRegistrarMovimentacao({
+                        id: `mov-${Date.now()}`,
+                        itemId: itemAlvo.id,
+                        codigoInsumo: itemAlvo.codigo,
+                        descricaoInsumo: itemAlvo.descricao,
+                        unidade: itemAlvo.unidade,
+                        tipo: "SAIDA_APLICACAO",
+                        quantidade: Number(baixaQtd),
+                        saldoAnterior: itemAlvo.saldoAtual,
+                        saldoPosterior: Math.max(0, itemAlvo.saldoAtual - Number(baixaQtd)),
+                        custoUnitario: itemAlvo.custoMedio,
+                        valorTotal: Number(baixaQtd) * itemAlvo.custoMedio,
+                        dataHora: dataHoraFormatada,
+                        responsavel: `${usuarioLogado.nome} (${usuarioLogado.cargo})`,
+                        obraOrigemId: itemAlvo.obraId,
+                        obraOrigemNome: itemAlvo.obraNome,
+                        numeroDocumento: `Frente: ${baixaEtapa}`,
+                        motivoEtapa: `Consumo imediato na frente '${baixaEtapa}'. ${baixaObs ? "Obs: " + baixaObs : ""}`,
+                      });
+                      setNotificacao(`Saída de ${baixaQtd} ${itemAlvo.unidade} de "${itemAlvo.descricao}" registrada com sucesso no Kardex!`);
+                      setBaixaQtd(1);
+                    }
+                  }}
+                  className="space-y-4"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+                    <div className="lg:col-span-2">
+                      <label className="block font-semibold text-slate-700 mb-1">
+                        Insumo do Almoxarifado *
+                      </label>
+                      <select
+                        value={baixaItemEstoqueId}
+                        onChange={(e) => {
+                          setBaixaItemEstoqueId(e.target.value);
+                          const it = estoqueDestaObra.find((x) => x.id === e.target.value);
+                          if (it) {
+                            setBaixaQtd(Math.min(10, it.saldoAtual));
+                          }
+                        }}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-emerald-600"
+                        required
+                      >
+                        <option value="">-- Selecione o insumo retirado --</option>
+                        {estoqueDestaObra.map((it) => (
+                          <option key={it.id} value={it.id}>
+                            {it.descricao} (Saldo: {it.saldoAtual} {it.unidade})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">
+                        Quantidade a Baixar *
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="any"
+                        value={baixaQtd}
+                        onChange={(e) => setBaixaQtd(Number(e.target.value))}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-emerald-600"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">
+                        Etapa / Frente de Serviço *
+                      </label>
+                      <input
+                        type="text"
+                        value={baixaEtapa}
+                        onChange={(e) => setBaixaEtapa(e.target.value)}
+                        placeholder="Ex: Concretagem Laje 22º Pav."
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-emerald-600"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Chips rápidos de etapas frequentes */}
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <span className="text-slate-500 font-medium mr-1">Frentes Frequentes:</span>
+                    {[
+                      "Estrutura & Concretagem",
+                      "Armação de Pilares",
+                      "Alvenaria de Vedação",
+                      "Instalações Elétricas",
+                      "Instalações Hidráulicas",
+                      "Gesso & Pintura",
+                      "Fachada & Esquadrias",
+                    ].map((frente) => (
+                      <button
+                        key={frente}
+                        type="button"
+                        onClick={() => setBaixaEtapa(frente)}
+                        className={`px-2 py-0.5 rounded border transition ${
+                          baixaEtapa === frente
+                            ? "bg-emerald-700 text-white border-emerald-700"
+                            : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+                        }`}
+                      >
+                        {frente}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                    <input
+                      type="text"
+                      value={baixaObs}
+                      onChange={(e) => setBaixaObs(e.target.value)}
+                      placeholder="Observações complementares (ex: entregue para equipe do encarregado Carlos)..."
+                      className="w-full sm:w-2/3 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-600"
+                    />
+                    <button
+                      type="submit"
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-xs transition flex items-center justify-center gap-2 shrink-0"
+                    >
+                      <span>➖</span>
+                      <span>Registrar Baixa no Estoque & Kardex</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* ========================================================= */}
+              {/* PASSO 3: DIÁRIO DE OBRA EXPRESS (RDO DO DIA)               */}
+              {/* ========================================================= */}
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center">
+                        3
+                      </span>
+                      <h3 className="text-base font-bold text-slate-900">
+                        Passo 3: Diário de Obra Express (RDO do Dia)
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold">
+                        Engenharia & Encarregado
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Preencha o RDO em 1 minuto para consolidar o relatório diário e atualizar o painel de auditoria da Diretoria em tempo real.
+                    </p>
+                  </div>
+                </div>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (onSalvarDiarioObra) {
+                      const obraObj = obras.find((o) => o.id === obraIdEfetivo);
+                      const agora = new Date();
+                      const horaFormatada = agora.toLocaleTimeString("pt-BR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      });
+                      onSalvarDiarioObra({
+                        id: `rdo-${Date.now()}`,
+                        obraId: obraIdEfetivo,
+                        obraNome: obraObj ? obraObj.nome : usuarioLogado.obraNome,
+                        data: dataHojeStr,
+                        hora: horaFormatada,
+                        responsavelNome: usuarioLogado.nome,
+                        responsavelCargo: usuarioLogado.cargo,
+                        clima: rdoClima,
+                        efetivoProprio: Number(rdoEfetivoProprio) || 0,
+                        efetivoTerceirizado: Number(rdoEfetivoTerc) || 0,
+                        frentesServico: rdoFrentes.trim() || "Frentes de serviço regulares em andamento.",
+                        ocorrencias: rdoOcorrencias.trim() || "Sem ocorrências atípicas.",
+                      });
+                    }
+                  }}
+                  className="space-y-4"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    {/* Clima do dia */}
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1.5">
+                        Condição Climática do Canteiro *
+                      </label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {(
+                          [
+                            { valor: "Ensolarado", rotulo: "☀️ Ensolarado" },
+                            { valor: "Nublado", rotulo: "⛅ Nublado" },
+                            { valor: "Chuvoso", rotulo: "🌧️ Chuvoso" },
+                            {
+                              valor: "Chuva c/ Paralisação",
+                              rotulo: "⛈️ Paralisação",
+                            },
+                          ] as const
+                        ).map((item) => (
+                          <button
+                            key={item.valor}
+                            type="button"
+                            onClick={() => setRdoClima(item.valor)}
+                            className={`p-2 rounded-lg border text-xs font-semibold text-center transition ${
+                              rdoClima === item.valor
+                                ? "bg-emerald-700 text-white border-emerald-700"
+                                : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300"
+                            }`}
+                          >
+                            {item.rotulo}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Efetivo Próprio */}
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1.5">
+                        Efetivo Próprio (JC Bauer) *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={rdoEfetivoProprio}
+                        onChange={(e) => setRdoEfetivoProprio(Number(e.target.value))}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-emerald-600"
+                        required
+                      />
+                      <span className="text-[11px] text-slate-500 mt-1 block">
+                        Engenheiros, mestres, encarregados e equipe própria.
+                      </span>
+                    </div>
+
+                    {/* Efetivo Terceirizado */}
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1.5">
+                        Efetivo Terceirizado (Empreiteiros) *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={rdoEfetivoTerc}
+                        onChange={(e) => setRdoEfetivoTerc(Number(e.target.value))}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-emerald-600"
+                        required
+                      />
+                      <span className="text-[11px] text-slate-500 mt-1 block">
+                        Equipes de subempreiteiros em atividade na obra.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Banner resumo do efetivo total */}
+                  <div className="bg-slate-100 rounded-lg px-4 py-2 border border-slate-200 text-xs flex items-center justify-between">
+                    <span className="font-semibold text-slate-700">
+                      👥 Força de Trabalho Total no Canteiro Hoje:
+                    </span>
+                    <span className="text-sm font-extrabold text-emerald-800">
+                      {Number(rdoEfetivoProprio) + Number(rdoEfetivoTerc)} colaboradores ativos
+                    </span>
+                  </div>
+
+                  {/* Frentes de Trabalho em Execução */}
+                  <div className="text-xs">
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Frentes de Serviço em Andamento *
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={rdoFrentes}
+                      onChange={(e) => setRdoFrentes(e.target.value)}
+                      placeholder="Descreva as principais etapas executadas hoje na obra..."
+                      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-xs text-slate-800 focus:outline-none focus:border-emerald-600"
+                      required
+                    />
+                  </div>
+
+                  {/* Ocorrências / Livro do Canteiro */}
+                  <div className="text-xs">
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Ocorrências, Ensaios Tecnológicos & Entregas
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={rdoOcorrencias}
+                      onChange={(e) => setRdoOcorrencias(e.target.value)}
+                      placeholder="Ex: Slump test aprovado no concreto Polimix; recebida carga de aço sem desvios; fiscalização de rotina..."
+                      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-xs text-slate-800 focus:outline-none focus:border-emerald-600"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end pt-2">
+                    <button
+                      type="submit"
+                      className="px-6 py-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition flex items-center gap-2"
+                    >
+                      <span>💾</span>
+                      <span>Salvar & Transmitir Diário de Obra (RDO) de Hoje</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* ========================================================= */}
+              {/* HISTÓRICO DE DIÁRIOS DESTA OBRA                            */}
+              {/* ========================================================= */}
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <span>📜</span>
+                    <span>Histórico Recente de Diários de Obra (RDO)</span>
+                  </h3>
+                  <span className="text-xs text-slate-500 font-medium">
+                    {diariosDestaObra.length} registros no canteiro
+                  </span>
+                </div>
+
+                {diariosDestaObra.length === 0 ? (
+                  <div className="text-xs text-slate-500 italic py-4 text-center">
+                    Nenhum diário registrado ainda para esta obra.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {diariosDestaObra.map((d) => (
+                      <div
+                        key={d.id}
+                        className="p-4 rounded-lg border border-slate-200 bg-slate-50 text-xs space-y-2"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 text-sm">
+                              📅 {d.data} às {d.hora}
+                            </span>
+                            <span className="text-slate-400">•</span>
+                            <span className="text-slate-700 font-medium">
+                              {d.responsavelNome} ({d.responsavelCargo})
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">
+                              ☀️ {d.clima}
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-800 font-bold">
+                              👥 {d.efetivoProprio + d.efetivoTerceirizado} trabalhadores ({d.efetivoProprio} próprios + {d.efetivoTerceirizado} terc.)
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <strong className="text-slate-800">Frentes em execução:</strong>{" "}
+                          <span className="text-slate-700">{d.frentesServico}</span>
+                        </div>
+
+                        {d.ocorrencias && (
+                          <div className="bg-white p-2.5 rounded border border-slate-200 text-slate-600 mt-1">
+                            <strong className="text-slate-800">Ocorrências / Notas de Campo:</strong>{" "}
+                            {d.ocorrencias}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* =============================================================== */}
+          {/* ABA 1: NOVO PEDIDO DE MATERIAL (REQUISIÇÃO DE CANTEIRO)         */}
+          {/* =============================================================== */}
+          {obraActiveTab === "NovoPedido" && (
+            <form
+              onSubmit={handleEnviarPedidoCanteiro}
+              className="max-w-5xl bg-white rounded-lg border border-slate-200 p-6 shadow-sm space-y-6"
+            >
+              <div className="border-b border-slate-200 pb-4 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">
+                    Requisição de Materiais e Insumos do Canteiro
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Preencha os itens necessários na obra. O pedido cairá
+                    instantaneamente na tela do Setor de Compras para cotação.
+                  </p>
+                </div>
+                <span className="px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold">
+                  Integração Direta com Suprimentos
+                </span>
+              </div>
+
+              {/* Dados do Cabeçalho da Requisição */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Obra Solicitante *
+                  </label>
+                  <select
+                    value={obraIdForm}
+                    onChange={(e) => setObraIdForm(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-900"
+                  >
+                    {obras.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Solicitante & Função
+                  </label>
+                  <input
+                    readOnly
+                    value={`${usuarioLogado.nome} - ${usuarioLogado.cargo}`}
+                    className="w-full bg-slate-100 border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-700 cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Categoria do Pedido *
+                  </label>
+                  <select
+                    value={categoriaForm}
+                    onChange={(e) => setCategoriaForm(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900"
+                  >
+                    {CATEGORIAS_CONSTRUCAO.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Urgência *
+                    </label>
+                    <select
+                      value={urgenciaForm}
+                      onChange={(e) =>
+                        setUrgenciaForm(e.target.value as UrgenciaPedido)
+                      }
+                      className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-2 font-semibold text-slate-900"
+                    >
+                      <option value="Normal">Normal</option>
+                      <option value="Alta">Alta</option>
+                      <option value="Crítica - Obra Parada">
+                        Crítica - Obra Parada
+                      </option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Data na Obra *
+                    </label>
+                    <input
+                      required
+                      type="date"
+                      value={dataNecessariaForm}
+                      onChange={(e) => setDataNecessariaForm(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-2 text-slate-900 tabular-nums"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Grade de Itens do Pedido */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                    Itens Solicitados para o Canteiro ({itensGrade.length})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={adicionarLinhaGrade}
+                    className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs font-bold text-slate-800 transition"
+                  >
+                    + Adicionar Mais um Material
+                  </button>
+                </div>
+
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-sm border-collapse text-left">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                        <th className="py-2.5 px-3 w-[40%]">
+                          Nome / Especificação Técnica do Material *
+                        </th>
+                        <th className="py-2.5 px-3 w-[14%]">Quantidade *</th>
+                        <th className="py-2.5 px-3 w-[14%]">Unidade *</th>
+                        <th className="py-2.5 px-3 w-[26%]">
+                          Observação da Obra (Ex: Portão B)
+                        </th>
+                        <th className="py-2.5 px-3 text-center w-[6%]">Rem.</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {itensGrade.map((linha) => (
+                        <tr key={linha.id}>
+                          <td className="p-2.5">
+                            <input
+                              required
+                              placeholder="Ex: Aço CA-50 Ø 12.5mm dobrado / Cimento CP-II"
+                              value={linha.descricao}
+                              onChange={(e) =>
+                                setItensGrade((prev) =>
+                                  prev.map((r) =>
+                                    r.id === linha.id
+                                      ? { ...r, descricao: e.target.value }
+                                      : r
+                                  )
+                                )
+                              }
+                              className="w-full bg-slate-50 border border-slate-300 rounded-md px-3 py-1.5 text-sm text-slate-900"
+                            />
+                          </td>
+                          <td className="p-2.5">
+                            <input
+                              required
+                              type="number"
+                              min={1}
+                              value={linha.quantidade}
+                              onChange={(e) =>
+                                setItensGrade((prev) =>
+                                  prev.map((r) =>
+                                    r.id === linha.id
+                                      ? {
+                                          ...r,
+                                          quantidade:
+                                            Number(e.target.value) || 1,
+                                        }
+                                      : r
+                                  )
+                                )
+                              }
+                              className="w-full bg-slate-50 border border-slate-300 rounded-md px-3 py-1.5 text-sm font-semibold text-slate-900 tabular-nums"
+                            />
+                          </td>
+                          <td className="p-2.5">
+                            <select
+                              value={linha.unidade}
+                              onChange={(e) =>
+                                setItensGrade((prev) =>
+                                  prev.map((r) =>
+                                    r.id === linha.id
+                                      ? { ...r, unidade: e.target.value }
+                                      : r
+                                  )
+                                )
+                              }
+                              className="w-full bg-slate-50 border border-slate-300 rounded-md px-2.5 py-1.5 text-sm text-slate-900"
+                            >
+                              <option value="un">un (Unidade)</option>
+                              <option value="sc">sc (Saco)</option>
+                              <option value="m²">m² (Metro quad.)</option>
+                              <option value="m³">m³ (Metro cúbico)</option>
+                              <option value="kg">kg (Quilo)</option>
+                              <option value="barra">barra (12m)</option>
+                              <option value="vb">vb (Verba/Pacote)</option>
+                            </select>
+                          </td>
+                          <td className="p-2.5">
+                            <input
+                              placeholder="Ex: Descarregar no portão B"
+                              value={linha.observacaoObra}
+                              onChange={(e) =>
+                                setItensGrade((prev) =>
+                                  prev.map((r) =>
+                                    r.id === linha.id
+                                      ? { ...r, observacaoObra: e.target.value }
+                                      : r
+                                  )
+                                )
+                              }
+                              className="w-full bg-slate-50 border border-slate-300 rounded-md px-3 py-1.5 text-sm text-slate-800"
+                            />
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => removerLinhaGrade(linha.id)}
+                              disabled={itensGrade.length <= 1}
+                              className="px-2 py-1 rounded bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-700 text-xs font-bold disabled:opacity-40"
+                            >
+                              ✕
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end">
+                <button
+                  type="submit"
+                  className="px-6 py-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold transition shadow-sm flex items-center gap-2"
+                >
+                  🚀 Enviar Pedido para o Setor de Compras
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* =============================================================== */}
+          {/* ABA 2: MEUS PEDIDOS DA OBRA (ACOMPANHAMENTO EM TEMPO REAL)      */}
+          {/* =============================================================== */}
+          {obraActiveTab === "MeusPedidos" && (
+            <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">
+                    Meus Pedidos da Obra ({pedidosDaObra.length})
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Acompanhe em tempo real o andamento das solicitações no
+                    Setor de Compras
+                  </p>
+                </div>
+                <button
+                  onClick={() => setObraActiveTab("NovoPedido")}
+                  className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+                >
+                  + Fazer Novo Pedido
+                </button>
+              </div>
+
+              <table className="w-full text-sm border-collapse text-left">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                    <th className="py-3 px-4">Nº Pedido / Data</th>
+                    <th className="py-3 px-4">Solicitante / Obra</th>
+                    <th className="py-3 px-4">Materiais Solicitados</th>
+                    <th className="py-3 px-4 text-center">Urgência</th>
+                    <th className="py-3 px-4 text-center">
+                      Status em Tempo Real
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {pedidosDaObra.map((sc) => {
+                    const obra = obras.find((o) => o.id === sc.obraId);
+                    const urg = sc.urgencia || "Normal";
+                    return (
+                      <tr key={sc.id} className="hover:bg-slate-50">
+                        <td className="py-3.5 px-4 whitespace-nowrap align-top">
+                          <div className="font-bold text-slate-900 tabular-nums">
+                            {sc.codigo}
+                          </div>
+                          <div className="text-xs text-slate-500 tabular-nums">
+                            {sc.horarioPedido || sc.dataAbertura}
+                          </div>
+                          {sc.dataNecessaria && (
+                            <div className="text-xs text-slate-600 font-medium mt-0.5">
+                              Necessário p/: {sc.dataNecessaria}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4 align-top">
+                          <div className="font-semibold text-slate-900">
+                            {sc.solicitante}{" "}
+                            {sc.solicitanteCargo
+                              ? `(${sc.solicitanteCargo})`
+                              : ""}
+                          </div>
+                          <div className="text-xs text-slate-600">
+                            {obra?.nome}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {sc.categoria}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 align-top">
+                          <div className="space-y-1">
+                            {sc.itens.map((it) => (
+                              <div key={it.id} className="text-xs text-slate-800">
+                                <strong>
+                                  • {it.quantidade} {it.unidade}
+                                </strong>{" "}
+                                — {it.descricao}
+                                {it.observacaoObra && (
+                                  <span className="block text-slate-500 italic pl-2">
+                                    Obs: {it.observacaoObra}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center align-top whitespace-nowrap">
+                          <span
+                            className={`px-2.5 py-1 rounded-md text-xs font-bold ${
+                              urg === "Crítica - Obra Parada"
+                                ? "bg-red-100 text-red-900 border border-red-300"
+                                : urg === "Alta"
+                                ? "bg-amber-100 text-amber-900 border border-amber-300"
+                                : "bg-slate-100 text-slate-700 border border-slate-200"
+                            }`}
+                          >
+                            {urg}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center align-top whitespace-nowrap">
+                          {sc.status === "Enviado / Aguardando Compras" && (
+                            <span className="px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold inline-block">
+                              🟡 Enviado / Aguardando Compras
+                            </span>
+                          )}
+                          {sc.status === "Em Cotação" && (
+                            <span className="px-3 py-1 rounded-full bg-blue-100 border border-blue-300 text-blue-900 text-xs font-bold inline-block">
+                              🔵 Em Cotação com Fornecedores
+                            </span>
+                          )}
+                          {sc.status === "Comprada" && (
+                            <div className="space-y-1">
+                              <span className="px-3 py-1 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold inline-block">
+                                🟢 Compra Aprovada / Pedido Emitido
+                              </span>
+                              <div className="text-xs text-slate-600 font-medium">
+                                Previsão Entrega:{" "}
+                                {sc.dataPrevistaEntrega || "Em programação"}
+                              </div>
+                            </div>
+                          )}
+                          {sc.status === "Entregue na Obra" && (
+                            <div className="space-y-1">
+                              <span className="px-3 py-1 rounded-full bg-emerald-700 text-white text-xs font-bold inline-block">
+                                ✅ Entregue no Canteiro
+                              </span>
+                              {sc.notaFiscalRecebida && (
+                                <div className="text-xs text-emerald-800 font-semibold">
+                                  NF: {sc.notaFiscalRecebida}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => setScChatModal(sc)}
+                            className="mt-2 px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs font-semibold text-slate-700 flex items-center justify-center gap-1.5 mx-auto transition"
+                            title="Linha do tempo e mensagens com a Central de Compras"
+                          >
+                            <span>💬 Mensagens</span>
+                            {sc.mensagens && sc.mensagens.length > 0 && (
+                              <span className="px-1.5 py-0.2 bg-blue-600 text-white rounded-full text-[10px] font-bold">
+                                {sc.mensagens.length}
+                              </span>
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* =============================================================== */}
+          {/* ABA 3: RECEBIMENTO & CONTROLE INTERNO (ALMOXARIFADO)            */}
+          {/* =============================================================== */}
+          {obraActiveTab === "Recebimento" && (
+            <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">
+                    Recebimento de Materiais & Conferência de Nota Fiscal na
+                    Obra
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Pedidos já comprados pelo Setor de Suprimentos que estão a
+                    caminho ou foram entregues no canteiro
+                  </p>
+                </div>
+              </div>
+
+              <table className="w-full text-sm border-collapse text-left">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                    <th className="py-3 px-4">Ordem de Compra</th>
+                    <th className="py-3 px-4">Fornecedor / Entrega</th>
+                    <th className="py-3 px-4">Materiais para Conferência</th>
+                    <th className="py-3 px-4 text-center">Status Recebimento</th>
+                    <th className="py-3 px-4 text-right">
+                      Ação do Almoxarifado
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {ordensDaObra.map((oc) => {
+                    const jaRecebido =
+                      oc.status ===
+                        "Entregue na Obra (Confirmado pelo Almoxarifado)" ||
+                      oc.status === "Entregue";
+
+                    return (
+                      <tr key={oc.id} className="hover:bg-slate-50">
+                        <td className="py-3.5 px-4 whitespace-nowrap align-top">
+                          <div className="font-bold text-slate-900 tabular-nums">
+                            {oc.numeroOc}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            Pedido: {oc.scCodigo}
+                          </div>
+                          <div className="text-xs text-slate-600 font-medium mt-0.5">
+                            Previsão: {oc.dataPrevistaEntrega || oc.dataEmissao}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 align-top">
+                          <div className="font-bold text-slate-900">
+                            {oc.fornecedorNome}
+                          </div>
+                          <div className="text-xs text-slate-600">
+                            📍 {oc.obraNome}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            Frete: {oc.tipoFrete}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 align-top">
+                          <div className="space-y-1">
+                            {oc.itens.map((it, idx) => (
+                              <div key={idx} className="text-xs text-slate-800">
+                                <strong>
+                                  • {it.quantidade} {it.unidade}
+                                </strong>{" "}
+                                — {it.descricao}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center align-top">
+                          {jaRecebido ? (
+                            <div className="space-y-1">
+                              <span className="px-2.5 py-1 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold inline-block">
+                                ✅ Recebido no Canteiro
+                              </span>
+                              <div className="text-xs text-slate-700 font-semibold">
+                                NF: {oc.notaFiscalRecebida}
+                              </div>
+                              <div className="text-[11px] text-slate-500">
+                                {oc.condicaoRecebimento}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-800 text-xs font-semibold inline-block">
+                              🚚 A Caminho da Obra
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right align-top whitespace-nowrap">
+                          {jaRecebido ? (
+                            <span className="text-xs font-semibold text-emerald-800">
+                              Conferido por {oc.recebidoPor || usuarioLogado.nome}
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setNotaFiscalInput("NF-e 000.482.910");
+                                setCondicaoInput(
+                                  "Material completo e sem avarias"
+                                );
+                                setOcConfirmarRecebimentoModal(oc);
+                              }}
+                              className="px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-xs"
+                            >
+                              ✔️ Confirmar Recebimento do Material na Obra
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* =============================================================== */}
+          {/* ABA 4: CONTRATOS & MEDIÇÕES (BM) DA OBRA                        */}
+          {/* =============================================================== */}
+          {obraActiveTab === "Medicoes" && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg border border-slate-200 p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">
+                    Contratos de Subempreitada & Boletins de Medição (BM)
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Acompanhe os pacotes de subempreitada da obra e lance novos boletins de medição para aprovação da Diretoria
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                {contratosDaObra.length === 0 ? (
+                  <div className="bg-white rounded-lg border border-slate-200 p-8 text-center text-slate-500 text-sm">
+                    Nenhum contrato de subempreitada vinculado a esta obra até o momento.
+                  </div>
+                ) : (
+                  contratosDaObra.map((contrato) => {
+                    const totalMedidoBruto = contrato.medicoes.reduce(
+                      (acc, bm) => acc + bm.valorBruto,
+                      0
+                    );
+                    const percentualTotalMedido =
+                      contrato.valorTotal > 0
+                        ? Math.min(
+                            100,
+                            (totalMedidoBruto / contrato.valorTotal) * 100
+                          )
+                        : 0;
+
+                    return (
+                      <div
+                        key={contrato.id}
+                        className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden"
+                      >
+                        {/* Cabeçalho do Contrato */}
+                        <div className="p-4 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-start justify-between gap-4">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 text-sm">
+                                {contrato.numeroContrato}
+                              </span>
+                              <span className="text-slate-400">•</span>
+                              <span className="font-semibold text-slate-900 text-sm">
+                                {contrato.empreiteiro}
+                              </span>
+                              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                                {contrato.status}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-600 mt-1">
+                              <strong>Objeto:</strong> {contrato.objeto}
+                            </div>
+                            <div className="text-xs text-slate-500 mt-0.5">
+                              CNPJ: {contrato.cnpj} • Disciplina: {contrato.categoria} • Retenção Técnica: {contrato.percentualRetencao}%
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <div className="text-xs text-slate-500 font-medium">
+                                Valor Total do Contrato
+                              </div>
+                              <div className="text-base font-bold text-slate-900 tabular-nums">
+                                {formatBRL(contrato.valorTotal)}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setNovoBmModalContrato(contrato)}
+                              className="px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                            >
+                              <span>+ Lançar Medição (BM)</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Barra de Progresso Físico-Financeiro */}
+                        <div className="px-4 py-2.5 bg-white border-b border-slate-100 flex items-center justify-between gap-4 text-xs">
+                          <div className="text-slate-700">
+                            Avanço Medido:{" "}
+                            <strong className="text-emerald-700">
+                              {formatBRL(totalMedidoBruto)} ({percentualTotalMedido.toFixed(1)}%)
+                            </strong>
+                          </div>
+                          <div className="w-40 bg-slate-200 h-2 rounded-full overflow-hidden">
+                            <div
+                              className="bg-emerald-600 h-2 rounded-full transition-all"
+                              style={{ width: `${percentualTotalMedido}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Tabela de Boletins de Medição */}
+                        <table className="w-full text-xs border-collapse text-left">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200 font-semibold text-slate-600 uppercase">
+                              <th className="py-2.5 px-3">Nº BM</th>
+                              <th className="py-2.5 px-3">Data / Período</th>
+                              <th className="py-2.5 px-3 text-center">% Medido</th>
+                              <th className="py-2.5 px-3 text-right">Valor Bruto</th>
+                              <th className="py-2.5 px-3 text-right">Retenção</th>
+                              <th className="py-2.5 px-3 text-right">Valor Líquido</th>
+                              <th className="py-2.5 px-3 text-center">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {contrato.medicoes.length === 0 ? (
+                              <tr>
+                                <td
+                                  colSpan={7}
+                                  className="py-3 text-center text-slate-400 italic"
+                                >
+                                  Nenhum boletim de medição lançado ainda.
+                                </td>
+                              </tr>
+                            ) : (
+                              contrato.medicoes.map((bm) => (
+                                <tr key={bm.id} className="hover:bg-slate-50">
+                                  <td className="py-2.5 px-3 font-bold text-slate-900 tabular-nums">
+                                    {bm.numeroBm}
+                                  </td>
+                                  <td className="py-2.5 px-3">
+                                    <div className="font-medium text-slate-900">{bm.dataMedicao}</div>
+                                    <div className="text-[10px] text-slate-500">{bm.periodoReferencia}</div>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center font-semibold text-slate-800">
+                                    {bm.percentualMedidoPeriodo}%
+                                  </td>
+                                  <td className="py-2.5 px-3 text-right font-medium text-slate-900 tabular-nums">
+                                    {formatBRL(bm.valorBruto)}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-right text-blue-700 tabular-nums">
+                                    - {formatBRL(bm.valorRetencao)}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-right font-bold text-emerald-800 tabular-nums">
+                                    {formatBRL(bm.valorLiquido)}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-block ${
+                                        bm.status === "Pago"
+                                          ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                                          : bm.status === "Aprovado para Pagamento"
+                                          ? "bg-blue-100 text-blue-900 border border-blue-300"
+                                          : "bg-amber-100 text-amber-900 border border-amber-300"
+                                      }`}
+                                    >
+                                      {bm.status === "Pago"
+                                        ? "🟢 Pago"
+                                        : bm.status === "Aprovado para Pagamento"
+                                        ? "🔵 Aprovado"
+                                        : "🟡 Pendente"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* =============================================================== */}
+          {/* ABA 5: CALENDÁRIO LOGÍSTICO & PORTÃO DE DESCARGA NO CANTEIRO    */}
+          {/* =============================================================== */}
+          {obraActiveTab === "Logistica" && (() => {
+            const entregasHoje = cargasDaObraSemana.flatMap((d) => d.cargas).filter((c) => c.status === "Hoje").length;
+            const conflitosPortao = cargasDaObraSemana.filter((d) => d.conflitoPortao).length;
+            const recebidas = cargasDaObraSemana.flatMap((d) => d.cargas).filter((c) => c.status === "Entregue").length;
+
+            return (
+              <div className="space-y-6">
+                {/* 4 KPIs de Logística do Canteiro */}
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      CARGAS NESTA SEMANA
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                      {totalCargasObra}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Fluxo de caminhões previsto
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      DESCARGAS HOJE
+                    </div>
+                    <div className="text-2xl font-bold text-blue-700 mt-1 tabular-nums">
+                      {entregasHoje}
+                    </div>
+                    <div className="text-xs text-blue-800 font-medium mt-1">
+                      Previstas para o portão da obra
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      GARGALO NO PORTÃO
+                    </div>
+                    <div className={`text-2xl font-bold mt-1 tabular-nums ${conflitosPortao > 0 ? "text-amber-600" : "text-emerald-700"}`}>
+                      {conflitosPortao}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {conflitosPortao > 0 ? "Dias com sobreposição pesada" : "Portão e pátio desimpedidos"}
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      CONFERIDAS NO ALMOXARIFADO
+                    </div>
+                    <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
+                      {recebidas}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Entrada formalizada com NF
+                    </div>
+                  </div>
+                </div>
+
+                {/* Banner de Conflito de Portão */}
+                {conflitosPortao > 0 && (
+                  <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 flex items-center gap-3">
+                    <span className="text-2xl">⚠️</span>
+                    <div>
+                      <h4 className="text-sm font-bold text-amber-950">
+                        Alerta de Portão & Pátio de Descarga
+                      </h4>
+                      <p className="text-xs text-amber-900 mt-0.5">
+                        Existem múltiplos veículos pesados agendados no mesmo dia. Mantenha os ajudantes e a grua/munck de prontidão para agilizar a liberação da via pública.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Grade Semanal de Logística do Canteiro */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {cargasDaObraSemana.map((dia) => (
+                    <div
+                      key={dia.diaSemana}
+                      className={`bg-white rounded-lg border shadow-sm p-4 space-y-3 ${
+                        dia.conflitoPortao ? "border-amber-300 ring-1 ring-amber-200" : "border-slate-200"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between border-b border-slate-200 pb-2.5">
+                        <div>
+                          <h3 className="font-bold text-sm text-slate-900">
+                            {dia.diaSemana}
+                          </h3>
+                          <span className="text-xs text-slate-500">{dia.dataLabel}</span>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 text-xs font-bold">
+                            {dia.cargas.length} {dia.cargas.length === 1 ? "carga" : "cargas"}
+                          </span>
+                          {dia.conflitoPortao && (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-extrabold border border-amber-300">
+                              ⚠️ Conflito Portão
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {dia.cargas.length === 0 ? (
+                        <div className="py-8 text-center text-xs text-slate-400">
+                          Nenhum caminhão programado para este dia.
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {dia.cargas.map((carga) => {
+                            const ocAlvo = ordens.find((o) => o.id === carga.ordemId);
+                            const jaEntregue = carga.status === "Entregue";
+
+                            return (
+                              <div
+                                key={carga.id}
+                                className="bg-slate-50 rounded-lg border border-slate-200 p-3 space-y-2 hover:bg-slate-100/80 transition"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="font-bold text-xs text-slate-900 truncate">
+                                    {carga.fornecedorNome}
+                                  </span>
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      jaEntregue
+                                        ? "bg-emerald-100 text-emerald-800"
+                                        : carga.status === "Hoje"
+                                        ? "bg-blue-100 text-blue-800"
+                                        : "bg-slate-200 text-slate-800"
+                                    }`}
+                                  >
+                                    {jaEntregue ? "✓ Entregue" : carga.status === "Hoje" ? "🔵 Previsto Hoje" : "Agendado"}
+                                  </span>
+                                </div>
+
+                                <div className="text-xs text-slate-700 font-medium">
+                                  {carga.insumoDescricao}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 bg-white p-2 rounded border border-slate-200">
+                                  <div>
+                                    <span className="text-slate-400">Janela: </span>
+                                    <strong className="text-slate-800">{carga.horarioJanela}</strong>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400">Veículo: </span>
+                                    <strong className="text-slate-800">{carga.tipoVeiculo}</strong>
+                                  </div>
+                                </div>
+
+                                <div className="pt-1 flex items-center justify-between border-t border-slate-200">
+                                  <span className="text-[10px] text-slate-500 font-medium">
+                                    Frete {carga.tipoFrete}
+                                  </span>
+                                  {!jaEntregue && ocAlvo && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setNotaFiscalInput("NF-e 000.482.910");
+                                        setCondicaoInput("Material descarregado e sem avarias");
+                                        setOcConfirmarRecebimentoModal(ocAlvo);
+                                      }}
+                                      className="px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold transition shadow-xs"
+                                    >
+                                      📦 Dar Entrada na Obra
+                                    </button>
+                                  )}
+                                  {jaEntregue && (
+                                    <span className="text-[11px] font-semibold text-emerald-800">
+                                      ✓ Recebido no Canteiro
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* =============================================================== */}
+          {/* ABA: ALMOXARIFADO DO CANTEIRO DE OBRAS (`Estoque`)              */}
+          {/* =============================================================== */}
+          {obraActiveTab === "Estoque" && (() => {
+            const obraAlvoId = usuarioLogado.obraId !== "ALL" ? usuarioLogado.obraId : obraIdForm;
+            const itensObra = estoque.filter((it) => it.obraId === obraAlvoId || it.obraId === "central");
+            const criticosObra = itensObra.filter((it) => it.saldoAtual <= it.estoqueMinimo);
+            const valorTotalObra = itensObra.reduce((acc, it) => acc + it.saldoAtual * it.custoMedio, 0);
+
+            return (
+              <div className="space-y-6">
+                {/* KPIs de Almoxarifado da Obra */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      INSUMOS EM ALMOXARIFADO
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                      {itensObra.length}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Materiais cadastrados no canteiro
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      CRÍTICOS / BAIXO ESTOQUE
+                    </div>
+                    <div className="text-2xl font-bold text-red-600 mt-1 tabular-nums">
+                      {criticosObra.length}
+                    </div>
+                    <div className="text-xs text-red-700 mt-1 font-medium">
+                      {criticosObra.length > 0 ? "Reposição prioritária necessária" : "Estoque de segurança mantido"}
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      VALOR ESTOCADO NO CANTEIRO
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                      {formatBRL(valorTotalObra)}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Patrimônio de insumos no canteiro
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tabela do Almoxarifado do Canteiro */}
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">
+                        Inventário de Materiais Disponíveis no Canteiro
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Acompanhe o saldo físico em tempo real para planejar as frentes de serviço sem risco de desabastecimento.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setObraActiveTab("NovoPedido")}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold transition"
+                    >
+                      + Solicitar Reposição
+                    </button>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-lg border border-slate-200">
+                    <table className="w-full text-sm border-collapse text-left">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                          <th className="py-3 px-4">Código / Descrição</th>
+                          <th className="py-3 px-4">Localização Física</th>
+                          <th className="py-3 px-4 text-right">Saldo Físico</th>
+                          <th className="py-3 px-4 text-center">Nível Mínimo</th>
+                          <th className="py-3 px-4 text-center">Status</th>
+                          <th className="py-3 px-4 text-right">Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {itensObra.map((it) => {
+                          const critico = it.saldoAtual <= it.estoqueMinimo;
+
+                          return (
+                            <tr key={it.id} className="hover:bg-slate-50 transition-colors">
+                              <td className="py-3 px-4">
+                                <div className="font-bold text-slate-900">{it.descricao}</div>
+                                <div className="text-xs text-slate-500 font-mono mt-0.5">
+                                  {it.codigo} • {it.categoria}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-xs text-slate-700">
+                                📍 {it.localizacaoFisica}
+                              </td>
+                              <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums">
+                                <span className="text-base">{it.saldoAtual}</span>{" "}
+                                <span className="text-xs font-normal text-slate-500">{it.unidade}</span>
+                              </td>
+                              <td className="py-3 px-4 text-center text-xs text-slate-600 whitespace-nowrap">
+                                Mín: {it.estoqueMinimo} {it.unidade}
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                {critico ? (
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200 inline-block animate-pulse">
+                                    🚨 Repor Imediato
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200 inline-block">
+                                    ✅ Disponível
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-right whitespace-nowrap">
+                                <button
+                                  onClick={() => {
+                                    setItensGrade([
+                                      {
+                                        id: `item-${Date.now()}`,
+                                        descricao: it.descricao,
+                                        quantidade: Math.max(it.pontoReposicao * 2 - it.saldoAtual, it.estoqueMinimo),
+                                        unidade: it.unidade,
+                                        observacaoObra: `Reposição de estoque de canteiro. Saldo atual: ${it.saldoAtual} ${it.unidade}`,
+                                      },
+                                    ]);
+                                    setObraActiveTab("NovoPedido");
+                                  }}
+                                  className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+                                >
+                                  Requisitar
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </main>
+      </div>
+
+      {/* MODAL PARA CONFIRMAR RECEBIMENTO COM NOTA FISCAL E AVARIAS */}
+      {ocConfirmarRecebimentoModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              onConfirmarRecebimentoObra(
+                ocConfirmarRecebimentoModal.id,
+                notaFiscalInput,
+                condicaoInput
+              );
+            }}
+            className="bg-white rounded-xl border border-slate-200 max-w-md w-full p-6 shadow-xl space-y-4 text-sm"
+          >
+            <div className="border-b border-slate-200 pb-3">
+              <span className="text-xs font-bold text-emerald-700 uppercase">
+                Conferência de Almoxarifado —{" "}
+                {ocConfirmarRecebimentoModal.numeroOc}
+              </span>
+              <h3 className="text-base font-bold text-slate-900 mt-0.5">
+                Confirmar Recebimento na Obra
+              </h3>
+              <p className="text-xs text-slate-500">
+                Fornecedor: {ocConfirmarRecebimentoModal.fornecedorNome}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Número da Nota Fiscal Recebida (NF-e) *
+                </label>
+                <input
+                  required
+                  value={notaFiscalInput}
+                  onChange={(e) => setNotaFiscalInput(e.target.value)}
+                  placeholder="Ex: NF-e 000.482.910"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Condição Física da Entrega *
+                </label>
+                <select
+                  value={condicaoInput}
+                  onChange={(e) => setCondicaoInput(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900"
+                >
+                  <option value="Material completo e sem avarias">
+                    ✅ Material entregue completo e sem avarias
+                  </option>
+                  <option value="Entrega parcial (saldo pendente)">
+                    ⚠️ Entrega parcial (saldo pendente do fornecedor)
+                  </option>
+                  <option value="Recebido com ressalva na NF">
+                    ⚠️ Recebido com ressalva registrada no canhoto
+                  </option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setOcConfirmarRecebimentoModal(null)}
+                className="px-4 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold"
+              >
+                ✔️ Confirmar Entrada no Canteiro
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      {/* MODAL NOVO BOLETIM DE MEDIÇÃO NO CANTEIRO */}
+      {novoBmModalContrato && (
+        <ModalNovoBoletimMedicao
+          contrato={novoBmModalContrato}
+          usuarioLogado={usuarioLogado}
+          onClose={() => setNovoBmModalContrato(null)}
+          onSalvar={(novoBm) => {
+            onCriarBoletimMedicao(novoBmModalContrato.id, novoBm);
+            setNovoBmModalContrato(null);
+          }}
+        />
+      )}
+
+      {/* MODAL MENSAGENS E LINHA DO TEMPO DO PEDIDO */}
+      {scChatModal && (
+        <ModalMensagensPedido
+          sc={scChatModal}
+          usuarioLogado={usuarioLogado}
+          onClose={() => setScChatModal(null)}
+          onEnviar={(texto) => onEnviarMensagemSC(scChatModal.id, texto)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* COMPONENTES MODAIS: CONTRATOS, MEDIÇÕES, MENSAGENS E ALÇADA DIRETORIA     */
+/* ========================================================================= */
+
+function ModalNovoContrato({
+  obras,
+  onClose,
+  onSalvar,
+}: {
+  obras: Obra[];
+  onClose: () => void;
+  onSalvar: (c: ContratoSubempreitada) => void;
+}) {
+  const [numeroContrato, setNumeroContrato] = useState(
+    `CT-2026-00${Math.floor(4 + Math.random() * 20)}`
+  );
+  const [empreiteiro, setEmpreiteiro] = useState("");
+  const [cnpj, setCnpj] = useState("");
+  const [obraId, setObraId] = useState(obras[0]?.id || "obra-1");
+  const [objeto, setObjeto] = useState("");
+  const [categoria, setCategoria] = useState<string>(CATEGORIAS_CONSTRUCAO[3]);
+  const [valorTotal, setValorTotal] = useState(150000);
+  const [percentualRetencao, setPercentualRetencao] = useState(5);
+  const [dataInicio, setDataInicio] = useState(
+    new Date().toLocaleDateString("pt-BR")
+  );
+  const [previsaoFim, setPrevisaoFim] = useState(
+    new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toLocaleDateString("pt-BR")
+  );
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!empreiteiro.trim() || !objeto.trim()) return;
+    const obraObj = obras.find((o) => o.id === obraId);
+
+    const novoContrato: ContratoSubempreitada = {
+      id: `con-${Date.now()}`,
+      numeroContrato: numeroContrato.trim(),
+      empreiteiro: empreiteiro.trim(),
+      cnpj: cnpj.trim() || "11.209.440/0001-88",
+      obraId,
+      obraNome: obraObj?.nome || "Obra Vinculada",
+      objeto: objeto.trim(),
+      categoria,
+      valorTotal: Number(valorTotal) || 0,
+      percentualRetencao: Number(percentualRetencao) || 5,
+      dataInicio,
+      previsaoFim,
+      status: "Ativo",
+      medicoes: [],
+    };
+
+    onSalvar(novoContrato);
+  };
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-xl border border-slate-200 max-w-xl w-full p-6 shadow-xl space-y-4 text-sm"
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">
+              Novo Contrato de Subempreitada
+            </h3>
+            <p className="text-xs text-slate-500">
+              Gestão de contratos com retenção técnica para garantia e encargos
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+          >
+            Fechar
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Nº do Contrato *
+            </label>
+            <input
+              required
+              value={numeroContrato}
+              onChange={(e) => setNumeroContrato(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-900"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Obra Vinculada *
+            </label>
+            <select
+              value={obraId}
+              onChange={(e) => setObraId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900"
+            >
+              {obras.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Razão Social / Empreiteiro *
+            </label>
+            <input
+              required
+              placeholder="Ex: AluGlass Fachadas Ltda"
+              value={empreiteiro}
+              onChange={(e) => setEmpreiteiro(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              CNPJ do Empreiteiro *
+            </label>
+            <input
+              required
+              placeholder="00.000.000/0001-00"
+              value={cnpj}
+              onChange={(e) => setCnpj(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 tabular-nums"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Objeto do Contrato (Escopo dos Serviços) *
+            </label>
+            <input
+              required
+              placeholder="Ex: Fornecimento e instalação de esquadrias de alumínio e peles de vidro"
+              value={objeto}
+              onChange={(e) => setObjeto(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Disciplina / Categoria *
+            </label>
+            <select
+              value={categoria}
+              onChange={(e) => setCategoria(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            >
+              {CATEGORIAS_CONSTRUCAO.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Percentual Retenção Técnica *
+            </label>
+            <select
+              value={percentualRetencao}
+              onChange={(e) => setPercentualRetencao(Number(e.target.value))}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-semibold"
+            >
+              <option value={5}>5% (Garantia Contratual Padrão)</option>
+              <option value={11}>11% (Retenção Previdenciária INSS)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Valor Global do Contrato (R$) *
+            </label>
+            <input
+              required
+              type="number"
+              step="1000"
+              value={valorTotal}
+              onChange={(e) => setValorTotal(Number(e.target.value) || 0)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-bold tabular-nums text-slate-900"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Previsão de Término
+            </label>
+            <input
+              value={previsaoFim}
+              onChange={(e) => setPrevisaoFim(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 tabular-nums"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition"
+          >
+            Salvar e Cadastrar Contrato
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ModalNovoBoletimMedicao({
+  contrato,
+  usuarioLogado,
+  onClose,
+  onSalvar,
+}: {
+  contrato: ContratoSubempreitada;
+  usuarioLogado: UsuarioSistema | null;
+  onClose: () => void;
+  onSalvar: (bm: BoletimMedicao) => void;
+}) {
+  const numeroSugerido = `BM-0${contrato.medicoes.length + 1}`;
+  const [periodoReferencia, setPeriodoReferencia] = useState(
+    "01/10/2026 a 31/10/2026"
+  );
+  const [percentualMedido, setPercentualMedido] = useState(15);
+  const [observacoes, setObservacoes] = useState(
+    "Medição referente aos serviços concluídos e aprovados pela engenharia."
+  );
+
+  const valorBruto = (contrato.valorTotal * percentualMedido) / 100;
+  const valorRetencao = (valorBruto * contrato.percentualRetencao) / 100;
+  const valorLiquido = valorBruto - valorRetencao;
+
+  const totalAcumuladoAnterior = contrato.medicoes.reduce(
+    (acc, m) => acc + m.percentualMedidoPeriodo,
+    0
+  );
+  const percentualAcumulado = totalAcumuladoAnterior + percentualMedido;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const novoBm: BoletimMedicao = {
+      id: `bm-${Date.now()}`,
+      numeroBm: numeroSugerido,
+      dataMedicao: new Date().toLocaleDateString("pt-BR"),
+      periodoReferencia,
+      percentualMedidoPeriodo: percentualMedido,
+      percentualAcumulado,
+      valorBruto,
+      valorRetencao,
+      valorLiquido,
+      engenheiroResponsavel: usuarioLogado?.nome || "Engenharia Residente",
+      observacoes,
+      status: "Pendente Aprovação",
+    };
+
+    onSalvar(novoBm);
+  };
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4 text-sm"
+      >
+        <div className="border-b border-slate-200 pb-3">
+          <span className="text-xs font-bold text-emerald-700 uppercase">
+            Boletim de Medição (BM) • {contrato.numeroContrato}
+          </span>
+          <h3 className="text-base font-bold text-slate-900 mt-0.5">
+            Lançar Medição de Subempreitada
+          </h3>
+          <p className="text-xs text-slate-500">
+            {contrato.empreiteiro} — {contrato.obraNome}
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Identificação da Medição
+              </label>
+              <input
+                disabled
+                value={numeroSugerido}
+                className="w-full bg-slate-100 border border-slate-300 rounded-lg px-3 py-2 font-bold text-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                % Avanço Físico do Período *
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={100 - totalAcumuladoAnterior}
+                value={percentualMedido}
+                onChange={(e) => setPercentualMedido(Number(e.target.value) || 0)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-bold text-slate-900 tabular-nums"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Período de Referência dos Serviços *
+            </label>
+            <input
+              required
+              value={periodoReferencia}
+              onChange={(e) => setPeriodoReferencia(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+            />
+          </div>
+
+          {/* Resumo Financeiro Automático */}
+          <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-1.5 text-xs">
+            <div className="flex justify-between text-slate-600">
+              <span>Valor Bruto Medido ({percentualMedido}%):</span>
+              <strong className="text-slate-900 tabular-nums">{formatBRL(valorBruto)}</strong>
+            </div>
+            <div className="flex justify-between text-blue-700">
+              <span>Retenção Técnica ({contrato.percentualRetencao}%):</span>
+              <strong className="tabular-nums">- {formatBRL(valorRetencao)}</strong>
+            </div>
+            <div className="flex justify-between text-emerald-800 font-bold text-sm pt-1 border-t border-slate-200">
+              <span>Valor Líquido a Pagar ao Empreiteiro:</span>
+              <span className="tabular-nums">{formatBRL(valorLiquido)}</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Descrição das Atividades Executadas & Vistorias *
+            </label>
+            <textarea
+              rows={3}
+              required
+              value={observacoes}
+              onChange={(e) => setObservacoes(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs text-slate-800"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2.5 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold"
+          >
+            Lançar Medição para Aprovação
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ModalMensagensPedido({
+  sc,
+  usuarioLogado,
+  onClose,
+  onEnviar,
+}: {
+  sc: SolicitacaoCompra;
+  usuarioLogado: UsuarioSistema | null;
+  onClose: () => void;
+  onEnviar: (texto: string) => void;
+}) {
+  const [novoTexto, setNovoTexto] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novoTexto.trim()) return;
+    onEnviar(novoTexto.trim());
+    setNovoTexto("");
+  };
+
+  const listaMensagens = sc.mensagens || [];
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4 text-sm flex flex-col max-h-[85vh]">
+        <div className="flex items-start justify-between border-b border-slate-200 pb-3 shrink-0">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-slate-900 text-base">{sc.codigo}</span>
+              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-100 text-blue-900">
+                {sc.status}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Linha do tempo & chat entre Canteiro de Obras e Central de Compras
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+          >
+            Fechar
+          </button>
+        </div>
+
+        {/* Lista de Mensagens com Scroll */}
+        <div className="flex-1 overflow-y-auto space-y-3 p-2 bg-slate-50 rounded-lg border border-slate-200 min-h-[220px]">
+          {listaMensagens.length === 0 ? (
+            <div className="text-center text-slate-400 text-xs py-8 italic">
+              Nenhuma mensagem registrada neste pedido ainda. Envie a primeira mensagem abaixo!
+            </div>
+          ) : (
+            listaMensagens.map((msg) => {
+              const isMe = msg.autorNome === usuarioLogado?.nome;
+              return (
+                <div
+                  key={msg.id}
+                  className={`p-3 rounded-lg border max-w-[85%] text-xs space-y-1 ${
+                    isMe
+                      ? "ml-auto bg-blue-50 border-blue-200 text-blue-950"
+                      : "mr-auto bg-white border-slate-200 text-slate-900 shadow-xs"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3 text-[11px] font-bold">
+                    <span>
+                      {msg.autorNome} • {msg.autorCargo}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      {msg.dataHora}
+                    </span>
+                  </div>
+                  <p className="leading-relaxed">{msg.texto}</p>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Input de Nova Mensagem */}
+        <form onSubmit={handleSubmit} className="flex gap-2 shrink-0 pt-2 border-t border-slate-200">
+          <input
+            required
+            placeholder="Digite uma observação técnica, dúvida de entrega ou cotação..."
+            value={novoTexto}
+            onChange={(e) => setNovoTexto(e.target.value)}
+            className="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-slate-900"
+          />
+          <button
+            type="submit"
+            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition"
+          >
+            Enviar 🚀
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ModalAprovacaoDiretoria({
+  data,
+  onClose,
+  onConfirmar,
+}: {
+  data: { novaOc: OrdemCompra; prop: PropostaFornecedor };
+  onClose: () => void;
+  onConfirmar: (assinatura: string) => void;
+}) {
+  const [assinatura, setAssinatura] = useState(
+    "João Carlos Bauer — Diretor Executivo"
+  );
+  const [declaracaoCiente, setDeclaracaoCiente] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!declaracaoCiente || !assinatura.trim()) return;
+    onConfirmar(assinatura.trim());
+  };
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-xl border border-red-300 max-w-lg w-full p-6 shadow-2xl space-y-4 text-sm"
+      >
+        <div className="border-b border-red-200 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-xs font-bold">
+              ⚠️
+            </span>
+            <span className="text-xs font-bold text-red-800 uppercase tracking-wider">
+              Alçada de Governança Corporativa: Valor &gt; R$ 100.000,00
+            </span>
+          </div>
+          <h3 className="text-base font-bold text-slate-900 mt-1">
+            Requer Aprovação Formal da Diretoria Executiva / CFO
+          </h3>
+          <p className="text-xs text-slate-600 mt-0.5">
+            O valor total desta compra excede o limite operacional do comprador e exige homologação estatutária.
+          </p>
+        </div>
+
+        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-2 text-xs">
+          <div className="flex justify-between">
+            <span className="text-slate-500">Ordem de Compra:</span>
+            <strong className="text-slate-900">{data.novaOc.numeroOc}</strong>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-500">Obra Destino:</span>
+            <strong className="text-slate-900">{data.novaOc.obraNome}</strong>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-500">Fornecedor Vencedor:</span>
+            <strong className="text-slate-900">{data.prop.fornecedorNome}</strong>
+          </div>
+          <div className="flex justify-between text-sm font-bold text-red-700 pt-2 border-t border-slate-200">
+            <span>Valor Total Homologado:</span>
+            <span className="tabular-nums">{formatBRL(data.novaOc.valorTotal)}</span>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Assinatura do Diretor / Autorizador *
+            </label>
+            <input
+              required
+              value={assinatura}
+              onChange={(e) => setAssinatura(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-900"
+            />
+          </div>
+
+          <label className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-950 cursor-pointer">
+            <input
+              type="checkbox"
+              required
+              checked={declaracaoCiente}
+              onChange={(e) => setDeclaracaoCiente(e.target.checked)}
+              className="mt-0.5 rounded border-amber-400 text-emerald-600 focus:ring-emerald-500"
+            />
+            <span>
+              Declaro que auditei a equalização de propostas comerciais e aprovo formalmente o dispêndio financeiro desta compra pela Diretoria.
+            </span>
+          </label>
+        </div>
+
+        <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold"
+          >
+            Rejeitar / Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={!declaracaoCiente}
+            className="px-4 py-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-bold transition flex items-center gap-1.5"
+          >
+            <span>✍️ Autorizar e Emitir Ordem de Compra</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* MODAL: CENTRAL DE NOTIFICAÇÕES & ALERTAS PREVENTIVOS                      */
+/* ========================================================================= */
+
+function ModalNotificacoesSistema({
+  notificacoes,
+  onClose,
+  onNavegar,
+}: {
+  notificacoes: NotificacaoItem[];
+  onClose: () => void;
+  onNavegar: (notif: NotificacaoItem) => void;
+}) {
+  const [filtroTipo, setFiltroTipo] = useState<"TODOS" | NotificacaoItem["tipo"]>("TODOS");
+
+  const listaFiltrada = notificacoes.filter(
+    (n) => filtroTipo === "TODOS" || n.tipo === filtroTipo
+  );
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-start justify-end p-4 sm:p-6 overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh] mt-12 animate-in slide-in-from-right duration-200">
+        {/* Cabeçalho */}
+        <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">🔔</span>
+            <div>
+              <h3 className="font-bold text-base text-slate-900">
+                Central de Notificações & Alertas
+              </h3>
+              <p className="text-xs text-slate-500">
+                {notificacoes.length} alertas preventivos e operacionais ativos
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Filtros por Categoria */}
+        <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50 flex items-center gap-1.5 overflow-x-auto text-xs">
+          {[
+            { id: "TODOS", label: "Todas" },
+            { id: "URGENTE_OBRA", label: "🚨 Obra Parada" },
+            { id: "FRETE_ATRASADO", label: "🚚 Logística" },
+            { id: "MEDICAO_PENDENTE", label: "📐 Medições" },
+            { id: "MENSAGEM_NOVA", label: "💬 Recados" },
+          ].map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setFiltroTipo(cat.id as any)}
+              className={`px-2.5 py-1 rounded-md font-semibold transition shrink-0 ${
+                filtroTipo === cat.id
+                  ? "bg-slate-900 text-white"
+                  : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Lista de Alertas */}
+        <div className="p-4 overflow-y-auto space-y-3 flex-1">
+          {listaFiltrada.length === 0 ? (
+            <div className="text-center py-12 text-slate-400 text-sm">
+              Nenhuma notificação nesta categoria no momento.
+            </div>
+          ) : (
+            listaFiltrada.map((item) => {
+              const bgBadge =
+                item.severidade === "Critica"
+                  ? "bg-red-100 text-red-900 border-red-300"
+                  : item.severidade === "Alerta"
+                  ? "bg-amber-100 text-amber-900 border-amber-300"
+                  : "bg-blue-100 text-blue-900 border-blue-300";
+
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => onNavegar(item)}
+                  className="p-3.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition cursor-pointer space-y-1.5 group"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-bold text-sm text-slate-900 group-hover:text-emerald-700 transition">
+                      {item.titulo}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border shrink-0 ${bgBadge}`}
+                    >
+                      {item.severidade}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {item.descricao}
+                  </p>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-200/60">
+                    <span>{item.horario}</span>
+                    <span className="text-emerald-700 font-semibold group-hover:underline">
+                      Ver detalhes no sistema →
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Rodapé */}
+        <div className="p-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+          <span className="text-xs text-slate-500">
+            Atualização contínua de status das obras
+          </span>
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+          >
+            Fechar Central
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* MODAL: AUDITORIA DE IQF & HISTÓRICO DE ENTREGAS DO FORNECEDOR             */
+/* ========================================================================= */
+
+function ModalDetalhesIqf({
+  fornecedorNome,
+  ordens,
+  onClose,
+}: {
+  fornecedorNome: string;
+  ordens: OrdemCompra[];
+  onClose: () => void;
+}) {
+  const iqf = calcularIqfFornecedor(fornecedorNome, ordens);
+
+  const ordensDoFornecedor = ordens.filter(
+    (o) => o.fornecedorNome.toLowerCase() === fornecedorNome.toLowerCase()
+  );
+
+  const badgeColor =
+    iqf.classificacao.includes("Ouro")
+      ? "bg-amber-100 text-amber-900 border-amber-300"
+      : iqf.classificacao.includes("Prata")
+      ? "bg-blue-100 text-blue-900 border-blue-300"
+      : iqf.classificacao.includes("Monitorado")
+      ? "bg-orange-100 text-orange-900 border-orange-300"
+      : "bg-red-100 text-red-900 border-red-300";
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl border border-slate-200 max-w-2xl w-full p-6 shadow-2xl space-y-5 my-6">
+        {/* Cabeçalho */}
+        <div className="flex items-start justify-between border-b border-slate-200 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Auditoria de Qualidade B2B (Vendor Rating)
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded text-xs font-bold border ${badgeColor}`}
+              >
+                Classificação: {iqf.classificacao}
+              </span>
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mt-1">
+              {fornecedorNome}
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700"
+          >
+            Fechar
+          </button>
+        </div>
+
+        {/* Score Geral e os 3 Pilares de Desempenho */}
+        <div className="grid grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <div className="text-center p-2 rounded-lg bg-white border border-slate-200">
+            <div className="text-[11px] font-bold text-slate-500 uppercase">
+              SCORE GERAL
+            </div>
+            <div className="text-3xl font-extrabold text-slate-900 mt-1">
+              {iqf.scoreGeral}
+            </div>
+            <div className="text-[10px] text-slate-500">de 100 pontos</div>
+          </div>
+
+          <div className="text-center p-2 rounded-lg bg-white border border-slate-200">
+            <div className="text-[11px] font-bold text-slate-500 uppercase">
+              PONTUALIDADE
+            </div>
+            <div className="text-2xl font-bold text-emerald-700 mt-1">
+              {iqf.taxaPontualidade}%
+            </div>
+            <div className="text-[10px] text-slate-500">Prazos de entrega</div>
+          </div>
+
+          <div className="text-center p-2 rounded-lg bg-white border border-slate-200">
+            <div className="text-[11px] font-bold text-slate-500 uppercase">
+              CONFORMIDADE
+            </div>
+            <div className="text-2xl font-bold text-blue-700 mt-1">
+              {iqf.conformidadeFisica}%
+            </div>
+            <div className="text-[10px] text-slate-500">Sem avarias/ressalvas</div>
+          </div>
+
+          <div className="text-center p-2 rounded-lg bg-white border border-slate-200">
+            <div className="text-[11px] font-bold text-slate-500 uppercase">
+              COMPETITIVIDADE
+            </div>
+            <div className="text-2xl font-bold text-amber-700 mt-1">
+              {iqf.competitividadeComercial}%
+            </div>
+            <div className="text-[10px] text-slate-500">Equalização de preço</div>
+          </div>
+        </div>
+
+        {/* Parecer do Algoritmo */}
+        <div className="bg-white p-3.5 rounded-lg border border-slate-200 text-xs text-slate-700 space-y-1">
+          <span className="font-bold text-slate-900">
+            Diretriz de Suprimentos JC BAUER:
+          </span>
+          <p className="leading-relaxed">
+            {iqf.classificacao.includes("Ouro") &&
+              "Fornecedor altamente recomendado para contratos de grande porte e compras críticas. Histórico impecável de pontualidade no canteiro e produtos conformes."}
+            {iqf.classificacao.includes("Prata") &&
+              "Fornecedor homologado e qualificado. Apresenta ótimo atendimento com ocorrências mínimas no almoxarifado."}
+            {iqf.classificacao.includes("Monitorado") &&
+              "Fornecedor sob observação. Recomenda-se acompanhamento rigoroso nas datas de descarga e conferência física detalhada na chegada do caminhão."}
+            {iqf.classificacao === "Risco Crítico" &&
+              "Atenção máxima: Fornecedor com reincidência de atrasos de carga ou divergência física de material. Não emitir novas ordens de grande vulto sem garantia adicional."}
+          </p>
+        </div>
+
+        {/* Histórico Real de Ordens e Conferências */}
+        <div>
+          <h4 className="text-xs font-bold text-slate-700 uppercase mb-2">
+            Histórico de Ordens de Compra & Entregas nos Canteiros ({ordensDoFornecedor.length})
+          </h4>
+          <div className="border border-slate-200 rounded-lg overflow-hidden max-h-56 overflow-y-auto">
+            {ordensDoFornecedor.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-400">
+                Nenhuma ordem de compra registrada no sistema para este fornecedor. Score calculado por estimativa de homologação.
+              </div>
+            ) : (
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                  <tr>
+                    <th className="p-2.5">OC #</th>
+                    <th className="p-2.5">Obra</th>
+                    <th className="p-2.5">Insumo</th>
+                    <th className="p-2.5">Valor (R$)</th>
+                    <th className="p-2.5">Conferência no Canteiro</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {ordensDoFornecedor.map((oc) => (
+                    <tr key={oc.id} className="hover:bg-slate-50">
+                      <td className="p-2.5 font-bold text-slate-900">{oc.numeroOc}</td>
+                      <td className="p-2.5 text-slate-700">{oc.obraNome}</td>
+                      <td className="p-2.5 text-slate-800">
+                        {oc.itens[0]?.descricao || "Materiais Diversos"}
+                      </td>
+                      <td className="p-2.5 font-semibold text-slate-900 tabular-nums">
+                        {formatBRL(oc.valorTotal)}
+                      </td>
+                      <td className="p-2.5">
+                        <span className="text-emerald-700 font-medium">
+                          {oc.condicaoRecebimento || "Aprovado sem ressalvas"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* Rodapé com Fechar */}
+        <div className="flex justify-end pt-2 border-t border-slate-200">
+          <button
+            onClick={onClose}
+            className="px-5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+          >
+            Concluir Auditoria
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* MODAL: DEFINIR OU AJUSTAR VERBA ORÇAMENTÁRIA POR DISCIPLINA               */
+/* ========================================================================= */
+
+function ModalNovoOrcamento({
+  obras,
+  obraFiltro,
+  onClose,
+  onSalvar,
+}: {
+  obras: Obra[];
+  obraFiltro: string;
+  onClose: () => void;
+  onSalvar: (item: ItemOrcamentoObra) => void;
+}) {
+  const [obraId, setObraId] = useState(
+    obraFiltro !== "ALL" ? obraFiltro : obras[0]?.id || "obra-1"
+  );
+  const [categoria, setCategoria] = useState<string>(CATEGORIAS_CONSTRUCAO[0]);
+  const [valorOrcado, setValorOrcado] = useState(250000);
+  const [observacao, setObservacao] = useState("Verba executiva aprovada pelo planejamento de engenharia");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (valorOrcado <= 0) return;
+
+    const novoItem: ItemOrcamentoObra = {
+      id: `orc-${obraId}-${Date.now()}`,
+      obraId,
+      categoria,
+      valorOrcado: Number(valorOrcado),
+      observacao: observacao.trim(),
+    };
+
+    onSalvar(novoItem);
+  };
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-xl border border-slate-200 max-w-md w-full p-6 shadow-xl space-y-4 text-sm"
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">
+              Definir Verba Orçamentária
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Estabeleça o teto de gastos por disciplina e empreendimento
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Empreendimento Destino *
+            </label>
+            <select
+              value={obraId}
+              onChange={(e) => setObraId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-medium"
+            >
+              {obras.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.nome} ({o.sigla})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Disciplina / Categoria de Suprimentos *
+            </label>
+            <select
+              value={categoria}
+              onChange={(e) => setCategoria(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-medium"
+            >
+              {CATEGORIAS_CONSTRUCAO.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Valor Teto Orçado (R$) *
+            </label>
+            <input
+              type="number"
+              required
+              step="1000"
+              min="1000"
+              value={valorOrcado}
+              onChange={(e) => setValorOrcado(Number(e.target.value) || 0)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-bold text-slate-900 tabular-nums"
+            />
+            <div className="text-[11px] text-slate-500 mt-1">
+              Equivalente: {formatBRL(valorOrcado)}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Observação / Origem do Orçamento
+            </label>
+            <input
+              type="text"
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+              placeholder="Ex: Verba aprovada em planejamento executivo"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-800"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="px-5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-xs"
+          >
+            Salvar Verba Orçamentária
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* MODAIS DE ESTOQUE, ALMOXARIFADO, PUXADAS E COMPRAS EM LOTE                */
+/* ========================================================================= */
+
+function ModalMovimentacaoEstoque({
+  estoque,
+  obras,
+  usuarioLogado,
+  onClose,
+  onSalvar,
+}: {
+  estoque: ItemEstoque[];
+  obras: Obra[];
+  usuarioLogado: UsuarioSistema;
+  onClose: () => void;
+  onSalvar: (mov: MovimentacaoEstoque) => void;
+}) {
+  const [itemId, setItemId] = useState<string>(estoque[0]?.id || "");
+  const [tipo, setTipo] = useState<TipoMovimentacaoEstoque>("SAIDA_APLICACAO");
+  const [quantidade, setQuantidade] = useState<number>(10);
+  const [obraDestinoId, setObraDestinoId] = useState<string>(
+    obras[1]?.id || "obra-2"
+  );
+  const [responsavel, setResponsavel] = useState<string>(
+    usuarioLogado.nome || "Almoxarife"
+  );
+  const [numeroDocumento, setNumeroDocumento] = useState<string>("REQ-APLIC-101");
+  const [motivoEtapa, setMotivoEtapa] = useState<string>(
+    "Armação estrutural das vigas e lajes"
+  );
+
+  const itemSelecionado = estoque.find((it) => it.id === itemId) || estoque[0];
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!itemSelecionado) return;
+
+    const saldoAnterior = itemSelecionado.saldoAtual;
+    let saldoPosterior = saldoAnterior;
+
+    if (tipo === "ENTRADA_COMPRA") {
+      saldoPosterior = saldoAnterior + quantidade;
+    } else if (
+      tipo === "SAIDA_APLICACAO" ||
+      tipo === "PERDA_AVARIA" ||
+      tipo === "TRANSFERENCIA_OBRA"
+    ) {
+      saldoPosterior = Math.max(0, saldoAnterior - quantidade);
+    } else if (tipo === "AJUSTE_INVENTARIO") {
+      saldoPosterior = quantidade;
+    }
+
+    const obraDestinoObj = obras.find((o) => o.id === obraDestinoId);
+    const dataHora = `${new Date().toLocaleDateString(
+      "pt-BR"
+    )} às ${new Date().toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`;
+
+    const novaMov: MovimentacaoEstoque = {
+      id: `mov-${Date.now()}`,
+      itemId: itemSelecionado.id,
+      codigoInsumo: itemSelecionado.codigo,
+      descricaoInsumo: itemSelecionado.descricao,
+      unidade: itemSelecionado.unidade,
+      tipo,
+      quantidade,
+      saldoAnterior,
+      saldoPosterior,
+      custoUnitario: itemSelecionado.custoMedio,
+      valorTotal: quantidade * itemSelecionado.custoMedio,
+      dataHora,
+      responsavel,
+      obraOrigemId: itemSelecionado.obraId,
+      obraOrigemNome: itemSelecionado.obraNome,
+      obraDestinoId: tipo === "TRANSFERENCIA_OBRA" ? obraDestinoId : undefined,
+      obraDestinoNome:
+        tipo === "TRANSFERENCIA_OBRA"
+          ? obraDestinoObj?.nome || "Canteiro Destino"
+          : undefined,
+      numeroDocumento,
+      motivoEtapa,
+    };
+
+    onSalvar(novaMov);
+  };
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4 text-sm"
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div>
+            <span className="text-xs font-bold text-emerald-700 uppercase">
+              Controle Físico de Almoxarifado
+            </span>
+            <h3 className="text-base font-bold text-slate-900 mt-0.5">
+              Registrar Movimentação de Estoque
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+          >
+            Fechar
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Insumo / Material em Estoque *
+            </label>
+            <select
+              value={itemId}
+              onChange={(e) => setItemId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-medium"
+            >
+              {estoque.map((it) => (
+                <option key={it.id} value={it.id}>
+                  {it.descricao} ({it.obraNome}) — Saldo: {it.saldoAtual}{" "}
+                  {it.unidade}
+                </option>
+              ))}
+            </select>
+            {itemSelecionado && (
+              <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
+                <span>
+                  📍 {itemSelecionado.localizacaoFisica}
+                </span>
+                <span>
+                  Custo Médio: {formatBRL(itemSelecionado.custoMedio)} /{" "}
+                  {itemSelecionado.unidade}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Tipo de Operação *
+              </label>
+              <select
+                value={tipo}
+                onChange={(e) =>
+                  setTipo(e.target.value as TipoMovimentacaoEstoque)
+                }
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-medium"
+              >
+                <option value="SAIDA_APLICACAO">
+                  🔵 Saída para Aplicação na Obra
+                </option>
+                <option value="TRANSFERENCIA_OBRA">
+                  🟣 Transferência entre Canteiros
+                </option>
+                <option value="ENTRADA_COMPRA">🟢 Entrada por Compra</option>
+                <option value="PERDA_AVARIA">
+                  🔴 Perda / Avaria no Canteiro
+                </option>
+                <option value="AJUSTE_INVENTARIO">
+                  ⚪ Ajuste de Inventário Físico
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Quantidade ({itemSelecionado?.unidade || "un"}) *
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                required
+                value={quantidade}
+                onChange={(e) => setQuantidade(Number(e.target.value) || 0)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-bold text-slate-900 tabular-nums"
+              />
+            </div>
+          </div>
+
+          {tipo === "TRANSFERENCIA_OBRA" && (
+            <div className="bg-purple-50 border border-purple-200 p-3 rounded-lg space-y-1">
+              <label className="block text-xs font-bold text-purple-900">
+                Canteiro de Destino (Receberá o Material) *
+              </label>
+              <select
+                value={obraDestinoId}
+                onChange={(e) => setObraDestinoId(e.target.value)}
+                className="w-full bg-white border border-purple-300 rounded-lg px-3 py-1.5 text-slate-900 font-medium text-xs"
+              >
+                {obras
+                  .filter((o) => o.id !== itemSelecionado?.obraId)
+                  .map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.nome} ({o.sigla})
+                    </option>
+                  ))}
+              </select>
+              <p className="text-[11px] text-purple-700">
+                O saldo será debitado de {itemSelecionado?.obraNome} e creditado
+                automaticamente na obra de destino sem gerar nova despesa
+                externa.
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Responsável pelo Registro
+              </label>
+              <input
+                type="text"
+                required
+                value={responsavel}
+                onChange={(e) => setResponsavel(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-800"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Nº Documento / NF / Requisição
+              </label>
+              <input
+                type="text"
+                value={numeroDocumento}
+                onChange={(e) => setNumeroDocumento(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-800"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Motivo / Etapa da Obra / Local de Aplicação
+            </label>
+            <input
+              type="text"
+              required
+              value={motivoEtapa}
+              onChange={(e) => setMotivoEtapa(e.target.value)}
+              placeholder="Ex: Concretagem das vigas e lajes do 8º pavimento"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-800"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="px-5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition shadow-xs"
+          >
+            Confirmar Movimentação Física
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ModalProgramarPuxada({
+  contratos,
+  onClose,
+  onSalvar,
+}: {
+  contratos: ContratoPuxadaFornecimento[];
+  onClose: () => void;
+  onSalvar: (contratoId: string, novaPrg: ProgramacaoPuxada) => void;
+}) {
+  const [contratoId, setContratoId] = useState<string>(
+    contratos[0]?.id || ""
+  );
+  const [dataHora, setDataHora] = useState<string>(() => {
+    const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    return `${d.toLocaleDateString("pt-BR")} 07:30`;
+  });
+  const [quantidade, setQuantidade] = useState<number>(32);
+  const [etapaAplicacao, setEtapaAplicacao] = useState<string>(
+    "Concretagem da Laje e Vigas do 10º Pavimento"
+  );
+  const [responsavelRecebimento, setResponsavelRecebimento] = useState<string>(
+    "Eng. Marcos Viana"
+  );
+  const [observacoes, setObservacoes] = useState<string>(
+    "4 caminhões betoneira de 8m³. Slump 12 +/- 2 com bomba posicionada."
+  );
+
+  const contratoAlvo =
+    contratos.find((c) => c.id === contratoId) || contratos[0];
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!contratoAlvo) return;
+
+    const novaPrg: ProgramacaoPuxada = {
+      id: `prg-${Date.now()}`,
+      contratoId: contratoAlvo.id,
+      dataHoraAgendada: dataHora,
+      quantidade,
+      unidade: contratoAlvo.unidade,
+      status: "Agendada",
+      etapaAplicacao,
+      responsavelRecebimento,
+      observacoes,
+    };
+
+    onSalvar(contratoAlvo.id, novaPrg);
+  };
+
+  const saldoRestante = contratoAlvo
+    ? Math.max(
+        0,
+        contratoAlvo.quantidadeContratada - contratoAlvo.quantidadeEntregue
+      )
+    : 0;
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4 text-sm"
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div>
+            <span className="text-xs font-bold text-indigo-700 uppercase">
+              Fornecimento Contínuo & Usinas
+            </span>
+            <h3 className="text-base font-bold text-slate-900 mt-0.5">
+              Programar Puxada de Concreto / Aço
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+          >
+            Fechar
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Contrato Mãe Homologado *
+            </label>
+            <select
+              value={contratoId}
+              onChange={(e) => setContratoId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-medium"
+            >
+              {contratos.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.numeroContrato} — {c.insumo} ({c.obraNome})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {contratoAlvo && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-xs space-y-1">
+              <div className="flex justify-between text-indigo-950 font-bold">
+                <span>Fornecedor: {contratoAlvo.fornecedorNome}</span>
+                <span>
+                  Saldo na Usina: {saldoRestante} {contratoAlvo.unidade}
+                </span>
+              </div>
+              <div className="text-indigo-800">
+                Já entregue no canteiro: {contratoAlvo.quantidadeEntregue} de{" "}
+                {contratoAlvo.quantidadeContratada} {contratoAlvo.unidade} (
+                {Math.round(
+                  (contratoAlvo.quantidadeEntregue /
+                    contratoAlvo.quantidadeContratada) *
+                    100
+                )}
+                %)
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Data & Horário de Início *
+              </label>
+              <input
+                type="text"
+                required
+                value={dataHora}
+                onChange={(e) => setDataHora(e.target.value)}
+                placeholder="Ex: 22/10/2026 07:30"
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-bold text-slate-900"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Volume da Carga ({contratoAlvo?.unidade || "m³"}) *
+              </label>
+              <input
+                type="number"
+                step="1"
+                min="1"
+                max={saldoRestante > 0 ? saldoRestante : undefined}
+                required
+                value={quantidade}
+                onChange={(e) => setQuantidade(Number(e.target.value) || 0)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-bold text-slate-900 tabular-nums"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Etapa Construtiva / Local de Lançamento *
+            </label>
+            <input
+              type="text"
+              required
+              value={etapaAplicacao}
+              onChange={(e) => setEtapaAplicacao(e.target.value)}
+              placeholder="Ex: Laje e Vigas do 9º Pavimento"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-800"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Responsável pelo Recebimento no Canteiro
+            </label>
+            <input
+              type="text"
+              required
+              value={responsavelRecebimento}
+              onChange={(e) => setResponsavelRecebimento(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-800"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Observações Técnicas / Logística do Portão
+            </label>
+            <input
+              type="text"
+              value={observacoes}
+              onChange={(e) => setObservacoes(e.target.value)}
+              placeholder="Ex: Bomba lança 36m, agendamento de 4 betoneiras"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-800"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="px-5 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold transition shadow-xs"
+          >
+            Confirmar e Agendar Puxada
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ModalFichaKardex({
+  item,
+  movimentacoes,
+  onClose,
+  onRepor,
+}: {
+  item: ItemEstoque;
+  movimentacoes: MovimentacaoEstoque[];
+  onClose: () => void;
+  onRepor: () => void;
+}) {
+  const critico = item.saldoAtual <= item.estoqueMinimo;
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl border border-slate-200 max-w-4xl w-full p-6 shadow-xl space-y-4 max-h-[90vh] flex flex-col">
+        <div className="flex items-start justify-between border-b border-slate-200 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded bg-slate-900 text-white font-mono text-xs font-bold">
+                {item.codigo}
+              </span>
+              <span className="text-xs text-slate-500">{item.categoria}</span>
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 mt-1">
+              Ficha Kardex: {item.descricao}
+            </h3>
+            <p className="text-xs text-slate-500">
+              Canteiro: <strong>{item.obraNome}</strong> • Localização:{" "}
+              <strong>{item.localizacaoFisica}</strong>
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+          >
+            ✕ Fechar
+          </button>
+        </div>
+
+        {/* 4 Cards de Resumo do Kardex */}
+        <div className="grid grid-cols-4 gap-3">
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+            <div className="text-[11px] font-bold text-slate-500 uppercase">
+              SALDO ATUAL
+            </div>
+            <div className="text-xl font-bold text-slate-900 tabular-nums mt-0.5">
+              {item.saldoAtual} {item.unidade}
+            </div>
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+            <div className="text-[11px] font-bold text-slate-500 uppercase">
+              CUSTO MÉDIO PONDERADO
+            </div>
+            <div className="text-xl font-bold text-slate-900 tabular-nums mt-0.5">
+              {formatBRL(item.custoMedio)}
+            </div>
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+            <div className="text-[11px] font-bold text-slate-500 uppercase">
+              VALOR EM ESTOQUE
+            </div>
+            <div className="text-xl font-bold text-emerald-700 tabular-nums mt-0.5">
+              {formatBRL(item.saldoAtual * item.custoMedio)}
+            </div>
+          </div>
+          <div
+            className={`border rounded-lg p-3 ${
+              critico
+                ? "bg-red-50 border-red-200"
+                : "bg-slate-50 border-slate-200"
+            }`}
+          >
+            <div
+              className={`text-[11px] font-bold uppercase ${
+                critico ? "text-red-700" : "text-slate-500"
+              }`}
+            >
+              ESTOQUE MÍNIMO / REPOR
+            </div>
+            <div
+              className={`text-xl font-bold tabular-nums mt-0.5 ${
+                critico ? "text-red-700" : "text-slate-900"
+              }`}
+            >
+              {item.estoqueMinimo} / {item.pontoReposicao} {item.unidade}
+            </div>
+          </div>
+        </div>
+
+        {/* Tabela do Livro Razão Kardex */}
+        <div className="overflow-y-auto flex-1 rounded-lg border border-slate-200">
+          <table className="w-full text-xs text-left border-collapse">
+            <thead className="sticky top-0 bg-slate-100 border-b border-slate-200 text-slate-700 uppercase font-semibold">
+              <tr>
+                <th className="py-2.5 px-3">Data / Hora</th>
+                <th className="py-2.5 px-3">Tipo de Operação</th>
+                <th className="py-2.5 px-3">Documento / Responsável</th>
+                <th className="py-2.5 px-3 text-right">Qtd Movimentada</th>
+                <th className="py-2.5 px-3 text-right">Saldo Resultante</th>
+                <th className="py-2.5 px-3 text-right">Valor Movimentado</th>
+                <th className="py-2.5 px-3">Motivo / Aplicação</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {movimentacoes.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-6 text-center text-slate-400">
+                    Nenhuma movimentação registrada para este insumo.
+                  </td>
+                </tr>
+              ) : (
+                movimentacoes.map((mov) => {
+                  const ehEntrada = mov.tipo === "ENTRADA_COMPRA";
+                  return (
+                    <tr key={mov.id} className="hover:bg-slate-50">
+                      <td className="py-2.5 px-3 font-semibold text-slate-800 whitespace-nowrap">
+                        {mov.dataHora}
+                      </td>
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                            ehEntrada
+                              ? "bg-emerald-100 text-emerald-800"
+                              : mov.tipo === "TRANSFERENCIA_OBRA"
+                              ? "bg-purple-100 text-purple-800"
+                              : mov.tipo === "PERDA_AVARIA"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-blue-100 text-blue-800"
+                          }`}
+                        >
+                          {mov.tipo}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="font-semibold text-slate-800">
+                          {mov.responsavel}
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          {mov.numeroDocumento || "—"}
+                        </div>
+                      </td>
+                      <td
+                        className={`py-2.5 px-3 text-right font-bold tabular-nums whitespace-nowrap ${
+                          ehEntrada ? "text-emerald-700" : "text-slate-800"
+                        }`}
+                      >
+                        {ehEntrada ? "+" : "-"}
+                        {mov.quantidade} {mov.unidade}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold text-slate-900 tabular-nums whitespace-nowrap">
+                        {mov.saldoPosterior} {mov.unidade}
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-slate-700 tabular-nums whitespace-nowrap">
+                        {formatBRL(mov.valorTotal)}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 max-w-xs truncate">
+                        {mov.motivoEtapa || "—"}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex justify-between items-center pt-3 border-t border-slate-200">
+          <div className="text-xs text-slate-500">
+            Fornecedor Homologado Habitual:{" "}
+            <strong>
+              {item.fornecedorHabitual || "Gerdau / Votorantim"}
+            </strong>
+          </div>
+          <div className="flex items-center gap-2">
+            {critico && (
+              <button
+                type="button"
+                onClick={onRepor}
+                className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+              >
+                <span>⚡ Gerar Solicitação de Reposição</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold"
+            >
+              🖨️ Imprimir Kardex
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModalAgruparDemandas({
+  demandas,
+  onClose,
+  onCriarLote,
+}: {
+  demandas: Array<{
+    descricao: string;
+    unidade: string;
+    totalQtd: number;
+    obrasParticipantes: string[];
+    orcamentoUnitario: number;
+    categoria: string;
+  }>;
+  onClose: () => void;
+  onCriarLote: (dem: any) => void;
+}) {
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl border border-slate-200 max-w-3xl w-full p-6 shadow-xl space-y-4 max-h-[90vh] flex flex-col">
+        <div className="flex items-start justify-between border-b border-slate-200 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-lg">⚡</span>
+              <span className="text-xs font-bold text-emerald-700 uppercase">
+                Centralizador Corporativo Multi-Obra
+              </span>
+            </div>
+            <h3 className="text-base font-bold text-slate-900 mt-0.5">
+              Oportunidades de Compra em Lote & Ganho de Escala
+            </h3>
+            <p className="text-xs text-slate-500">
+              Unifique requisições de diferentes empreendimentos para negociar preços de atacado e frete compartilhado.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+          >
+            ✕ Fechar
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 space-y-3">
+          {demandas.length === 0 ? (
+            <div className="py-12 text-center text-slate-500 text-sm">
+              Nenhuma oportunidade de agrupamento detectada no momento.
+            </div>
+          ) : (
+            demandas.map((dem, idx) => {
+              const valorIndividual = dem.totalQtd * dem.orcamentoUnitario;
+              const savingEstimado = valorIndividual * 0.12;
+              const valorLote = valorIndividual - savingEstimado;
+
+              return (
+                <div
+                  key={idx}
+                  className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-slate-900 text-sm">
+                        {dem.descricao}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Categoria: {dem.categoria} • Volume Total:{" "}
+                        <strong className="text-slate-800">
+                          {dem.totalQtd} {dem.unidade}
+                        </strong>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => onCriarLote(dem)}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-1 shadow-xs"
+                    >
+                      ⚡ Unificar em Cotação Corporativa
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 items-center text-xs">
+                    <span className="text-slate-500">Canteiros:</span>
+                    {dem.obrasParticipantes.map((obraNome, oIdx) => (
+                      <span
+                        key={oIdx}
+                        className="px-2 py-0.5 bg-white border border-slate-200 rounded text-slate-700 font-medium"
+                      >
+                        🏗️ {obraNome}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 bg-white p-2.5 rounded border border-slate-200 text-xs text-center">
+                    <div>
+                      <div className="text-slate-500">Orçamento Unitário</div>
+                      <div className="font-bold text-slate-900 mt-0.5">
+                        {formatBRL(dem.orcamentoUnitario)} / {dem.unidade}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500">Valor em Carga Fechada</div>
+                      <div className="font-bold text-slate-900 mt-0.5">
+                        {formatBRL(valorLote)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-emerald-700 font-bold">Saving Estimado</div>
+                      <div className="font-bold text-emerald-700 mt-0.5">
+                        {formatBRL(savingEstimado)} (-12%)
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="flex justify-end pt-3 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+

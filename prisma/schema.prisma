@@ -1,0 +1,161 @@
+// Prisma Schema - JC BAUER Procurement B2B (PostgreSQL / Supabase / SQLite compatible)
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id               String            @id @default(uuid())
+  nome             String
+  codigo_sigla     String            @unique
+  endereco         String
+  responsavel_obra String
+  status           String            // "ativo" | "concluido"
+  orcamento_meta   Float             @default(0)
+  purchaseRequests PurchaseRequest[]
+  createdAt        DateTime          @default(now())
+
+  @@map("projects")
+}
+
+model ItemCatalog {
+  id               String        @id @default(uuid())
+  codigo_insumo    String        @unique
+  descricao        String
+  categoria        String        // Estrutural, Hidráulico, Elétrico, Acabamento, EPI/Ferramentas, Locação
+  unidade_medida   String        // m³, kg, barra, sc, un, vb, m, l, rl
+  preco_referencia Float         @default(0) // Preço SINAPI / Orçamento base
+  requestItems     RequestItem[]
+
+  @@map("items_catalog")
+}
+
+model Vendor {
+  id                          String          @id @default(uuid())
+  razao_social                String
+  nome_fantasia               String
+  cnpj                        String          @unique
+  inscricao_estadual          String
+  cidade_uf                   String
+  categorias_atendidas        String[]
+  status_homologacao          String          // "Em Análise" | "Homologado" | "Bloqueado"
+  score_avaliacao             Float           @default(4.5)
+  condicoes_pagamento_padrao  String
+  contacts                    VendorContact[]
+  quotations                  Quotation[]
+  purchaseOrders              PurchaseOrder[]
+
+  @@map("vendors")
+}
+
+model VendorContact {
+  id               String      @id @default(uuid())
+  vendor_id        String
+  vendor           Vendor      @relation(fields: [vendor_id], references: [id], onDelete: Cascade)
+  nome_vendedor    String
+  cargo            String
+  whatsapp         String
+  telefone         String
+  email            String
+  chave_pix        String
+  notas_negociacao String
+  quotations       Quotation[]
+
+  @@map("vendor_contacts")
+}
+
+model PurchaseRequest {
+  id                  String          @id @default(uuid())
+  numero_sc           String          @unique
+  project_id          String
+  project             Project         @relation(fields: [project_id], references: [id])
+  solicitante         String
+  data_abertura       String
+  data_limite_entrega String
+  prioridade          String          // "Normal" | "Alta" | "Crítica (Obra Parando)"
+  status              String          // "Rascunho" | "Em Cotação" | "Aguardando Aprovação" | "Aprovada" | "Recusada" | "Comprada"
+  observacoes         String
+  items               RequestItem[]
+  quotations          Quotation[]
+  purchaseOrders      PurchaseOrder[]
+
+  @@map("purchase_requests")
+}
+
+model RequestItem {
+  id                 String          @id @default(uuid())
+  sc_id              String
+  purchaseRequest    PurchaseRequest @relation(fields: [sc_id], references: [id], onDelete: Cascade)
+  item_catalog_id    String
+  itemCatalog        ItemCatalog     @relation(fields: [item_catalog_id], references: [id])
+  descricao          String
+  codigo_insumo      String
+  categoria          String
+  quantidade         Float
+  unidade            String
+  preco_orcado_unit  Float
+  observacao_tecnica String
+  quotationItems     QuotationItem[]
+
+  @@map("request_items")
+}
+
+model Quotation {
+  id                  String          @id @default(uuid())
+  sc_id               String
+  purchaseRequest     PurchaseRequest @relation(fields: [sc_id], references: [id], onDelete: Cascade)
+  vendor_id           String
+  vendor              Vendor          @relation(fields: [vendor_id], references: [id])
+  vendor_contact_id   String
+  vendorContact       VendorContact   @relation(fields: [vendor_contact_id], references: [id])
+  data_envio          String
+  data_retorno        String
+  prazo_entrega_dias  Int
+  condicao_pagamento  String
+  tipo_frete          String          // "CIF" | "FOB"
+  valor_frete         Float
+  desconto_global     Float           @default(0)
+  status              String          // "Em preenchimento" | "Equalizada" | "Vencedora" | "Desclassificada"
+  items               QuotationItem[]
+  purchaseOrders      PurchaseOrder[]
+
+  @@map("quotations")
+}
+
+model QuotationItem {
+  id                String      @id @default(uuid())
+  quotation_id      String
+  quotation         Quotation   @relation(fields: [quotation_id], references: [id], onDelete: Cascade)
+  request_item_id   String
+  requestItem       RequestItem @relation(fields: [request_item_id], references: [id], onDelete: Cascade)
+  preco_unitario    Float
+  aliquota_ipi_icms Float       // %
+  valor_total_item  Float
+  marca_oferecida   String
+  prazo_item_dias   Int
+
+  @@map("quotation_items")
+}
+
+model PurchaseOrder {
+  id                     String          @id @default(uuid())
+  numero_oc              String          @unique
+  sc_id                  String
+  purchaseRequest        PurchaseRequest @relation(fields: [sc_id], references: [id])
+  quotation_id           String
+  quotation              Quotation       @relation(fields: [quotation_id], references: [id])
+  vendor_id              String
+  vendor                 Vendor          @relation(fields: [vendor_id], references: [id])
+  valor_total            Float
+  valor_saving_calculado Float
+  condicao_fechada       String
+  previsao_entrega       String
+  status                 String          // "Emitida" | "Aguardando Entrega" | "Parcialmente Entregue" | "Finalizada" | "Cancelada"
+  historico_auditoria    Json
+
+  @@map("purchase_orders")
+}
