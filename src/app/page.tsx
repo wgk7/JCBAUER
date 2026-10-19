@@ -98,6 +98,7 @@ const DEFAULT_SETTINGS: UserSettings = {
 const SETTINGS_STORAGE_KEY = "jc_bauer_user_settings_v3";
 const USERS_STORAGE_KEY = "jc_bauer_users_v3";
 const SESSION_STORAGE_KEY = "jc_bauer_current_user_v3";
+const OBRAS_STORAGE_KEY = "jc_bauer_obras_v3";
 const SOLICITACOES_STORAGE_KEY = "jc_bauer_solicitacoes_v3";
 const ORDENS_STORAGE_KEY = "jc_bauer_ordens_v3";
 const CONTRATOS_STORAGE_KEY = "jc_bauer_contratos_v3";
@@ -507,29 +508,7 @@ function formatBRL(valor: number): string {
 /* DADOS INICIAIS REALISTAS DE CONSTRUTORA                                   */
 /* ========================================================================= */
 
-const OBRAS_INICIAIS: Obra[] = [
-  {
-    id: "obra-1",
-    nome: "Residencial Horizon Tower",
-    sigla: "RHT-01",
-    endereco: "Av. Atlântica, 2450 — Balneário Camboriú / SC",
-    engenheiro: "A Definir",
-  },
-  {
-    id: "obra-2",
-    nome: "Edifício Comercial Atrium Bauer",
-    sigla: "EAB-02",
-    endereco: "Rua XV de Novembro, 1120 — Joinville / SC",
-    engenheiro: "A Definir",
-  },
-  {
-    id: "obra-3",
-    nome: "Condomínio Logístico SulPark",
-    sigla: "CLS-03",
-    endereco: "Rod. BR-101, Km 118 — Itajaí / SC",
-    engenheiro: "A Definir",
-  },
-];
+const OBRAS_INICIAIS: Obra[] = [];
 
 const ECONOMIA_INSUMOS_HISTORICO: ItemEconomiaInsumo[] = [];
 
@@ -1151,7 +1130,8 @@ export default function HomePage() {
     useState<UserSettings>(DEFAULT_SETTINGS);
 
   // Estados Principais (Persistidos no localStorage para sincronizar Obra <-> Admin)
-  const [obras] = useState<Obra[]>(OBRAS_INICIAIS);
+  const [obras, setObras] = useState<Obra[]>(OBRAS_INICIAIS);
+  const [showModalNovaObra, setShowModalNovaObra] = useState<boolean>(false);
   const [solicitacoes, setSolicitacoes] =
     useState<SolicitacaoCompra[]>(SOLICITACOES_INICIAIS);
   const [fornecedores, setFornecedores] =
@@ -1220,6 +1200,8 @@ export default function HomePage() {
         "jc_bauer_diarios_v2",
         "jc_bauer_fornecedores",
         "jc_bauer_fornecedores_v2",
+        "jc_bauer_obras",
+        "jc_bauer_obras_v2",
       ];
       OLD_STORAGE_KEYS.forEach((k) => {
         try {
@@ -1255,6 +1237,26 @@ export default function HomePage() {
         if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
           usuariosEfetivos = parsedUsers;
           setUsuarios(parsedUsers);
+        }
+      }
+
+      const DEMO_OBRA_IDS = new Set(["obra-1", "obra-2", "obra-3"]);
+      const isDemoObra = (o?: { id?: string; nome?: string } | null) =>
+        !o ||
+        DEMO_OBRA_IDS.has(o.id || "") ||
+        o.nome === "Residencial Horizon Tower" ||
+        o.nome === "Edifício Comercial Atrium Bauer" ||
+        o.nome === "Condomínio Logístico SulPark";
+
+      const savedObras = window.localStorage.getItem(OBRAS_STORAGE_KEY);
+      if (savedObras) {
+        try {
+          const parsedObras = (JSON.parse(savedObras) as Obra[]).filter((o) => !isDemoObra(o));
+          if (Array.isArray(parsedObras)) {
+            setObras(parsedObras);
+          }
+        } catch {
+          // ignore
         }
       }
 
@@ -1372,6 +1374,15 @@ export default function HomePage() {
       // ignore
     }
   }, [usuarios, storageCarregado]);
+
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      window.localStorage.setItem(OBRAS_STORAGE_KEY, JSON.stringify(obras));
+    } catch {
+      // ignore
+    }
+  }, [obras, storageCarregado]);
 
   useEffect(() => {
     if (!storageCarregado) return;
@@ -1748,6 +1759,7 @@ export default function HomePage() {
     try {
       const allKeys = [
         USERS_STORAGE_KEY,
+        OBRAS_STORAGE_KEY,
         SOLICITACOES_STORAGE_KEY,
         ORDENS_STORAGE_KEY,
         CONTRATOS_STORAGE_KEY,
@@ -1759,6 +1771,8 @@ export default function HomePage() {
         FORNECEDORES_STORAGE_KEY,
         "jc_bauer_users",
         "jc_bauer_users_v2",
+        "jc_bauer_obras",
+        "jc_bauer_obras_v2",
         "jc_bauer_solicitacoes",
         "jc_bauer_ordens",
         "jc_bauer_contratos",
@@ -1781,6 +1795,7 @@ export default function HomePage() {
     }
 
     setUsuarios(USUARIOS_INICIAIS);
+    setObras([]);
     setSolicitacoes([]);
     setOrdens([]);
     setContratos([]);
@@ -1822,7 +1837,16 @@ export default function HomePage() {
   }, [solicitacoes, selectedScId]);
 
   const obraScAtiva = useMemo(() => {
-    return (scAtiva && obras.find((o) => o.id === scAtiva.obraId)) || obras[0];
+    return (
+      (scAtiva && obras.find((o) => o.id === scAtiva.obraId)) ||
+      obras[0] || {
+        id: "obra-geral",
+        nome: "Todas as Obras / Canteiro Geral",
+        sigla: "GERAL",
+        endereco: "Sede JC Bauer",
+        engenheiro: "A Definir",
+      }
+    );
   }, [obras, scAtiva]);
 
   // Cálculo do Orçamento de Referência da SC ativa
@@ -3019,6 +3043,23 @@ export default function HomePage() {
     setErroLogin(null);
   };
 
+  const handleSalvarNovaObra = (novaObra: Obra) => {
+    setObras((prev) => [...prev, novaObra]);
+    dispararAviso(`Empreendimento "${novaObra.nome}" cadastrado com sucesso!`);
+  };
+
+  const handleExcluirObra = (obraId: string, obraNome: string) => {
+    const confirmou = window.confirm(
+      `Deseja realmente excluir o canteiro "${obraNome}"?\n\nEsta ação removerá a obra da visualização de compras.`
+    );
+    if (!confirmou) return;
+    setObras((prev) => prev.filter((o) => o.id !== obraId));
+    if (obraFiltro === obraId) {
+      setObraFiltro("ALL");
+    }
+    dispararAviso(`Obra "${obraNome}" removida com sucesso.`);
+  };
+
   const handleCriarPedidoCanteiro = (novaSc: SolicitacaoCompra) => {
     setSolicitacoes((prev) => [novaSc, ...prev]);
     setSelectedScId(novaSc.id);
@@ -4073,7 +4114,7 @@ export default function HomePage() {
                         : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                     }`}
                   >
-                    Visão Geral Consolidada (Todas as Obras)
+                    Visão Geral Consolidada ({obras.length === 0 ? "0 Obras" : "Todas as Obras"})
                   </button>
                   {obras.map((ob) => (
                     <button
@@ -4088,6 +4129,15 @@ export default function HomePage() {
                       {ob.nome}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => setShowModalNovaObra(true)}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 transition flex items-center gap-1 shadow-xs"
+                    title="Cadastrar novo canteiro ou obra"
+                  >
+                    <span>+</span>
+                    <span>Nova Obra</span>
+                  </button>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -4121,167 +4171,211 @@ export default function HomePage() {
                       Acompanhamento ao vivo do preenchimento do Diário de Obra (RDO), confirmações de recebimento de materiais com NF e baixas de estoque por Engenheiros, Almoxarifes e Encarregados.
                     </p>
                   </div>
-                  <div className="text-xs text-slate-500 font-medium bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex items-center gap-2 shrink-0">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                    Hoje: {new Date().toLocaleDateString("pt-BR")}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowModalNovaObra(true)}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                    >
+                      <span>+</span>
+                      <span>Cadastrar Nova Obra</span>
+                    </button>
+                    <div className="text-xs text-slate-500 font-medium bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex items-center gap-2 shrink-0">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                      Hoje: {new Date().toLocaleDateString("pt-BR")}
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {obras
-                    .filter((ob) => obraFiltro === "ALL" || ob.id === obraFiltro)
-                    .map((ob) => {
-                      const dataHoje = new Date().toLocaleDateString("pt-BR");
-                      const diariosObraEspecifica = diariosObra.filter((d) => d.obraId === ob.id);
-                      const ultimoDiario = diariosObraEspecifica[0]; // mais recente
-                      const diarioHojePreenchido = diariosObraEspecifica.some((d) => d.data === dataHoje);
+                {obras.length === 0 ? (
+                  <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-8 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center mx-auto text-xl">
+                      🏗️
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">
+                        Nenhum empreendimento ou canteiro cadastrado
+                      </h3>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                        Todos os empreendimentos de demonstração foram removidos. Cadastre os empreendimentos oficiais da JC Bauer para iniciar o controle operacional e suprimentos.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowModalNovaObra(true)}
+                      className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition inline-flex items-center gap-1.5 shadow-xs"
+                    >
+                      <span>+</span>
+                      <span>Cadastrar Primeiro Empreendimento</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {obras
+                      .filter((ob) => obraFiltro === "ALL" || ob.id === obraFiltro)
+                      .map((ob) => {
+                        const dataHoje = new Date().toLocaleDateString("pt-BR");
+                        const diariosObraEspecifica = diariosObra.filter((d) => d.obraId === ob.id);
+                        const ultimoDiario = diariosObraEspecifica[0]; // mais recente
+                        const diarioHojePreenchido = diariosObraEspecifica.some((d) => d.data === dataHoje);
 
-                      // OCs pendentes de confirmação física na obra
-                      const ocsPendentesRecebimento = ordens.filter(
-                        (o) =>
-                          o.obraId === ob.id &&
-                          (o.status === "Emitida" ||
-                            o.status === "Aguardando Entrega")
-                      );
+                        // OCs pendentes de confirmação física na obra
+                        const ocsPendentesRecebimento = ordens.filter(
+                          (o) =>
+                            o.obraId === ob.id &&
+                            (o.status === "Emitida" ||
+                              o.status === "Aguardando Entrega")
+                        );
 
-                      // Itens em estoque na obra
-                      const itensEstoqueObra = estoque.filter((it) => it.obraId === ob.id);
-                      const itensAbaixoMinimo = itensEstoqueObra.filter((it) => it.saldoAtual <= it.estoqueMinimo);
+                        // Itens em estoque na obra
+                        const itensEstoqueObra = estoque.filter((it) => it.obraId === ob.id);
+                        const itensAbaixoMinimo = itensEstoqueObra.filter((it) => it.saldoAtual <= it.estoqueMinimo);
 
-                      return (
-                        <div
-                          key={ob.id}
-                          className={`rounded-lg border p-4 transition flex flex-col justify-between ${
-                            diarioHojePreenchido
-                              ? "border-emerald-200 bg-emerald-50/40"
-                              : "border-amber-300 bg-amber-50/40"
-                          }`}
-                        >
-                          <div className="space-y-3">
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <h3 className="font-bold text-sm text-slate-900">
-                                  {ob.nome}
-                                </h3>
-                                <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                                  <span>👤 Eng. Responsável:</span>
-                                  <span className="font-medium text-slate-700">{ob.engenheiro || "A Definir"}</span>
+                        return (
+                          <div
+                            key={ob.id}
+                            className={`rounded-lg border p-4 transition flex flex-col justify-between ${
+                              diarioHojePreenchido
+                                ? "border-emerald-200 bg-emerald-50/40"
+                                : "border-amber-300 bg-amber-50/40"
+                            }`}
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <h3 className="font-bold text-sm text-slate-900">
+                                    {ob.nome}
+                                  </h3>
+                                  <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                    <span>👤 Eng. Responsável:</span>
+                                    <span className="font-medium text-slate-700">{ob.engenheiro || "A Definir"}</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[11px] font-bold shrink-0 ${
+                                      diarioHojePreenchido
+                                        ? "bg-emerald-600 text-white"
+                                        : "bg-amber-500 text-white animate-pulse"
+                                    }`}
+                                  >
+                                    {diarioHojePreenchido ? "🟢 Em Dia Hoje" : "🟡 Pendente Hoje"}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleExcluirObra(ob.id, ob.nome)}
+                                    title="Excluir este canteiro"
+                                    className="text-slate-400 hover:text-red-600 text-xs p-1 transition rounded hover:bg-slate-100"
+                                  >
+                                    ✕
+                                  </button>
                                 </div>
                               </div>
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-[11px] font-bold shrink-0 ${
-                                  diarioHojePreenchido
-                                    ? "bg-emerald-600 text-white"
-                                    : "bg-amber-500 text-white animate-pulse"
-                                }`}
+
+                              {/* Detalhes do Último Diário (RDO) */}
+                              <div className="bg-white/80 rounded-lg p-2.5 border border-slate-200/80 text-xs space-y-1.5">
+                                {ultimoDiario ? (
+                                  <>
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-slate-500 font-medium">Último RDO:</span>
+                                      <span className="font-bold text-slate-800">
+                                        {ultimoDiario.data} às {ultimoDiario.hora}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-slate-500">Registrado por:</span>
+                                      <span className="font-medium text-slate-800">
+                                        {ultimoDiario.responsavelNome} ({ultimoDiario.responsavelCargo})
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-slate-500">Efetivo de Campo:</span>
+                                      <span className="font-semibold text-emerald-800 text-xs">
+                                        {ultimoDiario.efetivoProprio + ultimoDiario.efetivoTerceirizado} trab. ({ultimoDiario.efetivoProprio} própr. / {ultimoDiario.efetivoTerceirizado} terc.)
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-slate-500">Clima:</span>
+                                      <span className="font-medium text-slate-700">
+                                        ☀️ {ultimoDiario.clima}
+                                      </span>
+                                    </div>
+                                    <div className="pt-1 border-t border-slate-100">
+                                      <span className="text-[11px] text-slate-500 block">Frentes ativas:</span>
+                                      <span className="text-[11px] text-slate-700 font-medium line-clamp-2">
+                                        {ultimoDiario.frentesServico}
+                                      </span>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="text-slate-500 italic py-1 text-center">
+                                    Nenhum diário registrado ainda para este canteiro.
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Resumo Operacional de Materiais & Entregas */}
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div className="bg-white/80 rounded p-2 border border-slate-200">
+                                  <span className="text-[10px] text-slate-500 block font-semibold">
+                                    Entregas a Conferir
+                                  </span>
+                                  <span
+                                    className={`text-sm font-bold ${
+                                      ocsPendentesRecebimento.length > 0
+                                        ? "text-amber-700"
+                                        : "text-emerald-700"
+                                    }`}
+                                  >
+                                    {ocsPendentesRecebimento.length}{" "}
+                                    {ocsPendentesRecebimento.length === 1 ? "carga" : "cargas"}
+                                  </span>
+                                </div>
+                                <div className="bg-white/80 rounded p-2 border border-slate-200">
+                                  <span className="text-[10px] text-slate-500 block font-semibold">
+                                    Itens Almoxarifado
+                                  </span>
+                                  <span className="text-sm font-bold text-slate-800">
+                                    {itensEstoqueObra.length} insumos
+                                    {itensAbaixoMinimo.length > 0 && (
+                                      <span className="text-[10px] text-red-600 block font-normal">
+                                        ({itensAbaixoMinimo.length} sob alerta mín.)
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="pt-3 mt-3 border-t border-slate-200/60 flex items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setObraFiltro(ob.id);
+                                  setSubAbaEstoque("movimentacoes");
+                                  setActiveTab("Estoque");
+                                }}
+                                className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 hover:underline"
                               >
-                                {diarioHojePreenchido ? "🟢 Em Dia Hoje" : "🟡 Pendente Hoje"}
-                              </span>
-                            </div>
-
-                            {/* Detalhes do Último Diário (RDO) */}
-                            <div className="bg-white/80 rounded-lg p-2.5 border border-slate-200/80 text-xs space-y-1.5">
-                              {ultimoDiario ? (
-                                <>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500 font-medium">Último RDO:</span>
-                                    <span className="font-bold text-slate-800">
-                                      {ultimoDiario.data} às {ultimoDiario.hora}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">Registrado por:</span>
-                                    <span className="font-medium text-slate-800">
-                                      {ultimoDiario.responsavelNome} ({ultimoDiario.responsavelCargo})
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">Efetivo de Campo:</span>
-                                    <span className="font-semibold text-emerald-800 text-xs">
-                                      {ultimoDiario.efetivoProprio + ultimoDiario.efetivoTerceirizado} trab. ({ultimoDiario.efetivoProprio} própr. / {ultimoDiario.efetivoTerceirizado} terc.)
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">Clima:</span>
-                                    <span className="font-medium text-slate-700">
-                                      ☀️ {ultimoDiario.clima}
-                                    </span>
-                                  </div>
-                                  <div className="pt-1 border-t border-slate-100">
-                                    <span className="text-[11px] text-slate-500 block">Frentes ativas:</span>
-                                    <span className="text-[11px] text-slate-700 font-medium line-clamp-2">
-                                      {ultimoDiario.frentesServico}
-                                    </span>
-                                  </div>
-                                </>
-                              ) : (
-                                <div className="text-slate-500 italic py-1 text-center">
-                                  Nenhum diário registrado ainda para este canteiro.
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Resumo Operacional de Materiais & Entregas */}
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div className="bg-white/80 rounded p-2 border border-slate-200">
-                                <span className="text-[10px] text-slate-500 block font-semibold">
-                                  Entregas a Conferir
-                                </span>
-                                <span
-                                  className={`text-sm font-bold ${
-                                    ocsPendentesRecebimento.length > 0
-                                      ? "text-amber-700"
-                                      : "text-emerald-700"
-                                  }`}
-                                >
-                                  {ocsPendentesRecebimento.length}{" "}
-                                  {ocsPendentesRecebimento.length === 1 ? "carga" : "cargas"}
-                                </span>
-                              </div>
-                              <div className="bg-white/80 rounded p-2 border border-slate-200">
-                                <span className="text-[10px] text-slate-500 block font-semibold">
-                                  Itens Almoxarifado
-                                </span>
-                                <span className="text-sm font-bold text-slate-800">
-                                  {itensEstoqueObra.length} insumos
-                                  {itensAbaixoMinimo.length > 0 && (
-                                    <span className="text-[10px] text-red-600 block font-normal">
-                                      ({itensAbaixoMinimo.length} sob alerta mín.)
-                                    </span>
-                                  )}
-                                </span>
-                              </div>
+                                Ver Almoxarifado ➔
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  dispararAviso(
+                                    `Lembrete operacional emitido via sistema para ${ob.engenheiro && ob.engenheiro !== "A Definir" ? ob.engenheiro : "o canteiro"} da obra ${ob.nome}!`
+                                  );
+                                }}
+                                className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-semibold transition"
+                              >
+                                🔔 Notificar Canteiro
+                              </button>
                             </div>
                           </div>
-
-                          <div className="pt-3 mt-3 border-t border-slate-200/60 flex items-center justify-between gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setObraFiltro(ob.id);
-                                setSubAbaEstoque("movimentacoes");
-                                setActiveTab("Estoque");
-                              }}
-                              className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 hover:underline"
-                            >
-                              Ver Almoxarifado ➔
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                dispararAviso(
-                                  `Lembrete operacional emitido via sistema para ${ob.engenheiro && ob.engenheiro !== "A Definir" ? ob.engenheiro : "o canteiro"} da obra ${ob.nome}!`
-                                );
-                              }}
-                              className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-semibold transition"
-                            >
-                              🔔 Notificar Canteiro
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
+                        );
+                      })}
+                  </div>
+                )}
               </div>
 
 
@@ -8983,6 +9077,14 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* MODAL CADASTRAR NOVO EMPREENDIMENTO / OBRA */}
+      {showModalNovaObra && (
+        <ModalNovaObra
+          onClose={() => setShowModalNovaObra(false)}
+          onSalvar={handleSalvarNovaObra}
+        />
+      )}
+
       {/* MODAL NOVO CONTRATO DE SUBEMPREITADA */}
       {showNovoContratoModal && (
         <ModalNovoContrato
@@ -12077,8 +12179,134 @@ function VisaoRestritaObra({
 }
 
 /* ========================================================================= */
-/* COMPONENTES MODAIS: CONTRATOS, MEDIÇÕES, MENSAGENS E ALÇADA DIRETORIA     */
 /* ========================================================================= */
+/* MODAL DE CADASTRO DE NOVO EMPREENDIMENTO / OBRA                           */
+/* ========================================================================= */
+
+function ModalNovaObra({
+  onClose,
+  onSalvar,
+}: {
+  onClose: () => void;
+  onSalvar: (novaObra: Obra) => void;
+}) {
+  const [nome, setNome] = useState("");
+  const [sigla, setSigla] = useState("");
+  const [endereco, setEndereco] = useState("");
+  const [engenheiro, setEngenheiro] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nome.trim()) return;
+
+    const novaObra: Obra = {
+      id: `obra-${Date.now()}`,
+      nome: nome.trim(),
+      sigla: sigla.trim().toUpperCase() || nome.trim().substring(0, 3).toUpperCase(),
+      endereco: endereco.trim() || "A Definir",
+      engenheiro: engenheiro.trim() || "A Definir",
+    };
+
+    onSalvar(novaObra);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden">
+        <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🏗️</span>
+            <div>
+              <h3 className="font-bold text-sm">Cadastrar Novo Empreendimento / Obra</h3>
+              <p className="text-xs text-slate-400">Adicione um canteiro oficial para compras e controle de campo</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-white text-lg font-bold p-1 transition"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Nome do Empreendimento / Obra *
+            </label>
+            <input
+              required
+              type="text"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Ex: Residencial Splendore, Edifício Villa Magna"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 font-semibold focus:outline-none focus:border-slate-900"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                Sigla / Código Interno
+              </label>
+              <input
+                type="text"
+                value={sigla}
+                onChange={(e) => setSigla(e.target.value)}
+                placeholder="Ex: SPL-01, VM-02"
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900 uppercase font-mono"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                Engenheiro / Responsável
+              </label>
+              <input
+                type="text"
+                value={engenheiro}
+                onChange={(e) => setEngenheiro(e.target.value)}
+                placeholder="Ex: Eng. Responsável"
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Endereço / Localização do Canteiro
+            </label>
+            <input
+              type="text"
+              value={endereco}
+              onChange={(e) => setEndereco(e.target.value)}
+              placeholder="Ex: Av. Atlântica, Balneário Camboriú / SC"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
+            />
+          </div>
+
+          <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition flex items-center gap-1.5 shadow-xs"
+            >
+              <span>✓</span>
+              <span>Salvar Empreendimento</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 function ModalNovoContrato({
   obras,
