@@ -108,6 +108,8 @@ const MOVIMENTACOES_STORAGE_KEY = "jc_bauer_movimentacoes_v3";
 const PUXADAS_STORAGE_KEY = "jc_bauer_puxadas_v3";
 const DIARIOS_STORAGE_KEY = "jc_bauer_diarios_v3";
 const FORNECEDORES_STORAGE_KEY = "jc_bauer_fornecedores_v3";
+const ITENS_PLANILHA_STORAGE_KEY = "jc_bauer_itens_planilha_v3";
+const DUPLICIDADES_STORAGE_KEY = "jc_bauer_duplicidades_v3";
 
 interface DiarioObraRegistro {
   id: string;
@@ -1332,6 +1334,30 @@ export default function HomePage() {
         }
       }
 
+      const savedItens = window.localStorage.getItem(ITENS_PLANILHA_STORAGE_KEY);
+      if (savedItens) {
+        try {
+          const parsedItens = JSON.parse(savedItens) as ItemPlanilhaImportada[];
+          if (Array.isArray(parsedItens) && parsedItens.length > 0) {
+            setItensPlanilha(parsedItens);
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      const savedDup = window.localStorage.getItem(DUPLICIDADES_STORAGE_KEY);
+      if (savedDup) {
+        try {
+          const parsedDup = JSON.parse(savedDup) as DuplicidadeFornecedor[];
+          if (Array.isArray(parsedDup) && parsedDup.length > 0) {
+            setDuplicidades(parsedDup);
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       const savedSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
       if (savedSession) {
         const parsedSession = JSON.parse(savedSession) as UsuarioSistema;
@@ -1486,6 +1512,30 @@ export default function HomePage() {
     }
   }, [fornecedores, storageCarregado]);
 
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      window.localStorage.setItem(
+        ITENS_PLANILHA_STORAGE_KEY,
+        JSON.stringify(itensPlanilha)
+      );
+    } catch {
+      // ignore
+    }
+  }, [itensPlanilha, storageCarregado]);
+
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      window.localStorage.setItem(
+        DUPLICIDADES_STORAGE_KEY,
+        JSON.stringify(duplicidades)
+      );
+    } catch {
+      // ignore
+    }
+  }, [duplicidades, storageCarregado]);
+
   // Notificações e Alertas do Sistema em Tempo Real
   const notificacoesSistema = useMemo(
     () => gerarNotificacoesDoSistema(solicitacoes, ordens, contratos),
@@ -1541,6 +1591,7 @@ export default function HomePage() {
     null
   );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fornecedoresFileInputRef = useRef<HTMLInputElement | null>(null);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
 
   // Modais de Ação e Governança
@@ -2004,8 +2055,11 @@ export default function HomePage() {
       const matchTexto =
         !q ||
         f.empresa.toLowerCase().includes(q) ||
+        (f.razaoSocial && f.razaoSocial.toLowerCase().includes(q)) ||
+        (f.cnpj && f.cnpj.toLowerCase().includes(q)) ||
         f.cidade.toLowerCase().includes(q) ||
         f.vendedor.toLowerCase().includes(q) ||
+        (f.telefone && f.telefone.toLowerCase().includes(q)) ||
         f.categoriaPrincipal.toLowerCase().includes(q);
       const matchCat =
         filtroCatFornecedor === "ALL" ||
@@ -2897,54 +2951,583 @@ export default function HomePage() {
     dispararAviso("Configurações atualizadas com sucesso!");
   };
 
-  // Upload real de planilha na Aba 5 (.xlsx, .xls, .csv)
+  // Upload real de planilha (.xlsx, .xls, .csv) sem limitação de linhas com mapeamento inteligente
   const handleUploadPlanilha = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const file = files[0];
     try {
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: "array" });
+      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        dispararAviso(`Arquivo "${file.name}" não contém planilhas legíveis.`);
+        return;
+      }
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
-        firstSheet,
-        { defval: "" }
+
+      // Lê a planilha inteira como matriz de linhas
+      const rawRows = XLSX.utils.sheet_to_json<unknown[]>(firstSheet, {
+        header: 1,
+        defval: "",
+      });
+
+      if (!rawRows || rawRows.length === 0) {
+        dispararAviso(`A planilha "${file.name}" está vazia.`);
+        return;
+      }
+
+      // Função de normalização para casamento de strings
+      const normalizar = (txt: unknown): string =>
+        String(txt ?? "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "")
+          .trim();
+
+      // Identifica a linha de cabeçalho (varre as 10 primeiras linhas)
+      const aliasesCabecalho = [
+        "fornecedor",
+        "empresa",
+        "razaosocial",
+        "nomefantasia",
+        "cnpj",
+        "cpf",
+        "cidade",
+        "uf",
+        "estado",
+        "telefone",
+        "whatsapp",
+        "vendedor",
+        "contato",
+        "email",
+        "categoria",
+        "ramo",
+        "insumo",
+        "material",
+        "descricao",
+        "preco",
+        "valor",
+        "quantidade",
+        "qtd",
+      ];
+
+      let headerRowIndex = 0;
+      let maxScoreCabecalho = 0;
+
+      for (let r = 0; r < Math.min(rawRows.length, 10); r++) {
+        const rowCells = rawRows[r];
+        if (!Array.isArray(rowCells)) continue;
+        let score = 0;
+        for (const cell of rowCells) {
+          const normCell = normalizar(cell);
+          if (
+            normCell.length >= 3 &&
+            aliasesCabecalho.some(
+              (alias) => normCell.includes(alias) || alias.includes(normCell)
+            )
+          ) {
+            score++;
+          }
+        }
+        if (score > maxScoreCabecalho) {
+          maxScoreCabecalho = score;
+          headerRowIndex = r;
+        }
+      }
+
+      const headerNames: string[] = (
+        Array.isArray(rawRows[headerRowIndex])
+          ? (rawRows[headerRowIndex] as unknown[])
+          : []
+      ).map((c) => String(c ?? "").trim());
+
+      const dadosInicio = maxScoreCabecalho > 0 ? headerRowIndex + 1 : 0;
+      const dataRows = rawRows.slice(dadosInicio);
+
+      if (dataRows.length === 0) {
+        dispararAviso(`Nenhum dado encontrado na planilha "${file.name}".`);
+        return;
+      }
+
+      const acharValor = (
+        cells: unknown[],
+        aliases: string[],
+        regexFallback?: RegExp,
+        posicaoFallback?: number
+      ): string => {
+        if (maxScoreCabecalho > 0) {
+          for (let col = 0; col < headerNames.length; col++) {
+            const hNorm = normalizar(headerNames[col]);
+            if (
+              aliases.some(
+                (alias) => hNorm.includes(alias) || alias.includes(hNorm)
+              )
+            ) {
+              const val = String(cells[col] ?? "").trim();
+              if (val && val !== "undefined" && val !== "null") return val;
+            }
+          }
+        }
+        if (regexFallback) {
+          for (const cell of cells) {
+            const strCell = String(cell ?? "").trim();
+            if (regexFallback.test(strCell)) return strCell;
+          }
+        }
+        if (
+          typeof posicaoFallback === "number" &&
+          posicaoFallback < cells.length
+        ) {
+          const val = String(cells[posicaoFallback] ?? "").trim();
+          if (val && val !== "undefined" && val !== "null") return val;
+        }
+        return "";
+      };
+
+      const inferirCategoria = (texto: string): string => {
+        const t = normalizar(texto);
+        if (/aco|ferro|armacao|concreto|cimento|viga|laje|pilar/.test(t))
+          return "Estrutura (Aço & Concreto)";
+        if (/fundac|terra|estaca|sondagem|escav/.test(t))
+          return "Fundações & Terraplenagem";
+        if (/alvenaria|tijolo|bloco|argamassa|vedac/.test(t))
+          return "Alvenaria & Vedações";
+        if (/esquadria|vidro|aluminio|janela|porta|fachada/.test(t))
+          return "Esquadrias & Fachadas de Vidro";
+        if (/elevador|grua|guincho|equipamento|maquin/.test(t))
+          return "Elevadores & Equipamentos";
+        if (/hidro|sanit|tubo|encan|esgoto|pluvial|valvula/.test(t))
+          return "Instalações Hidrossanitárias";
+        if (/eletric|fio|cabo|iluminac|painel|dados|transformador/.test(t))
+          return "Instalações Elétricas & Dados";
+        if (/impermeab|manta|isolamento|asfalto|sika|vedacit/.test(t))
+          return "Impermeabilização & Isolamento";
+        if (
+          /revestimento|piso|porcelanato|ceramica|louca|metal|torneira|azulejo/.test(
+            t
+          )
+        )
+          return "Revestimentos, Louças & Metais";
+        if (/tinta|pintura|verniz|textura|massa/.test(t))
+          return "Pintura & Texturas";
+        if (/epi|ferramenta|capacete|bota|canteiro|andaime|parafuso/.test(t))
+          return "EPIs, Ferramentas & Canteiro";
+
+        for (const cat of CATEGORIAS_CONSTRUCAO) {
+          if (normalizar(cat) === t || t.includes(normalizar(cat))) {
+            return cat;
+          }
+        }
+        return "Estrutura (Aço & Concreto)";
+      };
+
+      const novosItens: ItemPlanilhaImportada[] = [];
+      const novosFornecedoresMap = new Map<string, FornecedorCadastro>();
+      const novasDuplicidades: DuplicidadeFornecedor[] = [];
+
+      const hojePtBr = new Date().toLocaleDateString("pt-BR");
+
+      const cnpjsExistentes = new Set(
+        fornecedores.map((f) => normalizar(f.cnpj)).filter((c) => c.length > 5)
+      );
+      const nomesExistentes = new Map(
+        fornecedores.map((f) => [normalizar(f.empresa), f])
       );
 
-      const novosItens: ItemPlanilhaImportada[] = rows
-        .slice(0, 15)
-        .map((r, idx) => {
-          const vals = Object.values(r).map((v) => String(v ?? "").trim());
-          return {
-            id: `imp-upload-${Date.now()}-${idx}`,
-            data: vals[0] || "17/10/2026",
-            fornecedor: vals[1] || `Fornecedor Planilha #${idx + 1}`,
-            cnpj: vals[2] || "14.882.310/0001-19",
-            insumo: vals[3] || `Material Importado de ${file.name}`,
-            categoria:
-              CATEGORIAS_CONSTRUCAO[idx % CATEGORIAS_CONSTRUCAO.length],
-            quantidade: Number(vals[4]) || 100,
-            unidade: vals[5] || "un",
-            precoUnitario:
-              Number(String(vals[6] || "85").replace(",", ".")) || 85,
-            status: "Pendente",
-          };
+      // Processa 100% de todas as linhas da planilha (sem slice ou cortes)
+      dataRows.forEach((row, idx) => {
+        if (!Array.isArray(row)) return;
+        const nonBlank = row.some((c) => String(c ?? "").trim().length > 0);
+        if (!nonBlank) return;
+
+        const empresaRaw = acharValor(
+          row,
+          [
+            "fornecedor",
+            "empresa",
+            "razaosocial",
+            "nomefantasia",
+            "fantasia",
+            "razao",
+            "nome",
+            "parceiro",
+            "fabricante",
+          ],
+          undefined,
+          0
+        );
+
+        const cnpjRaw = acharValor(
+          row,
+          ["cnpj", "cpfcnpj", "cnpjcpf", "documento", "cpf", "doc"],
+          /\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}|\d{3}\.?\d{3}\.?\d{3}-?\d{2}/
+        );
+
+        const cidadeRaw = acharValor(
+          row,
+          [
+            "cidade",
+            "municipio",
+            "praca",
+            "localidade",
+            "cidadeuf",
+            "endereco",
+            "local",
+          ],
+          undefined,
+          2
+        );
+
+        const ufRaw = acharValor(row, ["uf", "estado"]);
+
+        const categoriaRaw = acharValor(row, [
+          "categoria",
+          "ramo",
+          "ramodeatividade",
+          "segmento",
+          "especialidade",
+          "grupo",
+          "setor",
+          "tipo",
+        ]);
+
+        const vendedorRaw = acharValor(
+          row,
+          [
+            "vendedor",
+            "contato",
+            "responsavel",
+            "representante",
+            "atendente",
+            "consultor",
+            "comercial",
+          ],
+          undefined,
+          3
+        );
+
+        const telefoneRaw = acharValor(
+          row,
+          ["telefone", "fone", "tel", "fixo", "contatotelefone"],
+          /\(?\d{2}\)?\s*9?\d{4}[-\s]?\d{4}/
+        );
+
+        const whatsRaw = acharValor(row, [
+          "whatsapp",
+          "whats",
+          "celular",
+          "mobile",
+          "cel",
+        ]);
+
+        const emailRaw = acharValor(
+          row,
+          ["email", "mail", "correioeletronico"],
+          /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/
+        );
+
+        const pixRaw = acharValor(row, [
+          "pix",
+          "chavepix",
+          "banco",
+          "dadosbancarios",
+        ]);
+
+        const condicaoRaw = acharValor(row, [
+          "condicao",
+          "condicoes",
+          "formadepagamento",
+          "prazodepagamento",
+          "prazo",
+          "faturamento",
+        ]);
+
+        const insumoRaw = acharValor(
+          row,
+          [
+            "insumo",
+            "material",
+            "descricao",
+            "descricaodoinsumo",
+            "item",
+            "produto",
+            "especificacao",
+            "servico",
+          ],
+          undefined,
+          1
+        );
+
+        const qtdRaw = acharValor(row, [
+          "quantidade",
+          "qtd",
+          "volume",
+          "quant",
+        ]);
+
+        const unidadeRaw = acharValor(row, [
+          "unidade",
+          "unid",
+          "und",
+          "un",
+          "medida",
+          "um",
+        ]);
+
+        const precoRaw = acharValor(row, [
+          "preco",
+          "precounitario",
+          "valorunitario",
+          "valor",
+          "unitario",
+          "custo",
+          "precounit",
+          "vlunit",
+        ]);
+
+        const dataRaw = acharValor(row, [
+          "data",
+          "datacompra",
+          "emissao",
+          "dataemissao",
+          "dt",
+          "periodo",
+          "mes",
+        ]);
+
+        const empresaFinal =
+          empresaRaw ||
+          (insumoRaw ? `Fornecedor de ${insumoRaw}` : `Fornecedor #${idx + 1}`);
+
+        const cnpjLimpo = cnpjRaw.replace(/[^\d]/g, "");
+        const cnpjFinal =
+          cnpjLimpo.length === 14
+            ? cnpjLimpo.replace(
+                /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+                "$1.$2.$3/$4-$5"
+              )
+            : cnpjLimpo.length === 11
+            ? cnpjLimpo.replace(
+                /^(\d{3})(\d{3})(\d{3})(\d{2})$/,
+                "$1.$2.$3-$4"
+              )
+            : cnpjRaw || "14.882.310/0001-19";
+
+        const cidadeFinal = cidadeRaw
+          ? ufRaw && !cidadeRaw.includes(ufRaw)
+            ? `${cidadeRaw} - ${ufRaw}`
+            : cidadeRaw
+          : "São Paulo / SP";
+
+        const categoriaFinal = categoriaRaw
+          ? inferirCategoria(categoriaRaw)
+          : inferirCategoria(`${empresaFinal} ${insumoRaw}`);
+
+        const vendedorFinal = vendedorRaw || "Comercial / Vendas";
+        const telefoneFinal = telefoneRaw || whatsRaw || "(11) 3200-0000";
+        const whatsFinal = whatsRaw || telefoneRaw || "(11) 99000-0000";
+        const emailFinal =
+          emailRaw ||
+          `contato@${
+            normalizar(empresaFinal)
+              .replace(/[^a-z0-9]/g, "")
+              .slice(0, 15) || "fornecedor"
+          }.com.br`;
+        const pixFinal = pixRaw || cnpjFinal;
+        const condicaoFinal = condicaoRaw || "28 dias (Faturamento Direto)";
+
+        const insumoFinal =
+          insumoRaw || `Fornecimento e Insumos (${categoriaFinal})`;
+
+        const qtdNumero =
+          Number(String(qtdRaw || "1").replace(",", ".")) || 1;
+        const precoNumero =
+          Number(
+            String(precoRaw || "0")
+              .replace("R$", "")
+              .replace(/\./g, "")
+              .replace(",", ".")
+              .trim()
+          ) || 0;
+
+        novosItens.push({
+          id: `imp-upload-${Date.now()}-${idx}`,
+          data: dataRaw || hojePtBr,
+          fornecedor: empresaFinal,
+          cnpj: cnpjFinal,
+          insumo: insumoFinal,
+          categoria: categoriaFinal,
+          quantidade: qtdNumero,
+          unidade: unidadeRaw || "un",
+          precoUnitario: precoNumero > 0 ? precoNumero : 100,
+          status: "Pendente",
         });
 
+        const normCnpj = normalizar(cnpjFinal);
+        const normNome = normalizar(empresaFinal);
+
+        const jaExisteCnpj =
+          normCnpj.length >= 8 && cnpjsExistentes.has(normCnpj);
+        const jaExisteNome = nomesExistentes.get(normNome);
+
+        if (jaExisteCnpj || jaExisteNome) {
+          const nomeExistente = jaExisteNome?.empresa || empresaFinal;
+          novasDuplicidades.push({
+            id: `dup-${Date.now()}-${idx}`,
+            nomeSugerido: nomeExistente,
+            cnpj: cnpjFinal,
+            variacoesPlanilha: `${empresaFinal} — ${cidadeFinal} (${vendedorFinal})`,
+            similaridade: jaExisteCnpj
+              ? "100% (CNPJ Idêntico)"
+              : "95% (Razão Social Compatível)",
+            status: "Pendente",
+          });
+        } else {
+          if (normCnpj.length >= 8) cnpjsExistentes.add(normCnpj);
+          nomesExistentes.set(normNome, {
+            empresa: empresaFinal,
+          } as FornecedorCadastro);
+
+          const chaveUnica = normCnpj.length >= 8 ? normCnpj : normNome;
+          if (!novosFornecedoresMap.has(chaveUnica)) {
+            novosFornecedoresMap.set(chaveUnica, {
+              id: `forn-imp-${Date.now()}-${idx}-${Math.random()
+                .toString(36)
+                .substring(2, 6)}`,
+              empresa: empresaFinal,
+              razaoSocial: empresaRaw || empresaFinal,
+              cnpj: cnpjFinal,
+              cidade: cidadeFinal,
+              categoriaPrincipal: categoriaFinal,
+              especialidades: [categoriaFinal],
+              vendedor: vendedorFinal,
+              telefone: telefoneFinal,
+              whatsapp: whatsFinal,
+              email: emailFinal,
+              chavePix: pixFinal,
+              condicaoPadrao: condicaoFinal,
+              observacoes: `Importado de "${file.name}" em ${hojePtBr}.`,
+            });
+          }
+        }
+      });
+
+      const listaNovosFornecedores = Array.from(novosFornecedoresMap.values());
+
       if (novosItens.length > 0) {
-        setItensPlanilha((prev) => [...novosItens, ...prev]);
-        dispararAviso(
-          `Planilha "${file.name}" lida com sucesso (${novosItens.length} linhas adicionadas para revisão).`
-        );
-      } else {
-        dispararAviso(
-          `Arquivo "${file.name}" processado e validado na quarentena.`
-        );
+        setItensPlanilha((prev) => {
+          const atualizado = [...novosItens, ...prev];
+          try {
+            window.localStorage.setItem(
+              ITENS_PLANILHA_STORAGE_KEY,
+              JSON.stringify(atualizado)
+            );
+          } catch {}
+          return atualizado;
+        });
       }
-    } catch {
+
+      if (novasDuplicidades.length > 0) {
+        setDuplicidades((prev) => {
+          const atualizado = [...novasDuplicidades, ...prev];
+          try {
+            window.localStorage.setItem(
+              DUPLICIDADES_STORAGE_KEY,
+              JSON.stringify(atualizado)
+            );
+          } catch {}
+          return atualizado;
+        });
+      }
+
+      if (listaNovosFornecedores.length > 0) {
+        setFornecedores((prev) => {
+          const atualizado = [...listaNovosFornecedores, ...prev];
+          try {
+            window.localStorage.setItem(
+              FORNECEDORES_STORAGE_KEY,
+              JSON.stringify(atualizado)
+            );
+          } catch {}
+          return atualizado;
+        });
+      }
+
       dispararAviso(
-        `Arquivo "${file.name}" importado para a tabela de revisão.`
+        `Planilha "${file.name}" importada com sucesso: ${novosItens.length} linhas lidas, ${listaNovosFornecedores.length} novos fornecedores cadastrados no CRM${
+          novasDuplicidades.length > 0
+            ? ` e ${novasDuplicidades.length} duplicidades detectadas para revisão`
+            : ""
+        }!`
+      );
+    } catch (err) {
+      console.error("Erro ao importar planilha:", err);
+      dispararAviso(
+        `Erro ao ler a planilha "${file.name}". Verifique se o arquivo é um Excel (.xlsx, .xls) ou .csv válido.`
       );
     }
+  };
+
+  // Aprovação em lote de todos os itens da planilha importada
+  const handleAprovarTodosItensPlanilha = () => {
+    setItensPlanilha((prev) => {
+      const atualizados = prev.map((r) => ({
+        ...r,
+        status: "Aprovado" as const,
+      }));
+      try {
+        window.localStorage.setItem(
+          ITENS_PLANILHA_STORAGE_KEY,
+          JSON.stringify(atualizados)
+        );
+      } catch {}
+      return atualizados;
+    });
+    dispararAviso(
+      "Todos os itens importados da planilha foram aprovados com sucesso!"
+    );
+  };
+
+  // Limpeza de itens da planilha importada
+  const handleLimparPlanilhaImportada = () => {
+    if (
+      window.confirm(
+        "Deseja realmente limpar todos os itens importados da tabela de revisão?"
+      )
+    ) {
+      setItensPlanilha([]);
+      try {
+        window.localStorage.removeItem(ITENS_PLANILHA_STORAGE_KEY);
+      } catch {}
+      dispararAviso("Tabela de revisão de importação limpa com sucesso.");
+    }
+  };
+
+  // Unificação em lote de duplicidades de fornecedores
+  const handleAprovarTodasDuplicidades = () => {
+    setDuplicidades((prev) => {
+      const atualizados = prev.map((d) => ({
+        ...d,
+        status: "Unificado" as const,
+      }));
+      try {
+        window.localStorage.setItem(
+          DUPLICIDADES_STORAGE_KEY,
+          JSON.stringify(atualizados)
+        );
+      } catch {}
+      return atualizados;
+    });
+    dispararAviso("Todas as duplicidades de fornecedores foram unificadas!");
+  };
+
+  // Limpeza de duplicidades
+  const handleLimparDuplicidades = () => {
+    setDuplicidades([]);
+    try {
+      window.localStorage.removeItem(DUPLICIDADES_STORAGE_KEY);
+    } catch {}
+    dispararAviso("Lista de duplicidades limpa com sucesso.");
   };
 
   /* ----------------------------------------------------------------------- */
@@ -3736,12 +4319,32 @@ export default function HomePage() {
         return (
           <button
             onClick={() => {
-              setItensPlanilha((prev) =>
-                prev.map((i) => ({ ...i, status: "Aprovado" }))
-              );
-              setDuplicidades((prev) =>
-                prev.map((d) => ({ ...d, status: "Unificado" }))
-              );
+              setItensPlanilha((prev) => {
+                const atualizados = prev.map((i) => ({
+                  ...i,
+                  status: "Aprovado" as const,
+                }));
+                try {
+                  window.localStorage.setItem(
+                    ITENS_PLANILHA_STORAGE_KEY,
+                    JSON.stringify(atualizados)
+                  );
+                } catch {}
+                return atualizados;
+              });
+              setDuplicidades((prev) => {
+                const atualizados = prev.map((d) => ({
+                  ...d,
+                  status: "Unificado" as const,
+                }));
+                try {
+                  window.localStorage.setItem(
+                    DUPLICIDADES_STORAGE_KEY,
+                    JSON.stringify(atualizados)
+                  );
+                } catch {}
+                return atualizados;
+              });
               setColaboradores((prev) =>
                 prev.map((c) => ({ ...c, status: "Validado" }))
               );
@@ -6257,6 +6860,26 @@ export default function HomePage() {
                     ))}
                   </select>
 
+                  <input
+                    ref={fornecedoresFileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={(e) => {
+                      handleUploadPlanilha(e.target.files);
+                      if (e.target) e.target.value = "";
+                    }}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => fornecedoresFileInputRef.current?.click()}
+                    className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold transition whitespace-nowrap flex items-center gap-1.5 shadow-sm"
+                    title="Importar lista completa de fornecedores via Excel (.xlsx) ou CSV"
+                  >
+                    <span>📥</span> Importar Planilha (.xlsx)
+                  </button>
+
                   <button
                     onClick={() => setShowNovoFornecedorModal(true)}
                     className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition whitespace-nowrap"
@@ -8083,37 +8706,95 @@ export default function HomePage() {
 
               {/* Sub-Abas Simples: Itens Lidos | Fornecedores Duplicados | Colaboradores */}
               <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
-                  <button
-                    onClick={() => setSubAbaImportacao("itens")}
-                    className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition ${
-                      subAbaImportacao === "itens"
-                        ? "bg-slate-900 text-white"
-                        : "bg-white text-slate-700 border border-slate-300"
-                    }`}
-                  >
-                    Itens Lidos ({itensPlanilha.length})
-                  </button>
-                  <button
-                    onClick={() => setSubAbaImportacao("duplicados")}
-                    className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition ${
-                      subAbaImportacao === "duplicados"
-                        ? "bg-slate-900 text-white"
-                        : "bg-white text-slate-700 border border-slate-300"
-                    }`}
-                  >
-                    Fornecedores Duplicados ({duplicidades.length})
-                  </button>
-                  <button
-                    onClick={() => setSubAbaImportacao("colaboradores")}
-                    className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition ${
-                      subAbaImportacao === "colaboradores"
-                        ? "bg-slate-900 text-white"
-                        : "bg-white text-slate-700 border border-slate-300"
-                    }`}
-                  >
-                    Colaboradores ({colaboradores.length})
-                  </button>
+                <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSubAbaImportacao("itens")}
+                      className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition ${
+                        subAbaImportacao === "itens"
+                          ? "bg-slate-900 text-white"
+                          : "bg-white text-slate-700 border border-slate-300"
+                      }`}
+                    >
+                      Itens Lidos ({itensPlanilha.length})
+                    </button>
+                    <button
+                      onClick={() => setSubAbaImportacao("duplicados")}
+                      className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition ${
+                        subAbaImportacao === "duplicados"
+                          ? "bg-slate-900 text-white"
+                          : "bg-white text-slate-700 border border-slate-300"
+                      }`}
+                    >
+                      Fornecedores Duplicados ({duplicidades.length})
+                    </button>
+                    <button
+                      onClick={() => setSubAbaImportacao("colaboradores")}
+                      className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition ${
+                        subAbaImportacao === "colaboradores"
+                          ? "bg-slate-900 text-white"
+                          : "bg-white text-slate-700 border border-slate-300"
+                      }`}
+                    >
+                      Colaboradores ({colaboradores.length})
+                    </button>
+                  </div>
+
+                  {/* Ações em Lote */}
+                  <div className="flex items-center gap-2">
+                    {subAbaImportacao === "itens" && itensPlanilha.length > 0 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleAprovarTodosItensPlanilha}
+                          className="px-3 py-1.5 rounded-md bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-sm"
+                          title="Aprovar todos os itens pendentes"
+                        >
+                          <span>✅</span> Aprovar Todos (
+                          {
+                            itensPlanilha.filter((i) => i.status === "Pendente")
+                              .length
+                          }
+                          )
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleLimparPlanilhaImportada}
+                          className="px-3 py-1.5 rounded-md bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 text-xs font-semibold transition flex items-center gap-1.5"
+                          title="Limpar todos os itens da tabela de importação"
+                        >
+                          <span>🗑️</span> Limpar Tabela
+                        </button>
+                      </>
+                    )}
+
+                    {subAbaImportacao === "duplicados" &&
+                      duplicidades.length > 0 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleAprovarTodasDuplicidades}
+                            className="px-3 py-1.5 rounded-md bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-sm"
+                            title="Aprovar e unificar todas as duplicidades"
+                          >
+                            <span>✅</span> Unificar Todas (
+                            {
+                              duplicidades.filter((d) => d.status === "Pendente")
+                                .length
+                            }
+                            )
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleLimparDuplicidades}
+                            className="px-3 py-1.5 rounded-md bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 text-xs font-semibold transition flex items-center gap-1.5"
+                            title="Limpar lista de duplicidades"
+                          >
+                            <span>🗑️</span> Limpar
+                          </button>
+                        </>
+                      )}
+                  </div>
                 </div>
 
                 {/* Sub-aba 1: Itens Lidos */}
