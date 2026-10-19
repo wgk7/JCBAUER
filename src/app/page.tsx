@@ -110,6 +110,7 @@ const DIARIOS_STORAGE_KEY = "jc_bauer_diarios_v3";
 const FORNECEDORES_STORAGE_KEY = "jc_bauer_fornecedores_v3";
 const ITENS_PLANILHA_STORAGE_KEY = "jc_bauer_itens_planilha_v3";
 const DUPLICIDADES_STORAGE_KEY = "jc_bauer_duplicidades_v3";
+const COMPARATIVO_STORAGE_KEY = "jc_bauer_comparativo_3orc_v3";
 
 interface DiarioObraRegistro {
   id: string;
@@ -322,6 +323,26 @@ interface DuplicidadeFornecedor {
   variacoesPlanilha: string;
   similaridade: string;
   status: "Pendente" | "Unificado";
+}
+
+interface ItemComparativoRapido {
+  id: string;
+  nome: string;
+  quantidade: number;
+  unidade: string;
+  preco1: number;
+  preco2: number;
+  preco3: number;
+}
+
+interface FornecedorCotadoRapido {
+  nome: string;
+  vendedor: string;
+  telefone: string;
+  prazo: string;
+  condicao: string;
+  freteTipo: "CIF" | "FOB";
+  freteValor: number;
 }
 
 interface ColaboradorMapeado {
@@ -1358,6 +1379,26 @@ export default function HomePage() {
         }
       }
 
+      const savedComp = window.localStorage.getItem(COMPARATIVO_STORAGE_KEY);
+      if (savedComp) {
+        try {
+          const parsedComp = JSON.parse(savedComp);
+          if (parsedComp) {
+            if (parsedComp.titulo) setComparativoTitulo(parsedComp.titulo);
+            if (parsedComp.obraId) setComparativoObraId(parsedComp.obraId);
+            if (parsedComp.categoria) setComparativoCategoria(parsedComp.categoria);
+            if (Array.isArray(parsedComp.fornecedores) && parsedComp.fornecedores.length === 3) {
+              setComparativoFornecedores(parsedComp.fornecedores);
+            }
+            if (Array.isArray(parsedComp.itens) && parsedComp.itens.length > 0) {
+              setComparativoItens(parsedComp.itens);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       const savedSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
       if (savedSession) {
         const parsedSession = JSON.parse(savedSession) as UsuarioSistema;
@@ -1536,6 +1577,32 @@ export default function HomePage() {
     }
   }, [duplicidades, storageCarregado]);
 
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      const dadosSalvar = {
+        titulo: comparativoTitulo,
+        obraId: comparativoObraId,
+        categoria: comparativoCategoria,
+        fornecedores: comparativoFornecedores,
+        itens: comparativoItens,
+      };
+      window.localStorage.setItem(
+        COMPARATIVO_STORAGE_KEY,
+        JSON.stringify(dadosSalvar)
+      );
+    } catch {
+      // ignore
+    }
+  }, [
+    comparativoTitulo,
+    comparativoObraId,
+    comparativoCategoria,
+    comparativoFornecedores,
+    comparativoItens,
+    storageCarregado,
+  ]);
+
   // Notificações e Alertas do Sistema em Tempo Real
   const notificacoesSistema = useMemo(
     () => gerarNotificacoesDoSistema(solicitacoes, ordens, contratos),
@@ -1592,7 +1659,82 @@ export default function HomePage() {
   );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const fornecedoresFileInputRef = useRef<HTMLInputElement | null>(null);
+  const comparativoFileInputRef = useRef<HTMLInputElement | null>(null);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Estados do Comparativo de Preços (3 Orçamentos)
+  const [modoCotacoes, setModoCotacoes] = useState<
+    "comparativo_rapido" | "solicitacoes_obra"
+  >("comparativo_rapido");
+  const [comparativoTitulo, setComparativoTitulo] = useState<string>(
+    "Cotação de Materiais — 3 Orçamentos"
+  );
+  const [comparativoObraId, setComparativoObraId] = useState<string>("");
+  const [comparativoCategoria, setComparativoCategoria] = useState<string>(
+    "Estrutura (Aço & Concreto)"
+  );
+  const [comparativoFornecedores, setComparativoFornecedores] = useState<
+    [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido]
+  >([
+    {
+      nome: "Fornecedor 1",
+      vendedor: "",
+      telefone: "",
+      prazo: "3 a 5 dias",
+      condicao: "28 dias (Faturado)",
+      freteTipo: "CIF",
+      freteValor: 0,
+    },
+    {
+      nome: "Fornecedor 2",
+      vendedor: "",
+      telefone: "",
+      prazo: "5 a 7 dias",
+      condicao: "30 dias",
+      freteTipo: "CIF",
+      freteValor: 0,
+    },
+    {
+      nome: "Fornecedor 3",
+      vendedor: "",
+      telefone: "",
+      prazo: "Pronta Entrega",
+      condicao: "21 dias",
+      freteTipo: "FOB",
+      freteValor: 0,
+    },
+  ]);
+  const [comparativoItens, setComparativoItens] = useState<
+    ItemComparativoRapido[]
+  >([
+    {
+      id: "comp-item-1",
+      nome: "Cimento CP-II F-32 (Saco 50kg)",
+      quantidade: 150,
+      unidade: "saco",
+      preco1: 34.5,
+      preco2: 36.0,
+      preco3: 33.9,
+    },
+    {
+      id: "comp-item-2",
+      nome: "Aço CA-50 10.0mm (Barra 12m)",
+      quantidade: 80,
+      unidade: "barra",
+      preco1: 58.0,
+      preco2: 54.5,
+      preco3: 56.2,
+    },
+    {
+      id: "comp-item-3",
+      nome: "Areia Média Lavada",
+      quantidade: 15,
+      unidade: "m³",
+      preco1: 110.0,
+      preco2: 115.0,
+      preco3: 108.0,
+    },
+  ]);
 
   // Modais de Ação e Governança
   const [showNovaScModal, setShowNovaScModal] = useState<boolean>(false);
@@ -3531,6 +3673,586 @@ export default function HomePage() {
   };
 
   /* ----------------------------------------------------------------------- */
+  /* CÁLCULOS E HANDLERS DO COMPARATIVO DE PREÇOS (3 ORÇAMENTOS)             */
+  /* ----------------------------------------------------------------------- */
+
+  const resumoComparativo = useMemo(() => {
+    let subtotal1 = 0;
+    let subtotal2 = 0;
+    let subtotal3 = 0;
+    let totalCenarioOtimizado = 0;
+
+    const itensCalculados = comparativoItens.map((item) => {
+      const p1 = Number(item.preco1) || 0;
+      const p2 = Number(item.preco2) || 0;
+      const p3 = Number(item.preco3) || 0;
+      const qtd = Number(item.quantidade) || 0;
+
+      const tot1 = qtd * p1;
+      const tot2 = qtd * p2;
+      const tot3 = qtd * p3;
+
+      subtotal1 += tot1;
+      subtotal2 += tot2;
+      subtotal3 += tot3;
+
+      const precosValidos = [
+        { index: 0, preco: p1, total: tot1 },
+        { index: 1, preco: p2, total: tot2 },
+        { index: 2, preco: p3, total: tot3 },
+      ].filter((p) => p.preco > 0);
+
+      const menorPreco =
+        precosValidos.length > 0
+          ? Math.min(...precosValidos.map((p) => p.preco))
+          : 0;
+
+      const maiorPreco =
+        precosValidos.length > 0
+          ? Math.max(...precosValidos.map((p) => p.preco))
+          : 0;
+
+      const savingItem =
+        maiorPreco > menorPreco && menorPreco > 0
+          ? (maiorPreco - menorPreco) * qtd
+          : 0;
+
+      const pctSaving =
+        maiorPreco > 0 && menorPreco > 0
+          ? ((maiorPreco - menorPreco) / maiorPreco) * 100
+          : 0;
+
+      if (menorPreco > 0) {
+        totalCenarioOtimizado += menorPreco * qtd;
+      }
+
+      return {
+        ...item,
+        tot1,
+        tot2,
+        tot3,
+        menorPreco,
+        maiorPreco,
+        savingItem,
+        pctSaving,
+        vencedor1: p1 > 0 && Math.abs(p1 - menorPreco) < 0.001,
+        vencedor2: p2 > 0 && Math.abs(p2 - menorPreco) < 0.001,
+        vencedor3: p3 > 0 && Math.abs(p3 - menorPreco) < 0.001,
+      };
+    });
+
+    const frete1 = Number(comparativoFornecedores[0].freteValor) || 0;
+    const frete2 = Number(comparativoFornecedores[1].freteValor) || 0;
+    const frete3 = Number(comparativoFornecedores[2].freteValor) || 0;
+
+    const total1 = subtotal1 + frete1;
+    const total2 = subtotal2 + frete2;
+    const total3 = subtotal3 + frete3;
+
+    const totaisValidos = [
+      {
+        index: 0,
+        nome: comparativoFornecedores[0].nome || "Orçamento 1",
+        subtotal: subtotal1,
+        frete: frete1,
+        total: total1,
+        forn: comparativoFornecedores[0],
+      },
+      {
+        index: 1,
+        nome: comparativoFornecedores[1].nome || "Orçamento 2",
+        subtotal: subtotal2,
+        frete: frete2,
+        total: total2,
+        forn: comparativoFornecedores[1],
+      },
+      {
+        index: 2,
+        nome: comparativoFornecedores[2].nome || "Orçamento 3",
+        subtotal: subtotal3,
+        frete: frete3,
+        total: total3,
+        forn: comparativoFornecedores[2],
+      },
+    ].filter((t) => t.total > 0);
+
+    const ranking = [...totaisValidos].sort((a, b) => a.total - b.total);
+    const vencedorGeral = ranking[0] || null;
+    const piorGeral = ranking[ranking.length - 1] || null;
+    const savingGlobal =
+      vencedorGeral && piorGeral && piorGeral.total > vencedorGeral.total
+        ? piorGeral.total - vencedorGeral.total
+        : 0;
+
+    const savingCenarioOtimizado =
+      vencedorGeral &&
+      totalCenarioOtimizado > 0 &&
+      vencedorGeral.total > totalCenarioOtimizado
+        ? vencedorGeral.total - totalCenarioOtimizado
+        : 0;
+
+    return {
+      itensCalculados,
+      subtotal1,
+      subtotal2,
+      subtotal3,
+      total1,
+      total2,
+      total3,
+      totalCenarioOtimizado,
+      savingCenarioOtimizado,
+      ranking,
+      vencedorGeral,
+      savingGlobal,
+    };
+  }, [comparativoItens, comparativoFornecedores]);
+
+  const handleAdicionarItemComparativo = () => {
+    const novoItem: ItemComparativoRapido = {
+      id: `comp-item-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 6)}`,
+      nome: "",
+      quantidade: 1,
+      unidade: "un",
+      preco1: 0,
+      preco2: 0,
+      preco3: 0,
+    };
+    setComparativoItens((prev) => [...prev, novoItem]);
+  };
+
+  const handleRemoverItemComparativo = (id: string) => {
+    setComparativoItens((prev) => prev.filter((i) => i.id !== id));
+  };
+
+  const handleAtualizarItemComparativo = (
+    id: string,
+    campo: keyof ItemComparativoRapido,
+    valor: string | number
+  ) => {
+    setComparativoItens((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, [campo]: valor } : i))
+    );
+  };
+
+  const handleAtualizarFornecedorComparativo = (
+    index: 0 | 1 | 2,
+    campo: keyof FornecedorCotadoRapido,
+    valor: string | number
+  ) => {
+    setComparativoFornecedores((prev) => {
+      const copia: [
+        FornecedorCotadoRapido,
+        FornecedorCotadoRapido,
+        FornecedorCotadoRapido
+      ] = [{ ...prev[0] }, { ...prev[1] }, { ...prev[2] }];
+      copia[index] = { ...copia[index], [campo]: valor };
+      return copia;
+    });
+  };
+
+  const handleSelecionarFornecedorCrmComparativo = (
+    index: 0 | 1 | 2,
+    fornecedorId: string
+  ) => {
+    const achado = fornecedores.find((f) => f.id === fornecedorId);
+    if (!achado) return;
+    setComparativoFornecedores((prev) => {
+      const copia: [
+        FornecedorCotadoRapido,
+        FornecedorCotadoRapido,
+        FornecedorCotadoRapido
+      ] = [{ ...prev[0] }, { ...prev[1] }, { ...prev[2] }];
+      copia[index] = {
+        ...copia[index],
+        nome: achado.empresa,
+        vendedor: achado.vendedor || copia[index].vendedor,
+        telefone: achado.telefone || achado.whatsapp || copia[index].telefone,
+        condicao: achado.condicaoPadrao || copia[index].condicao,
+      };
+      return copia;
+    });
+    dispararAviso(
+      `Fornecedor "${achado.empresa}" vinculado ao Orçamento ${index + 1}!`
+    );
+  };
+
+  const handleEmitirOrdemComparativo = (fornIndex: 0 | 1 | 2) => {
+    const forn = comparativoFornecedores[fornIndex];
+    const total =
+      fornIndex === 0
+        ? resumoComparativo.total1
+        : fornIndex === 1
+        ? resumoComparativo.total2
+        : resumoComparativo.total3;
+
+    if (total <= 0) {
+      dispararAviso(
+        "Insira preços válidos para este fornecedor antes de emitir a Ordem de Compra."
+      );
+      return;
+    }
+
+    const obraSel = obras.find((o) => o.id === comparativoObraId) || obras[0];
+    const fornCrm = fornecedores.find(
+      (f) => f.empresa.toLowerCase() === forn.nome.toLowerCase()
+    );
+
+    const proximaSeq = ordens.length + 1;
+    const anoAtual = new Date().getFullYear();
+    const numeroOcFormatado = `OC-${anoAtual}-${String(proximaSeq).padStart(
+      3,
+      "0"
+    )}`;
+
+    const novaOc: OrdemCompra = {
+      id: `oc-comp-${Date.now()}`,
+      numeroOc: numeroOcFormatado,
+      scId: `sc-comp-${Date.now()}`,
+      scCodigo: `COMP-3ORC`,
+      obraId: obraSel?.id || "obra-1",
+      obraNome: obraSel?.nome || "Empreendimento JC BAUER",
+      obraEndereco: obraSel?.endereco || "Canteiro Central de Obras",
+      obraEngenheiro: obraSel?.engenheiro || "Engenharia JC BAUER",
+      categoria: comparativoCategoria || "Geral / Suprimentos",
+      fornecedorNome: forn.nome || `Fornecedor ${fornIndex + 1}`,
+      fornecedorRazao:
+        fornCrm?.razaoSocial || forn.nome || `Fornecedor ${fornIndex + 1}`,
+      fornecedorCnpj: fornCrm?.cnpj || "14.882.310/0001-19",
+      vendedorNome: forn.vendedor || "Comercial / Vendas",
+      whatsapp: forn.telefone || "(11) 99000-0000",
+      chavePix:
+        fornCrm?.chavePix || fornCrm?.cnpj || "financeiro@jc-bauer.com.br",
+      dataEmissao: new Date().toLocaleDateString("pt-BR"),
+      dataPrevistaEntrega: forn.prazo || "5 dias úteis",
+      prazoPagamento: forn.condicao || "28 dias (Faturamento Direto)",
+      tipoFrete: forn.freteTipo,
+      freteValor: forn.freteValor,
+      valorTotal: total,
+      savingGerado: resumoComparativo.savingGlobal,
+      alcadaAprovacao: "Comprador Autorizado",
+      status: "Emitida",
+      itens: comparativoItens.map((it, idx) => {
+        const unit =
+          fornIndex === 0
+            ? it.preco1
+            : fornIndex === 1
+            ? it.preco2
+            : it.preco3;
+        return {
+          codigo: `MAT-${idx + 1}`,
+          descricao: it.nome || `Insumo #${idx + 1}`,
+          unidade: it.unidade || "un",
+          quantidade: it.quantidade || 1,
+          precoUnitario: unit,
+          subtotal: (it.quantidade || 1) * unit,
+        };
+      }),
+    };
+
+    setOrdens((prev) => [novaOc, ...prev]);
+    dispararAviso(
+      `Ordem de Compra ${novaOc.numeroOc} emitida com sucesso para "${forn.nome}"!`
+    );
+    setActiveTab("Ordens");
+    setOrdemVisualizarModal(novaOc);
+  };
+
+  const handleLimparComparativo = () => {
+    if (
+      window.confirm(
+        "Deseja limpar todos os itens e preços da tabela para iniciar um novo comparativo do zero?"
+      )
+    ) {
+      setComparativoItens([]);
+      dispararAviso(
+        "Tabela de comparativo limpa. Adicione novos itens para comparar."
+      );
+    }
+  };
+
+  const handleUploadItensComparativo = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawRows = XLSX.utils.sheet_to_json<unknown[]>(firstSheet, {
+        header: 1,
+        defval: "",
+      });
+
+      if (!rawRows || rawRows.length === 0) {
+        dispararAviso(`Arquivo "${file.name}" está vazio.`);
+        return;
+      }
+
+      const novos: ItemComparativoRapido[] = [];
+
+      rawRows.forEach((row, idx) => {
+        if (!Array.isArray(row) || idx === 0) return;
+        const vals = row.map((v) => String(v ?? "").trim());
+        if (vals.every((v) => !v)) return;
+
+        const nome = vals[0] || vals[1] || `Material #${idx}`;
+        const qtd =
+          Number(vals[1]?.replace(",", ".")) ||
+          Number(vals[2]?.replace(",", ".")) ||
+          1;
+        const und =
+          vals[2] && isNaN(Number(vals[2])) ? vals[2] : vals[3] || "un";
+        const p1 =
+          Number(
+            String(vals[3] || "0")
+              .replace("R$", "")
+              .replace(",", ".")
+              .trim()
+          ) || 0;
+        const p2 =
+          Number(
+            String(vals[4] || "0")
+              .replace("R$", "")
+              .replace(",", ".")
+              .trim()
+          ) || 0;
+        const p3 =
+          Number(
+            String(vals[5] || "0")
+              .replace("R$", "")
+              .replace(",", ".")
+              .trim()
+          ) || 0;
+
+        novos.push({
+          id: `comp-upload-${Date.now()}-${idx}`,
+          nome,
+          quantidade: qtd,
+          unidade: und,
+          preco1: p1,
+          preco2: p2,
+          preco3: p3,
+        });
+      });
+
+      if (novos.length > 0) {
+        setComparativoItens(novos);
+        dispararAviso(
+          `Planilha "${file.name}" importada com sucesso: ${novos.length} itens carregados para equalização!`
+        );
+      } else {
+        dispararAviso("Nenhum item válido identificado no arquivo.");
+      }
+    } catch (err) {
+      console.error(err);
+      dispararAviso(`Erro ao ler itens de "${file.name}".`);
+    }
+  };
+
+  const handleGerarComparativoRapidoPDF = () => {
+    const win = window.open("", "_blank");
+    if (!win) {
+      alert(
+        "Por favor, habilite pop-ups para gerar a impressão do comparativo."
+      );
+      return;
+    }
+
+    const obraSel = obras.find((o) => o.id === comparativoObraId) || obras[0];
+    const dataHoje = new Date().toLocaleDateString("pt-BR");
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>JC BAUER — Quadro Comparativo de Preços (3 Orçamentos)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; color: #0f172a; padding: 24px; background: #ffffff; }
+    .header { border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .logo { font-size: 20px; font-weight: 900; letter-spacing: -0.5px; color: #0f172a; }
+    .logo span { color: #166534; }
+    .title { font-size: 13px; font-weight: 700; text-transform: uppercase; color: #334155; margin-top: 4px; }
+    .meta { font-size: 10px; color: #64748b; line-height: 1.4; text-align: right; }
+    .info-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin-bottom: 16px; font-size: 10px; }
+    .info-item strong { display: block; color: #0f172a; font-size: 11px; margin-top: 2px; }
+    .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+    .kpi-card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 12px; }
+    .kpi-card.vencedor { border-color: #166534; background: #f0fdf4; }
+    .kpi-title { font-size: 10px; font-weight: 600; color: #64748b; text-transform: uppercase; }
+    .kpi-card.vencedor .kpi-title { color: #166534; font-weight: 700; }
+    .kpi-name { font-size: 13px; font-weight: 800; color: #0f172a; margin: 2px 0; }
+    .kpi-val { font-size: 16px; font-weight: 900; color: #0f172a; }
+    .kpi-card.vencedor .kpi-val { color: #166534; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10px; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+    th { background: #f1f5f9; font-weight: 700; color: #1e293b; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+    .winner-cell { background: #dcfce7; font-weight: 700; color: #166534; }
+    .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 36px; text-align: center; font-size: 10px; }
+    .sign-line { border-top: 1px solid #0f172a; padding-top: 6px; }
+    @media print { body { padding: 0; } .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="logo">JC <span>BAUER</span></div>
+      <div class="title">Mapa de Equalização e Comparativo de 3 Orçamentos</div>
+    </div>
+    <div class="meta">
+      <strong>Data de Emissão:</strong> ${dataHoje}<br>
+      <strong>Empreendimento:</strong> ${obraSel?.nome || "Todas as Obras"}<br>
+      <strong>Categoria:</strong> ${comparativoCategoria}
+    </div>
+  </div>
+
+  <div class="info-bar">
+    <div class="info-item">Objeto da Cotação:<strong>${comparativoTitulo}</strong></div>
+    <div class="info-item">Comprador Responsável:<strong>${settings.userName}</strong></div>
+    <div class="info-item">Vencedor Recomendado:<strong>${resumoComparativo.vencedorGeral?.nome || "A definir"}</strong></div>
+    <div class="info-item">Saving Apurado:<strong>${formatBRL(resumoComparativo.savingGlobal)}</strong></div>
+  </div>
+
+  <div class="kpi-row">
+    ${comparativoFornecedores
+      .map((f, i) => {
+        const tot =
+          i === 0
+            ? resumoComparativo.total1
+            : i === 1
+            ? resumoComparativo.total2
+            : resumoComparativo.total3;
+        const isVencedor = resumoComparativo.vencedorGeral?.index === i;
+        return `
+        <div class="kpi-card ${isVencedor ? "vencedor" : ""}">
+          <div class="kpi-title">${
+            isVencedor ? "🏆 1º Lugar (Mais em Conta)" : `Orçamento ${i + 1}`
+          }</div>
+          <div class="kpi-name">${f.nome || `Fornecedor ${i + 1}`}</div>
+          <div class="kpi-val">${formatBRL(tot)}</div>
+          <div style="font-size: 9px; color: #64748b; margin-top: 2px;">
+            Frete: ${f.freteTipo} (${formatBRL(f.freteValor)}) • Prazo: ${
+          f.prazo || "N/I"
+        } • Pagto: ${f.condicao || "N/I"}
+          </div>
+        </div>
+      `;
+      })
+      .join("")}
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 30%;">Insumo / Material</th>
+        <th class="text-center" style="width: 12%;">Qtd & Unid</th>
+        <th class="text-right" style="width: 19%;">${
+          comparativoFornecedores[0].nome || "Fornecedor 1"
+        }</th>
+        <th class="text-right" style="width: 19%;">${
+          comparativoFornecedores[1].nome || "Fornecedor 2"
+        }</th>
+        <th class="text-right" style="width: 19%;">${
+          comparativoFornecedores[2].nome || "Fornecedor 3"
+        }</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${resumoComparativo.itensCalculados
+        .map(
+          (it) => `
+        <tr>
+          <td><strong>${it.nome}</strong></td>
+          <td class="text-center">${it.quantidade} ${it.unidade}</td>
+          <td class="text-right ${it.vencedor1 ? "winner-cell" : ""}">
+            ${formatBRL(it.preco1)} / un<br>
+            <span style="font-size: 9px; color: ${
+              it.vencedor1 ? "#166534" : "#64748b"
+            };">Total: ${formatBRL(it.tot1)}</span>
+          </td>
+          <td class="text-right ${it.vencedor2 ? "winner-cell" : ""}">
+            ${formatBRL(it.preco2)} / un<br>
+            <span style="font-size: 9px; color: ${
+              it.vencedor2 ? "#166534" : "#64748b"
+            };">Total: ${formatBRL(it.tot2)}</span>
+          </td>
+          <td class="text-right ${it.vencedor3 ? "winner-cell" : ""}">
+            ${formatBRL(it.preco3)} / un<br>
+            <span style="font-size: 9px; color: ${
+              it.vencedor3 ? "#166534" : "#64748b"
+            };">Total: ${formatBRL(it.tot3)}</span>
+          </td>
+        </tr>
+      `
+        )
+        .join("")}
+    </tbody>
+    <tfoot>
+      <tr style="background: #f8fafc; font-weight: 700;">
+        <td colspan="2">Subtotal dos Materiais</td>
+        <td class="text-right">${formatBRL(resumoComparativo.subtotal1)}</td>
+        <td class="text-right">${formatBRL(resumoComparativo.subtotal2)}</td>
+        <td class="text-right">${formatBRL(resumoComparativo.subtotal3)}</td>
+      </tr>
+      <tr style="background: #f8fafc;">
+        <td colspan="2">Frete (CIF / FOB)</td>
+        <td class="text-right">${comparativoFornecedores[0].freteTipo} (${formatBRL(
+      comparativoFornecedores[0].freteValor
+    )})</td>
+        <td class="text-right">${comparativoFornecedores[1].freteTipo} (${formatBRL(
+      comparativoFornecedores[1].freteValor
+    )})</td>
+        <td class="text-right">${comparativoFornecedores[2].freteTipo} (${formatBRL(
+      comparativoFornecedores[2].freteValor
+    )})</td>
+      </tr>
+      <tr style="background: #0f172a; color: #ffffff; font-weight: 800; font-size: 11px;">
+        <td colspan="2" style="border-color: #0f172a;">VALOR TOTAL FINAL (COM FRETE)</td>
+        <td class="text-right" style="border-color: #0f172a;">${formatBRL(
+          resumoComparativo.total1
+        )}</td>
+        <td class="text-right" style="border-color: #0f172a;">${formatBRL(
+          resumoComparativo.total2
+        )}</td>
+        <td class="text-right" style="border-color: #0f172a;">${formatBRL(
+          resumoComparativo.total3
+        )}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="signatures">
+    <div class="sign-line">
+      <strong>${settings.userName}</strong><br>
+      Comprador Responsável
+    </div>
+    <div class="sign-line">
+      <strong>${obraSel?.engenheiro || "Engenharia de Obras"}</strong><br>
+      Engenheiro Fiscal da Obra
+    </div>
+    <div class="sign-line">
+      <strong>Diretoria Executiva / CFO</strong><br>
+      Aprovação Financeira
+    </div>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() { window.focus(); window.print(); }, 250);
+    };
+  </script>
+</body>
+</html>`;
+
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  };
+
+  /* ----------------------------------------------------------------------- */
   /* AUTENTICAÇÃO E HANDLERS DE INTEGRAÇÃO CANTEIRO <-> COMPRAS              */
   /* ----------------------------------------------------------------------- */
 
@@ -4470,7 +5192,7 @@ export default function HomePage() {
                   id: "DesempenhoFinanceiro",
                   label: "📊 BI Financeiro & Obras",
                 },
-                { id: "Cotacoes", label: "⚖️ Mapa de Cotações" },
+                { id: "Cotacoes", label: "⚖️ Comparativo de Preços" },
                 { id: "Fornecedores", label: "🏢 Fornecedores & IQF" },
                 { id: "Ordens", label: "📦 Ordens de Compra" },
                 { id: "Estoque", label: "🧱 Almoxarifado & Estoque" },
@@ -4493,6 +5215,11 @@ export default function HomePage() {
                   }`}
                 >
                   <span className="truncate">{item.label}</span>
+                  {item.id === "Cotacoes" && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-600 text-[10px] font-extrabold shrink-0">
+                      3 Orçamentos
+                    </span>
+                  )}
                   {item.id === "DesempenhoFinanceiro" && (
                     <span className="px-1.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-600 text-[10px] font-extrabold shrink-0">
                       Saving
@@ -6422,12 +7149,802 @@ export default function HomePage() {
           })()}
 
           {/* ============================================================= */}
-          {/* ABA 2: MAPA DE COTAÇÕES (`Cotacoes`)                          */}
+          {/* ABA 2: COMPARATIVO DE PREÇOS (3 ORÇAMENTOS & COTAÇÕES)        */}
           {/* ============================================================= */}
           {activeTab === "Cotacoes" && (
-            scAtiva ? (
             <div>
-              {/* Barra de Controle da Cotação */}
+              {/* Barra de Seleção de Modo: Comparativo Rápido (3 Orçamentos) vs Cotações de Obra */}
+              <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs mb-6 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModoCotacoes("comparativo_rapido")}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+                      modoCotacoes === "comparativo_rapido"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    }`}
+                  >
+                    <span>⚖️</span> Comparativo de 3 Orçamentos (Rápido)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModoCotacoes("solicitacoes_obra")}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+                      modoCotacoes === "solicitacoes_obra"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    }`}
+                  >
+                    <span>📋</span> Cotações Vinculadas a Obras ({solicitacoes.length})
+                  </button>
+                </div>
+
+                {modoCotacoes === "comparativo_rapido" && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={comparativoFileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        handleUploadItensComparativo(e.target.files);
+                        if (e.target) e.target.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => comparativoFileInputRef.current?.click()}
+                      className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold flex items-center gap-1.5 transition"
+                      title="Importar lista de itens de uma planilha Excel"
+                    >
+                      <span>📥</span> Importar Excel (.xlsx)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGerarComparativoRapidoPDF}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+                      title="Gerar mapa comparativo impresso ou em PDF"
+                    >
+                      <span>🖨️</span> Imprimir Mapa (PDF)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleLimparComparativo}
+                      className="px-3 py-1.5 rounded-lg bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 text-xs font-semibold flex items-center gap-1.5 transition"
+                      title="Limpar tabela e iniciar novo comparativo"
+                    >
+                      <span>🗑️</span> Limpar
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* MODO 1: COMPARATIVO RÁPIDO DE 3 ORÇAMENTOS (SEM BUROCRACIA) */}
+              {modoCotacoes === "comparativo_rapido" && (
+                <div className="space-y-6">
+                  {/* Barra de Metadados da Cotação (Título, Obra, Categoria) */}
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Objeto / Título da Cotação:
+                        </label>
+                        <input
+                          type="text"
+                          value={comparativoTitulo}
+                          onChange={(e) => setComparativoTitulo(e.target.value)}
+                          placeholder="Ex: Cotação de Aço CA-50 e Vergalhões"
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Empreendimento / Obra de Destino:
+                        </label>
+                        <select
+                          value={comparativoObraId}
+                          onChange={(e) => setComparativoObraId(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
+                        >
+                          <option value="">Todas as Obras / Canteiro Central</option>
+                          {obras.map((ob) => (
+                            <option key={ob.id} value={ob.id}>
+                              {ob.nome} ({ob.cidade}/{ob.estado})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Categoria de Suprimentos:
+                        </label>
+                        <select
+                          value={comparativoCategoria}
+                          onChange={(e) =>
+                            setComparativoCategoria(e.target.value)
+                          }
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
+                        >
+                          {CATEGORIAS_CONSTRUCAO.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cards dos 3 Fornecedores Cotados (Ranking + Totais + Ação) */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {([0, 1, 2] as const).map((idx) => {
+                      const forn = comparativoFornecedores[idx];
+                      const total =
+                        idx === 0
+                          ? resumoComparativo.total1
+                          : idx === 1
+                          ? resumoComparativo.total2
+                          : resumoComparativo.total3;
+                      const subtotal =
+                        idx === 0
+                          ? resumoComparativo.subtotal1
+                          : idx === 1
+                          ? resumoComparativo.subtotal2
+                          : resumoComparativo.subtotal3;
+
+                      const isVencedor =
+                        resumoComparativo.vencedorGeral?.index === idx;
+                      const posRank =
+                        resumoComparativo.ranking.findIndex(
+                          (r) => r.index === idx
+                        ) + 1;
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`rounded-xl border p-4 shadow-xs transition flex flex-col justify-between ${
+                            isVencedor
+                              ? "bg-emerald-50/50 border-emerald-400 ring-2 ring-emerald-500/20"
+                              : "bg-white border-slate-200"
+                          }`}
+                        >
+                          <div>
+                            {/* Cabeçalho do Card com Ranking */}
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <span
+                                className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                                  isVencedor
+                                    ? "bg-emerald-700 text-white shadow-xs"
+                                    : posRank === 2
+                                    ? "bg-blue-100 text-blue-900 border border-blue-200"
+                                    : "bg-slate-100 text-slate-700 border border-slate-200"
+                                }`}
+                              >
+                                {isVencedor
+                                  ? "🏆 1º Lugar — Mais em Conta"
+                                  : posRank > 0
+                                  ? `${posRank}º Lugar`
+                                  : `Orçamento ${idx + 1}`}
+                              </span>
+                              <span className="text-xs font-bold text-slate-500">
+                                Proposta #{idx + 1}
+                              </span>
+                            </div>
+
+                            {/* Nome do Fornecedor + Seleção rápida do CRM */}
+                            <div className="space-y-2 mb-3">
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                                  Nome da Empresa / Fornecedor:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={forn.nome}
+                                  onChange={(e) =>
+                                    handleAtualizarFornecedorComparativo(
+                                      idx,
+                                      "nome",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder={`Nome do Fornecedor ${idx + 1}`}
+                                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900"
+                                />
+                              </div>
+
+                              {fornecedores.length > 0 && (
+                                <select
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleSelecionarFornecedorCrmComparativo(
+                                        idx,
+                                        e.target.value
+                                      );
+                                      e.target.value = "";
+                                    }
+                                  }}
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-[11px] text-slate-700"
+                                >
+                                  <option value="">
+                                    Puxar do CRM de Fornecedores...
+                                  </option>
+                                  {fornecedores.map((f) => (
+                                    <option key={f.id} value={f.id}>
+                                      {f.empresa} ({f.cidade})
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+
+                            {/* Vendedor, Contato, Prazo e Frete */}
+                            <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                              <div>
+                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">
+                                  Vendedor / Contato:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={forn.vendedor}
+                                  onChange={(e) =>
+                                    handleAtualizarFornecedorComparativo(
+                                      idx,
+                                      "vendedor",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="Nome do vendedor"
+                                  className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-800"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">
+                                  Telefone / Whats:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={forn.telefone}
+                                  onChange={(e) =>
+                                    handleAtualizarFornecedorComparativo(
+                                      idx,
+                                      "telefone",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="(11) 9..."
+                                  className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-800"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">
+                                  Prazo de Entrega:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={forn.prazo}
+                                  onChange={(e) =>
+                                    handleAtualizarFornecedorComparativo(
+                                      idx,
+                                      "prazo",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="Ex: 5 dias úteis"
+                                  className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-800"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">
+                                  Condição de Pagto:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={forn.condicao}
+                                  onChange={(e) =>
+                                    handleAtualizarFornecedorComparativo(
+                                      idx,
+                                      "condicao",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="Ex: 28 dias boleto"
+                                  className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-800"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Frete (CIF / FOB) */}
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-bold text-slate-700">
+                                  Frete:
+                                </span>
+                                <select
+                                  value={forn.freteTipo}
+                                  onChange={(e) =>
+                                    handleAtualizarFornecedorComparativo(
+                                      idx,
+                                      "freteTipo",
+                                      e.target.value as "CIF" | "FOB"
+                                    )
+                                  }
+                                  className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-semibold"
+                                >
+                                  <option value="CIF">CIF (Incluso)</option>
+                                  <option value="FOB">FOB (A pagar)</option>
+                                </select>
+                              </div>
+                              {forn.freteTipo === "FOB" && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-slate-500">
+                                    R$
+                                  </span>
+                                  <input
+                                    type="number"
+                                    step="10"
+                                    value={forn.freteValor}
+                                    onChange={(e) =>
+                                      handleAtualizarFornecedorComparativo(
+                                        idx,
+                                        "freteValor",
+                                        parseFloat(e.target.value) || 0
+                                      )
+                                    }
+                                    className="w-20 bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-right"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Rodapé do Card: Valor Total + Botão de Emitir OC */}
+                          <div className="border-t border-slate-200 pt-3">
+                            <div className="flex items-baseline justify-between mb-2">
+                              <span className="text-xs font-semibold text-slate-500">
+                                Total da Proposta:
+                              </span>
+                              <div className="text-right">
+                                <div
+                                  className={`text-xl font-black tabular-nums ${
+                                    isVencedor
+                                      ? "text-emerald-700"
+                                      : "text-slate-900"
+                                  }`}
+                                >
+                                  {formatBRL(total)}
+                                </div>
+                                {subtotal !== total && (
+                                  <div className="text-[10px] text-slate-500">
+                                    (Materiais: {formatBRL(subtotal)} + Frete:{" "}
+                                    {formatBRL(forn.freteValor)})
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleEmitirOrdemComparativo(idx)}
+                              className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs ${
+                                isVencedor
+                                  ? "bg-emerald-700 hover:bg-emerald-800 text-white"
+                                  : "bg-slate-900 hover:bg-slate-800 text-white"
+                              }`}
+                            >
+                              <span>📦</span> Emitir Ordem de Compra
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Banner de Economia e Inteligência de Compra (Saving) */}
+                  <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center text-lg font-bold shadow-xs">
+                        💰
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
+                          Economia Direta Apurada (Saving Negociado)
+                        </div>
+                        <div className="text-sm font-semibold text-emerald-900 mt-0.5">
+                          O orçamento mais em conta (
+                          <strong>
+                            {resumoComparativo.vencedorGeral?.nome || "Vencedor"}
+                          </strong>
+                          ) gera uma redução de{" "}
+                          <strong className="text-emerald-950 font-black">
+                            {formatBRL(resumoComparativo.savingGlobal)}
+                          </strong>{" "}
+                          em relação à proposta mais cara.
+                        </div>
+                      </div>
+                    </div>
+
+                    {resumoComparativo.savingCenarioOtimizado > 10 && (
+                      <div className="bg-white/90 border border-emerald-300 rounded-lg px-3 py-2 text-right">
+                        <div className="text-[10px] font-bold text-slate-600 uppercase">
+                          💡 Cenário Otimizado (Item a Item):
+                        </div>
+                        <div className="text-xs font-black text-emerald-800">
+                          {formatBRL(resumoComparativo.totalCenarioOtimizado)}
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          Economia extra de{" "}
+                          {formatBRL(resumoComparativo.savingCenarioOtimizado)}{" "}
+                          fracionando os itens
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tabela Comparativa Interativa (Itens, Quantidades e Preços lado a lado) */}
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">
+                          Planilha de Equalização Item a Item (
+                          {comparativoItens.length} insumos)
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Insira os preços unitários de cada fornecedor. O sistema destaca em verde o item mais em conta em tempo real.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleAdicionarItemComparativo}
+                          className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                        >
+                          <span>+</span> Adicionar Insumo
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm border-collapse text-left">
+                        <thead>
+                          <tr className="bg-slate-100 border-b border-slate-300 text-xs font-semibold text-slate-700">
+                            <th className="py-3 px-4 w-[28%]">
+                              Insumo / Material
+                            </th>
+                            <th className="py-3 px-3 w-[14%] text-center">
+                              Qtd & Unidade
+                            </th>
+                            {([0, 1, 2] as const).map((idx) => (
+                              <th
+                                key={idx}
+                                className={`py-3 px-3 w-[18%] text-right border-l border-slate-200 ${
+                                  resumoComparativo.vencedorGeral?.index === idx
+                                    ? "bg-emerald-50/70 text-emerald-950 font-bold"
+                                    : ""
+                                }`}
+                              >
+                                <div className="truncate">
+                                  {comparativoFornecedores[idx].nome ||
+                                    `Fornecedor ${idx + 1}`}
+                                </div>
+                                <div className="text-[10px] font-normal text-slate-500 mt-0.5">
+                                  Preço Unit. • Total Item
+                                </div>
+                              </th>
+                            ))}
+                            <th className="py-3 px-3 w-[4%] text-center">
+                              Excluir
+                            </th>
+                          </tr>
+                        </thead>
+
+                        <tbody className="divide-y divide-slate-200">
+                          {comparativoItens.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={6}
+                                className="py-12 text-center text-slate-500"
+                              >
+                                <div className="max-w-xs mx-auto space-y-3">
+                                  <span className="text-3xl block">📋</span>
+                                  <div className="text-xs font-semibold text-slate-700">
+                                    Nenhum item na cotação atual.
+                                  </div>
+                                  <p className="text-[11px] text-slate-500">
+                                    Clique no botão abaixo para adicionar insumos ou importe uma lista do Excel.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={handleAdicionarItemComparativo}
+                                    className="px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-bold"
+                                  >
+                                    + Adicionar Primeiro Insumo
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            resumoComparativo.itensCalculados.map(
+                              (it, itemIdx) => {
+                                return (
+                                  <tr
+                                    key={it.id}
+                                    className="hover:bg-slate-50 transition"
+                                  >
+                                    {/* Coluna 1: Nome do Insumo */}
+                                    <td className="py-2.5 px-4">
+                                      <input
+                                        type="text"
+                                        value={it.nome}
+                                        onChange={(e) =>
+                                          handleAtualizarItemComparativo(
+                                            it.id,
+                                            "nome",
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder={`Ex: Insumo #${
+                                          itemIdx + 1
+                                        }`}
+                                        className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 focus:bg-white rounded px-1.5 py-1 text-xs font-bold text-slate-900 transition"
+                                      />
+                                      {it.pctSaving > 0 && (
+                                        <div className="text-[10px] text-emerald-700 font-semibold px-1.5 mt-0.5">
+                                          Variação de até{" "}
+                                          {it.pctSaving.toFixed(0)}% entre orçamentos
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    {/* Coluna 2: Quantidade & Unidade */}
+                                    <td className="py-2.5 px-3 text-center">
+                                      <div className="inline-flex items-center gap-1.5">
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          value={it.quantidade}
+                                          onChange={(e) =>
+                                            handleAtualizarItemComparativo(
+                                              it.id,
+                                              "quantidade",
+                                              parseFloat(e.target.value) || 0
+                                            )
+                                          }
+                                          className="w-16 bg-white border border-slate-300 rounded px-1.5 py-1 text-xs font-black text-center text-slate-900"
+                                        />
+                                        <input
+                                          type="text"
+                                          value={it.unidade}
+                                          onChange={(e) =>
+                                            handleAtualizarItemComparativo(
+                                              it.id,
+                                              "unidade",
+                                              e.target.value
+                                            )
+                                          }
+                                          placeholder="un"
+                                          className="w-12 bg-white border border-slate-300 rounded px-1 py-1 text-[11px] font-semibold text-center text-slate-700 uppercase"
+                                        />
+                                      </div>
+                                    </td>
+
+                                    {/* Colunas 3, 4 e 5: Preços Fornecedor 1, 2 e 3 */}
+                                    {[
+                                      {
+                                        p: it.preco1,
+                                        tot: it.tot1,
+                                        win: it.vencedor1,
+                                        key: "preco1" as const,
+                                      },
+                                      {
+                                        p: it.preco2,
+                                        tot: it.tot2,
+                                        win: it.vencedor2,
+                                        key: "preco2" as const,
+                                      },
+                                      {
+                                        p: it.preco3,
+                                        tot: it.tot3,
+                                        win: it.vencedor3,
+                                        key: "preco3" as const,
+                                      },
+                                    ].map((col, cIdx) => (
+                                      <td
+                                        key={cIdx}
+                                        className={`py-2.5 px-3 border-l border-slate-200 transition ${
+                                          col.win
+                                            ? "bg-emerald-50/70 border-emerald-300"
+                                            : ""
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between gap-1.5">
+                                          <div className="flex items-center gap-1 bg-white border border-slate-300 rounded px-1.5 py-0.5 shadow-2xs">
+                                            <span className="text-[10px] text-slate-400 font-semibold">
+                                              R$
+                                            </span>
+                                            <input
+                                              type="number"
+                                              step="0.01"
+                                              value={col.p}
+                                              onChange={(e) =>
+                                                handleAtualizarItemComparativo(
+                                                  it.id,
+                                                  col.key,
+                                                  parseFloat(e.target.value) ||
+                                                    0
+                                                )
+                                              }
+                                              className="w-20 text-right text-xs font-black text-slate-900 focus:outline-none tabular-nums"
+                                            />
+                                          </div>
+
+                                          <div className="text-right">
+                                            <div
+                                              className={`text-xs tabular-nums font-bold ${
+                                                col.win
+                                                  ? "text-emerald-800"
+                                                  : "text-slate-800"
+                                              }`}
+                                            >
+                                              {formatBRL(col.tot)}
+                                            </div>
+                                            {col.win && (
+                                              <span className="inline-block px-1.5 py-0.2 rounded bg-emerald-700 text-white text-[9px] font-extrabold uppercase tracking-tight">
+                                                🏆 Mais em Conta
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </td>
+                                    ))}
+
+                                    {/* Coluna 6: Excluir */}
+                                    <td className="py-2.5 px-3 text-center">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleRemoverItemComparativo(it.id)
+                                        }
+                                        className="text-slate-400 hover:text-rose-600 transition p-1 text-sm"
+                                        title="Remover insumo da cotação"
+                                      >
+                                        ✕
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              }
+                            )
+                          )}
+                        </tbody>
+
+                        {/* Rodapé com Totais Consolidados */}
+                        {comparativoItens.length > 0 && (
+                          <tfoot className="border-t-2 border-slate-300 font-bold">
+                            <tr className="bg-slate-50 text-xs">
+                              <td
+                                colSpan={2}
+                                className="py-3 px-4 text-slate-700"
+                              >
+                                Subtotal dos Materiais
+                              </td>
+                              <td className="py-3 px-3 text-right text-slate-900 border-l border-slate-200 tabular-nums">
+                                {formatBRL(resumoComparativo.subtotal1)}
+                              </td>
+                              <td className="py-3 px-3 text-right text-slate-900 border-l border-slate-200 tabular-nums">
+                                {formatBRL(resumoComparativo.subtotal2)}
+                              </td>
+                              <td className="py-3 px-3 text-right text-slate-900 border-l border-slate-200 tabular-nums">
+                                {formatBRL(resumoComparativo.subtotal3)}
+                              </td>
+                              <td></td>
+                            </tr>
+
+                            <tr className="bg-slate-50 text-xs">
+                              <td
+                                colSpan={2}
+                                className="py-2 px-4 text-slate-600 font-normal"
+                              >
+                                Frete (CIF / FOB)
+                              </td>
+                              {([0, 1, 2] as const).map((idx) => (
+                                <td
+                                  key={idx}
+                                  className="py-2 px-3 text-right text-slate-600 border-l border-slate-200 text-xs tabular-nums"
+                                >
+                                  {comparativoFornecedores[idx].freteTipo ===
+                                  "CIF"
+                                    ? "CIF (Incluso)"
+                                    : `FOB (${formatBRL(
+                                        comparativoFornecedores[idx].freteValor
+                                      )})`}
+                                </td>
+                              ))}
+                              <td></td>
+                            </tr>
+
+                            <tr className="bg-slate-900 text-white text-sm">
+                              <td
+                                colSpan={2}
+                                className="py-3 px-4 font-black"
+                              >
+                                VALOR TOTAL FINAL (COM FRETE)
+                              </td>
+                              {([0, 1, 2] as const).map((idx) => {
+                                const tot =
+                                  idx === 0
+                                    ? resumoComparativo.total1
+                                    : idx === 1
+                                    ? resumoComparativo.total2
+                                    : resumoComparativo.total3;
+                                const isVencedor =
+                                  resumoComparativo.vencedorGeral?.index ===
+                                  idx;
+
+                                return (
+                                  <td
+                                    key={idx}
+                                    className={`py-3 px-3 text-right border-l border-slate-800 tabular-nums font-black ${
+                                      isVencedor
+                                        ? "bg-emerald-700 text-white"
+                                        : "text-white"
+                                    }`}
+                                  >
+                                    <div>{formatBRL(tot)}</div>
+                                    {isVencedor && (
+                                      <div className="text-[10px] uppercase font-bold text-emerald-200 tracking-wider mt-0.5">
+                                        ⭐ Vencedor
+                                      </div>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                              <td></td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </div>
+
+                    {/* Barra de Ações Rápidas no Pé da Tabela */}
+                    <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={handleAdicionarItemComparativo}
+                        className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                      >
+                        <span>+</span> Adicionar Mais um Insumo
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            comparativoFileInputRef.current?.click()
+                          }
+                          className="px-3.5 py-2 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs font-semibold transition flex items-center gap-1.5"
+                        >
+                          <span>📥</span> Importar Itens (.xlsx)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleGerarComparativoRapidoPDF}
+                          className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                        >
+                          <span>🖨️</span> Imprimir Relatório Executivo
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* MODO 2: COTAÇÕES VINCULADAS A REQUISIÇÕES DE OBRA (SC) */}
+              {modoCotacoes === "solicitacoes_obra" && (
+                scAtiva ? (
+                <div>
+                  {/* Barra de Controle da Cotação */}
               <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3 flex-1 min-w-[280px]">
                   <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">
@@ -6828,6 +8345,8 @@ export default function HomePage() {
               </div>
             )
           )}
+        </div>
+      )}
 
           {/* ============================================================= */}
           {/* ABA 3: FORNECEDORES & VENDEDORES (`Fornecedores`)             */}
