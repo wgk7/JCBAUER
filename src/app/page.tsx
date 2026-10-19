@@ -4696,7 +4696,7 @@ export default function HomePage() {
 
             // Cálculos dinâmicos do Funil / Pipeline Financeiro de Pedidos das Obras
             const scsTriagem = solicitacoesFiltradasFin.filter(
-              (s) => s.status === "Rascunho / Obra" || s.status === "Enviado / Aguardando Compras"
+              (s) => s.status === "Enviado / Aguardando Compras"
             );
             const valTriagem = scsTriagem.reduce(
               (acc, s) => acc + s.itens.reduce((sum, it) => sum + (it.quantidade * (it.orcamentoUnitario || 0)), 0),
@@ -4712,7 +4712,7 @@ export default function HomePage() {
             );
 
             const scsDiretoria = solicitacoesFiltradasFin.filter(
-              (s) => s.status === "Aguardando Aprovação Diretoria" || s.status === "Em Aprovação Diretoria"
+              (s) => s.status === "Aprovada"
             );
             const valDiretoria = scsDiretoria.reduce(
               (acc, s) => acc + s.itens.reduce((sum, it) => sum + (it.quantidade * (it.orcamentoUnitario || 0)), 0),
@@ -4722,7 +4722,7 @@ export default function HomePage() {
             const valContratadoOCs = ordensFiltradasFin.reduce((acc, o) => acc + o.valorTotal, 0);
 
             const ordensEntregues = ordensFiltradasFin.filter(
-              (o) => o.status === "Entregue" || o.status === "Recebido"
+              (o) => o.status === "Entregue" || o.status === "Entregue na Obra (Confirmado pelo Almoxarifado)"
             );
             const valEntregueNF = ordensEntregues.reduce((acc, o) => acc + o.valorTotal, 0);
 
