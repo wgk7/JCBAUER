@@ -1194,6 +1194,145 @@ export default function HomePage() {
     useState<boolean>(false);
   const [storageCarregado, setStorageCarregado] = useState<boolean>(false);
 
+  // Filtros e Seleções das Abas 2, 3 e 4
+  const [filtroClasseAbc, setFiltroClasseAbc] = useState<"ALL" | ClasseAbc>(
+    "ALL"
+  );
+  const [selectedScId, setSelectedScId] = useState<string>("");
+  const [buscaFornecedor, setBuscaFornecedor] = useState<string>("");
+  const [filtroCatFornecedor, setFiltroCatFornecedor] = useState<string>("ALL");
+  const [fornecedorFichaModal, setFornecedorFichaModal] =
+    useState<FornecedorCadastro | null>(null);
+  const [ordemVisualizarModal, setOrdemVisualizarModal] =
+    useState<OrdemCompra | null>(null);
+  const [filtroObraContratos, setFiltroObraContratos] =
+    useState<string>("ALL");
+
+  // Estados da Aba 5 (Importar Planilhas)
+  const [subAbaImportacao, setSubAbaImportacao] = useState<
+    "itens" | "duplicados" | "colaboradores"
+  >("itens");
+  const [itensPlanilha, setItensPlanilha] = useState<ItemPlanilhaImportada[]>(
+    ITENS_PLANILHA_INICIAIS
+  );
+  const [duplicidades, setDuplicidades] = useState<DuplicidadeFornecedor[]>(
+    DUPLICIDADES_INICIAIS
+  );
+  const [colaboradores, setColaboradores] = useState<ColaboradorMapeado[]>(
+    COLABORADORES_INICIAIS
+  );
+  const [editingImportRowId, setEditingImportRowId] = useState<string | null>(
+    null
+  );
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fornecedoresFileInputRef = useRef<HTMLInputElement | null>(null);
+  const comparativoFileInputRef = useRef<HTMLInputElement | null>(null);
+  const backupInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Estados do Comparativo de Preços (3 Orçamentos)
+  const [modoCotacoes, setModoCotacoes] = useState<
+    "comparativo_rapido" | "solicitacoes_obra"
+  >("comparativo_rapido");
+  const [comparativoTitulo, setComparativoTitulo] = useState<string>(
+    "Cotação de Materiais — 3 Orçamentos"
+  );
+  const [comparativoObraId, setComparativoObraId] = useState<string>("");
+  const [comparativoCategoria, setComparativoCategoria] = useState<string>(
+    "Estrutura (Aço & Concreto)"
+  );
+  const [comparativoFornecedores, setComparativoFornecedores] = useState<
+    [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido]
+  >([
+    {
+      nome: "Fornecedor 1",
+      vendedor: "",
+      telefone: "",
+      prazo: "3 a 5 dias",
+      condicao: "28 dias (Faturado)",
+      freteTipo: "CIF",
+      freteValor: 0,
+    },
+    {
+      nome: "Fornecedor 2",
+      vendedor: "",
+      telefone: "",
+      prazo: "5 a 7 dias",
+      condicao: "30 dias",
+      freteTipo: "CIF",
+      freteValor: 0,
+    },
+    {
+      nome: "Fornecedor 3",
+      vendedor: "",
+      telefone: "",
+      prazo: "Pronta Entrega",
+      condicao: "21 dias",
+      freteTipo: "FOB",
+      freteValor: 0,
+    },
+  ]);
+  const [comparativoItens, setComparativoItens] = useState<
+    ItemComparativoRapido[]
+  >([
+    {
+      id: "comp-item-1",
+      nome: "Cimento CP-II F-32 (Saco 50kg)",
+      quantidade: 150,
+      unidade: "saco",
+      preco1: 34.5,
+      preco2: 36.0,
+      preco3: 33.9,
+    },
+    {
+      id: "comp-item-2",
+      nome: "Aço CA-50 10.0mm (Barra 12m)",
+      quantidade: 80,
+      unidade: "barra",
+      preco1: 58.0,
+      preco2: 54.5,
+      preco3: 56.2,
+    },
+    {
+      id: "comp-item-3",
+      nome: "Areia Média Lavada",
+      quantidade: 15,
+      unidade: "m³",
+      preco1: 110.0,
+      preco2: 115.0,
+      preco3: 108.0,
+    },
+  ]);
+
+  // Modais de Ação e Governança
+  const [showNovaScModal, setShowNovaScModal] = useState<boolean>(false);
+  const [showNovoFornecedorModal, setShowNovoFornecedorModal] =
+    useState<boolean>(false);
+  const [showInserirPrecoModal, setShowInserirPrecoModal] =
+    useState<boolean>(false);
+  const [showNovoUsuarioModal, setShowNovoUsuarioModal] =
+    useState<boolean>(false);
+  const [showNovoContratoModal, setShowNovoContratoModal] =
+    useState<boolean>(false);
+  const [showNovoBmModalContrato, setShowNovoBmModalContrato] =
+    useState<ContratoSubempreitada | null>(null);
+  const [scMensagensModal, setScMensagensModal] =
+    useState<SolicitacaoCompra | null>(null);
+  const [diretoriaAprovacaoModal, setDiretoriaAprovacaoModal] = useState<{
+    novaOc: OrdemCompra;
+    prop: PropostaFornecedor;
+  } | null>(null);
+  const [ocConfirmarRecebimentoModal, setOcConfirmarRecebimentoModal] =
+    useState<OrdemCompra | null>(null);
+
+  // Notificação rápida (Banner discreto)
+  const [notificacao, setNotificacao] = useState<string | null>(null);
+  const dispararAviso = (msg: string) => {
+    setNotificacao(msg);
+    setTimeout(() => {
+      setNotificacao((prev) => (prev === msg ? null : prev));
+    }, 4000);
+  };
+
   // Carregar dados persistidos do localStorage na montagem
   useEffect(() => {
     try {
@@ -1620,151 +1759,6 @@ export default function HomePage() {
     () => calcularClassificacaoAbc(solicitacoes, ordens),
     [solicitacoes, ordens]
   );
-  const [filtroClasseAbc, setFiltroClasseAbc] = useState<"ALL" | ClasseAbc>(
-    "ALL"
-  );
-
-  // Cotação ativa na Aba 2
-  const [selectedScId, setSelectedScId] = useState<string>("");
-
-  // Busca e Filtros na Aba 3 (Fornecedores)
-  const [buscaFornecedor, setBuscaFornecedor] = useState<string>("");
-  const [filtroCatFornecedor, setFiltroCatFornecedor] = useState<string>("ALL");
-  const [fornecedorFichaModal, setFornecedorFichaModal] =
-    useState<FornecedorCadastro | null>(null);
-
-  // Ordem de Compra selecionada para Modal na Aba 4
-  const [ordemVisualizarModal, setOrdemVisualizarModal] =
-    useState<OrdemCompra | null>(null);
-
-  // Filtro de Obra para a Aba de Contratos & Medições
-  const [filtroObraContratos, setFiltroObraContratos] =
-    useState<string>("ALL");
-
-  // Estados da Aba 5 (Importar Planilhas)
-  const [subAbaImportacao, setSubAbaImportacao] = useState<
-    "itens" | "duplicados" | "colaboradores"
-  >("itens");
-  const [itensPlanilha, setItensPlanilha] = useState<ItemPlanilhaImportada[]>(
-    ITENS_PLANILHA_INICIAIS
-  );
-  const [duplicidades, setDuplicidades] = useState<DuplicidadeFornecedor[]>(
-    DUPLICIDADES_INICIAIS
-  );
-  const [colaboradores, setColaboradores] = useState<ColaboradorMapeado[]>(
-    COLABORADORES_INICIAIS
-  );
-  const [editingImportRowId, setEditingImportRowId] = useState<string | null>(
-    null
-  );
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const fornecedoresFileInputRef = useRef<HTMLInputElement | null>(null);
-  const comparativoFileInputRef = useRef<HTMLInputElement | null>(null);
-  const backupInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Estados do Comparativo de Preços (3 Orçamentos)
-  const [modoCotacoes, setModoCotacoes] = useState<
-    "comparativo_rapido" | "solicitacoes_obra"
-  >("comparativo_rapido");
-  const [comparativoTitulo, setComparativoTitulo] = useState<string>(
-    "Cotação de Materiais — 3 Orçamentos"
-  );
-  const [comparativoObraId, setComparativoObraId] = useState<string>("");
-  const [comparativoCategoria, setComparativoCategoria] = useState<string>(
-    "Estrutura (Aço & Concreto)"
-  );
-  const [comparativoFornecedores, setComparativoFornecedores] = useState<
-    [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido]
-  >([
-    {
-      nome: "Fornecedor 1",
-      vendedor: "",
-      telefone: "",
-      prazo: "3 a 5 dias",
-      condicao: "28 dias (Faturado)",
-      freteTipo: "CIF",
-      freteValor: 0,
-    },
-    {
-      nome: "Fornecedor 2",
-      vendedor: "",
-      telefone: "",
-      prazo: "5 a 7 dias",
-      condicao: "30 dias",
-      freteTipo: "CIF",
-      freteValor: 0,
-    },
-    {
-      nome: "Fornecedor 3",
-      vendedor: "",
-      telefone: "",
-      prazo: "Pronta Entrega",
-      condicao: "21 dias",
-      freteTipo: "FOB",
-      freteValor: 0,
-    },
-  ]);
-  const [comparativoItens, setComparativoItens] = useState<
-    ItemComparativoRapido[]
-  >([
-    {
-      id: "comp-item-1",
-      nome: "Cimento CP-II F-32 (Saco 50kg)",
-      quantidade: 150,
-      unidade: "saco",
-      preco1: 34.5,
-      preco2: 36.0,
-      preco3: 33.9,
-    },
-    {
-      id: "comp-item-2",
-      nome: "Aço CA-50 10.0mm (Barra 12m)",
-      quantidade: 80,
-      unidade: "barra",
-      preco1: 58.0,
-      preco2: 54.5,
-      preco3: 56.2,
-    },
-    {
-      id: "comp-item-3",
-      nome: "Areia Média Lavada",
-      quantidade: 15,
-      unidade: "m³",
-      preco1: 110.0,
-      preco2: 115.0,
-      preco3: 108.0,
-    },
-  ]);
-
-  // Modais de Ação e Governança
-  const [showNovaScModal, setShowNovaScModal] = useState<boolean>(false);
-  const [showNovoFornecedorModal, setShowNovoFornecedorModal] =
-    useState<boolean>(false);
-  const [showInserirPrecoModal, setShowInserirPrecoModal] =
-    useState<boolean>(false);
-  const [showNovoUsuarioModal, setShowNovoUsuarioModal] =
-    useState<boolean>(false);
-  const [showNovoContratoModal, setShowNovoContratoModal] =
-    useState<boolean>(false);
-  const [showNovoBmModalContrato, setShowNovoBmModalContrato] =
-    useState<ContratoSubempreitada | null>(null);
-  const [scMensagensModal, setScMensagensModal] =
-    useState<SolicitacaoCompra | null>(null);
-  const [diretoriaAprovacaoModal, setDiretoriaAprovacaoModal] = useState<{
-    novaOc: OrdemCompra;
-    prop: PropostaFornecedor;
-  } | null>(null);
-  const [ocConfirmarRecebimentoModal, setOcConfirmarRecebimentoModal] =
-    useState<OrdemCompra | null>(null);
-
-  // Notificação rápida (Banner discreto)
-  const [notificacao, setNotificacao] = useState<string | null>(null);
-  const dispararAviso = (msg: string) => {
-    setNotificacao(msg);
-    setTimeout(() => {
-      setNotificacao((prev) => (prev === msg ? null : prev));
-    }, 4000);
-  };
 
   // Handlers de Contratos & Medições
   const handleCriarContrato = (novoCt: ContratoSubempreitada) => {
@@ -3682,7 +3676,23 @@ export default function HomePage() {
     let subtotal3 = 0;
     let totalCenarioOtimizado = 0;
 
-    const itensCalculados = comparativoItens.map((item) => {
+    const forn0 = comparativoFornecedores?.[0] ?? {
+      nome: "Fornecedor 1",
+      freteValor: 0,
+      freteTipo: "CIF" as const,
+    };
+    const forn1 = comparativoFornecedores?.[1] ?? {
+      nome: "Fornecedor 2",
+      freteValor: 0,
+      freteTipo: "CIF" as const,
+    };
+    const forn2 = comparativoFornecedores?.[2] ?? {
+      nome: "Fornecedor 3",
+      freteValor: 0,
+      freteTipo: "CIF" as const,
+    };
+
+    const itensCalculados = (comparativoItens || []).map((item) => {
       const p1 = Number(item.preco1) || 0;
       const p2 = Number(item.preco2) || 0;
       const p3 = Number(item.preco3) || 0;
@@ -3741,9 +3751,9 @@ export default function HomePage() {
       };
     });
 
-    const frete1 = Number(comparativoFornecedores[0].freteValor) || 0;
-    const frete2 = Number(comparativoFornecedores[1].freteValor) || 0;
-    const frete3 = Number(comparativoFornecedores[2].freteValor) || 0;
+    const frete1 = Number(forn0.freteValor) || 0;
+    const frete2 = Number(forn1.freteValor) || 0;
+    const frete3 = Number(forn2.freteValor) || 0;
 
     const total1 = subtotal1 + frete1;
     const total2 = subtotal2 + frete2;
@@ -3752,27 +3762,27 @@ export default function HomePage() {
     const totaisValidos = [
       {
         index: 0,
-        nome: comparativoFornecedores[0].nome || "Orçamento 1",
+        nome: forn0.nome || "Orçamento 1",
         subtotal: subtotal1,
         frete: frete1,
         total: total1,
-        forn: comparativoFornecedores[0],
+        forn: forn0,
       },
       {
         index: 1,
-        nome: comparativoFornecedores[1].nome || "Orçamento 2",
+        nome: forn1.nome || "Orçamento 2",
         subtotal: subtotal2,
         frete: frete2,
         total: total2,
-        forn: comparativoFornecedores[1],
+        forn: forn1,
       },
       {
         index: 2,
-        nome: comparativoFornecedores[2].nome || "Orçamento 3",
+        nome: forn2.nome || "Orçamento 3",
         subtotal: subtotal3,
         frete: frete3,
         total: total3,
-        forn: comparativoFornecedores[2],
+        forn: forn2,
       },
     ].filter((t) => t.total > 0);
 
@@ -3842,11 +3852,14 @@ export default function HomePage() {
     valor: string | number
   ) => {
     setComparativoFornecedores((prev) => {
+      const f0 = prev?.[0] || { nome: "Fornecedor 1", vendedor: "", telefone: "", prazo: "3 a 5 dias", condicao: "28 dias (Faturado)", freteTipo: "CIF" as const, freteValor: 0 };
+      const f1 = prev?.[1] || { nome: "Fornecedor 2", vendedor: "", telefone: "", prazo: "5 a 7 dias", condicao: "30 dias", freteTipo: "CIF" as const, freteValor: 0 };
+      const f2 = prev?.[2] || { nome: "Fornecedor 3", vendedor: "", telefone: "", prazo: "Pronta Entrega", condicao: "21 dias", freteTipo: "FOB" as const, freteValor: 0 };
       const copia: [
         FornecedorCotadoRapido,
         FornecedorCotadoRapido,
         FornecedorCotadoRapido
-      ] = [{ ...prev[0] }, { ...prev[1] }, { ...prev[2] }];
+      ] = [{ ...f0 }, { ...f1 }, { ...f2 }];
       copia[index] = { ...copia[index], [campo]: valor };
       return copia;
     });
@@ -3859,11 +3872,14 @@ export default function HomePage() {
     const achado = fornecedores.find((f) => f.id === fornecedorId);
     if (!achado) return;
     setComparativoFornecedores((prev) => {
+      const f0 = prev?.[0] || { nome: "Fornecedor 1", vendedor: "", telefone: "", prazo: "3 a 5 dias", condicao: "28 dias (Faturado)", freteTipo: "CIF" as const, freteValor: 0 };
+      const f1 = prev?.[1] || { nome: "Fornecedor 2", vendedor: "", telefone: "", prazo: "5 a 7 dias", condicao: "30 dias", freteTipo: "CIF" as const, freteValor: 0 };
+      const f2 = prev?.[2] || { nome: "Fornecedor 3", vendedor: "", telefone: "", prazo: "Pronta Entrega", condicao: "21 dias", freteTipo: "FOB" as const, freteValor: 0 };
       const copia: [
         FornecedorCotadoRapido,
         FornecedorCotadoRapido,
         FornecedorCotadoRapido
-      ] = [{ ...prev[0] }, { ...prev[1] }, { ...prev[2] }];
+      ] = [{ ...f0 }, { ...f1 }, { ...f2 }];
       copia[index] = {
         ...copia[index],
         nome: achado.empresa,
@@ -4150,13 +4166,13 @@ export default function HomePage() {
         <th style="width: 30%;">Insumo / Material</th>
         <th class="text-center" style="width: 12%;">Qtd & Unid</th>
         <th class="text-right" style="width: 19%;">${
-          comparativoFornecedores[0].nome || "Fornecedor 1"
+          comparativoFornecedores?.[0]?.nome || "Fornecedor 1"
         }</th>
         <th class="text-right" style="width: 19%;">${
-          comparativoFornecedores[1].nome || "Fornecedor 2"
+          comparativoFornecedores?.[1]?.nome || "Fornecedor 2"
         }</th>
         <th class="text-right" style="width: 19%;">${
-          comparativoFornecedores[2].nome || "Fornecedor 3"
+          comparativoFornecedores?.[2]?.nome || "Fornecedor 3"
         }</th>
       </tr>
     </thead>
@@ -4199,14 +4215,14 @@ export default function HomePage() {
       </tr>
       <tr style="background: #f8fafc;">
         <td colspan="2">Frete (CIF / FOB)</td>
-        <td class="text-right">${comparativoFornecedores[0].freteTipo} (${formatBRL(
-      comparativoFornecedores[0].freteValor
+        <td class="text-right">${comparativoFornecedores?.[0]?.freteTipo || "CIF"} (${formatBRL(
+      comparativoFornecedores?.[0]?.freteValor || 0
     )})</td>
-        <td class="text-right">${comparativoFornecedores[1].freteTipo} (${formatBRL(
-      comparativoFornecedores[1].freteValor
+        <td class="text-right">${comparativoFornecedores?.[1]?.freteTipo || "CIF"} (${formatBRL(
+      comparativoFornecedores?.[1]?.freteValor || 0
     )})</td>
-        <td class="text-right">${comparativoFornecedores[2].freteTipo} (${formatBRL(
-      comparativoFornecedores[2].freteValor
+        <td class="text-right">${comparativoFornecedores?.[2]?.freteTipo || "CIF"} (${formatBRL(
+      comparativoFornecedores?.[2]?.freteValor || 0
     )})</td>
       </tr>
       <tr style="background: #0f172a; color: #ffffff; font-weight: 800; font-size: 11px;">
@@ -7250,7 +7266,7 @@ export default function HomePage() {
                           <option value="">Todas as Obras / Canteiro Central</option>
                           {obras.map((ob) => (
                             <option key={ob.id} value={ob.id}>
-                              {ob.nome} ({ob.cidade}/{ob.estado})
+                              {ob.nome} ({ob.sigla})
                             </option>
                           ))}
                         </select>
@@ -7279,7 +7295,15 @@ export default function HomePage() {
                   {/* Cards dos 3 Fornecedores Cotados (Ranking + Totais + Ação) */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {([0, 1, 2] as const).map((idx) => {
-                      const forn = comparativoFornecedores[idx];
+                      const forn = comparativoFornecedores?.[idx] ?? {
+                        nome: `Fornecedor ${idx + 1}`,
+                        vendedor: "",
+                        telefone: "",
+                        prazo: "",
+                        condicao: "",
+                        freteTipo: "CIF" as const,
+                        freteValor: 0,
+                      };
                       const total =
                         idx === 0
                           ? resumoComparativo.total1
@@ -7625,7 +7649,7 @@ export default function HomePage() {
                                 }`}
                               >
                                 <div className="truncate">
-                                  {comparativoFornecedores[idx].nome ||
+                                  {comparativoFornecedores?.[idx]?.nome ||
                                     `Fornecedor ${idx + 1}`}
                                 </div>
                                 <div className="text-[10px] font-normal text-slate-500 mt-0.5">
@@ -7853,11 +7877,11 @@ export default function HomePage() {
                                   key={idx}
                                   className="py-2 px-3 text-right text-slate-600 border-l border-slate-200 text-xs tabular-nums"
                                 >
-                                  {comparativoFornecedores[idx].freteTipo ===
+                                  {(comparativoFornecedores?.[idx]?.freteTipo ?? "CIF") ===
                                   "CIF"
                                     ? "CIF (Incluso)"
                                     : `FOB (${formatBRL(
-                                        comparativoFornecedores[idx].freteValor
+                                        comparativoFornecedores?.[idx]?.freteValor ?? 0
                                       )})`}
                                 </td>
                               ))}
