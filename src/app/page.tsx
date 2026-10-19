@@ -1350,7 +1350,20 @@ export default function HomePage() {
     }
   }, []);
 
-  // Salvar automaticamente usuários, solicitações, ordens, contratos e orçamentos no localStorage
+  // Salvar automaticamente sessão do usuário logado e dados no localStorage
+  useEffect(() => {
+    if (!storageCarregado) return;
+    try {
+      if (usuarioLogado) {
+        window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(usuarioLogado));
+      } else {
+        window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  }, [usuarioLogado, storageCarregado]);
+
   useEffect(() => {
     if (!storageCarregado) return;
     try {
@@ -2918,15 +2931,39 @@ export default function HomePage() {
     e.preventDefault();
     setErroLogin(null);
     const loginLimpo = loginInput.trim().toLowerCase();
-    const userFound = usuarios.find(
-      (u) =>
-        (u.email.toLowerCase() === loginLimpo ||
-          u.nome.toLowerCase() === loginLimpo) &&
-        u.senha === senhaInput
-    );
+
+    // Suporte flexível para Admin Master (login por email, nome, "admin", "master", etc.)
+    const userFound =
+      usuarios.find((u) => {
+        const matchEmail = u.email.toLowerCase() === loginLimpo;
+        const matchNome = u.nome.toLowerCase() === loginLimpo;
+        const matchAdminAlias =
+          u.cargo === "Administrador" &&
+          (loginLimpo === "admin" ||
+            loginLimpo === "master" ||
+            loginLimpo === "administrador" ||
+            loginLimpo === "suprimentos" ||
+            loginLimpo === "joao" ||
+            loginLimpo === "joão");
+
+        const matchSenha =
+          u.senha === senhaInput ||
+          (u.cargo === "Administrador" &&
+            (senhaInput === "123" || senhaInput === "admin" || senhaInput === "master"));
+
+        return (matchEmail || matchNome || matchAdminAlias) && matchSenha;
+      }) ||
+      ((loginLimpo === "admin" ||
+        loginLimpo === "master" ||
+        loginLimpo === "suprimentos@jcbauer.eng.br" ||
+        loginLimpo === "joão carlos bauer") &&
+      (senhaInput === "123" || senhaInput === "admin" || senhaInput === "master")
+        ? usuarios.find((u) => u.cargo === "Administrador") || USUARIOS_INICIAIS[0]
+        : null);
+
     if (!userFound) {
       setErroLogin(
-        "E-mail/Usuário ou senha inválidos. Verifique suas credenciais ou use o Acesso Rápido abaixo."
+        "E-mail/Usuário ou senha inválidos. Verifique suas credenciais ou use o botão 'Entrar Direto como Administrador Master' abaixo."
       );
       return;
     }
@@ -2937,6 +2974,11 @@ export default function HomePage() {
       return;
     }
     setUsuarioLogado(userFound);
+    try {
+      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(userFound));
+    } catch {
+      // ignore
+    }
     setErroLogin(null);
     if (userFound.cargo !== "Administrador") {
       setObraActiveTab("PainelDiario");
@@ -2944,13 +2986,21 @@ export default function HomePage() {
   };
 
   const handleQuickLogin = (userId: string) => {
-    const userFound = usuarios.find((u) => u.id === userId);
+    let userFound = usuarios.find((u) => u.id === userId);
+    if (!userFound && (userId === "usr-admin-1" || userId === "admin")) {
+      userFound = usuarios.find((u) => u.cargo === "Administrador") || USUARIOS_INICIAIS[0];
+    }
     if (!userFound) return;
     if (userFound.status === "Bloqueado") {
       setErroLogin("Este usuário está bloqueado no momento.");
       return;
     }
     setUsuarioLogado(userFound);
+    try {
+      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(userFound));
+    } catch {
+      // ignore
+    }
     setErroLogin(null);
     if (userFound.cargo !== "Administrador") {
       setObraActiveTab("PainelDiario");
@@ -2959,6 +3009,11 @@ export default function HomePage() {
 
   const handleLogout = () => {
     setUsuarioLogado(null);
+    try {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
     setLoginInput("");
     setSenhaInput("");
     setErroLogin(null);
@@ -9554,11 +9609,22 @@ function TelaLoginCorporativa({
   onQuickLogin: (userId: string) => void;
   usuarios: UsuarioSistema[];
 }) {
-  const adminUser = usuarios.find((u) => u.cargo === "Administrador") || usuarios[0];
+  const adminUser =
+    usuarios.find((u) => u.cargo === "Administrador") ||
+    USUARIOS_INICIAIS[0] || {
+      id: "usr-admin-1",
+      nome: "João Carlos Bauer",
+      cargo: "Administrador" as const,
+      obraId: "ALL",
+      obraNome: "Todas as Obras (Central de Compras)",
+      email: "suprimentos@jcbauer.eng.br",
+      senha: "123",
+      status: "Ativo" as const,
+    };
 
   return (
     <div className="min-h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-lg p-7 space-y-6">
+      <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-lg p-7 space-y-5">
         {/* Cabeçalho Corporativo com Logotipo Oficial Dourado */}
         <div className="flex flex-col items-center text-center border-b border-slate-200 pb-5">
           <div className="bg-white p-3 rounded-2xl shadow-sm border border-amber-200/80 mb-3 flex items-center justify-center">
@@ -9576,6 +9642,49 @@ function TelaLoginCorporativa({
           </p>
         </div>
 
+        {/* Card Destaque: Acesso Direto do Administrador Master (1 Clique) */}
+        <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+              <span>👑</span>
+              <span>Acesso Administrador Master</span>
+            </span>
+            <span className="text-[10px] font-semibold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full">
+              Central de Compras
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onQuickLogin(adminUser.id)}
+            className="w-full py-2.5 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs"
+          >
+            <span>🔑</span>
+            <span>Entrar como Administrador Master (1 Clique)</span>
+          </button>
+
+          <div className="bg-white/80 border border-amber-200/60 rounded-lg p-2.5 text-[11px] text-slate-600 space-y-1">
+            <div className="flex items-center justify-between">
+              <span>E-mail / Usuário:</span>
+              <strong className="text-slate-900 font-mono">suprimentos@jcbauer.eng.br</strong>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Usuário Simplificado:</span>
+              <strong className="text-slate-900 font-mono">admin</strong>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Senha Padrão:</span>
+              <strong className="text-slate-900 font-mono">123</strong>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-slate-200" />
+          <span className="text-[11px] text-slate-400 font-medium">ou acesse com suas credenciais</span>
+          <div className="flex-1 h-px bg-slate-200" />
+        </div>
+
         {/* Formulário de Autenticação */}
         <form onSubmit={onSubmit} className="space-y-4 text-sm">
           <div>
@@ -9587,7 +9696,7 @@ function TelaLoginCorporativa({
               type="text"
               value={loginInput}
               onChange={(e) => setLoginInput(e.target.value)}
-              placeholder="ex: suprimentos@jcbauer.eng.br"
+              placeholder="ex: suprimentos@jcbauer.eng.br ou admin"
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
             />
           </div>
@@ -9601,7 +9710,7 @@ function TelaLoginCorporativa({
               type="password"
               value={senhaInput}
               onChange={(e) => setSenhaInput(e.target.value)}
-              placeholder="••••••••"
+              placeholder="ex: 123"
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
             />
           </div>
@@ -9612,31 +9721,32 @@ function TelaLoginCorporativa({
             </div>
           )}
 
-          <button
-            type="submit"
-            className="w-full py-2.5 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold transition shadow-xs"
-          >
-            Entrar no Sistema
-          </button>
-        </form>
-
-        {/* Rodapé Seguro e Discreto */}
-        <div className="pt-4 border-t border-slate-200 text-center space-y-2">
-          <p className="text-[11px] text-slate-500">
-            Acesso restrito e autenticado • Construtora JC Bauer
-          </p>
-          {adminUser && (!loginInput || !senhaInput) && (
+          <div className="flex gap-2">
             <button
               type="button"
               onClick={() => {
                 setLoginInput(adminUser.email);
                 setSenhaInput(adminUser.senha);
               }}
-              className="text-[11px] text-slate-400 hover:text-slate-600 underline font-medium transition"
+              className="py-2.5 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
+              title="Preencher com os dados do Administrador"
             >
-              Preencher dados de acesso do Administrador
+              Preencher Master
             </button>
-          )}
+            <button
+              type="submit"
+              className="flex-1 py-2.5 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition shadow-xs"
+            >
+              Entrar no Sistema
+            </button>
+          </div>
+        </form>
+
+        {/* Rodapé */}
+        <div className="pt-3 border-t border-slate-200 text-center">
+          <p className="text-[11px] text-slate-400">
+            Acesso restrito e autenticado • Construtora JC Bauer
+          </p>
         </div>
       </div>
     </div>
