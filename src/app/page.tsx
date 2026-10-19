@@ -91,7 +91,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   userRole: "Diretoria & Coordenação de Suprimentos",
   userEmail: "suprimentos@jcbauer.eng.br",
   userPhone: "(47) 99910-2030",
-  companyName: "JC Bauer Engenharia e Incorporações S.A.",
+  companyName: "JC Bauer Empreendimentos",
   companyCnpj: "04.819.302/0001-71",
 };
 
@@ -3659,16 +3659,21 @@ export default function HomePage() {
   <!-- Folha A4 Executiva -->
   <div class="page-sheet" style="max-width: 1040px; margin: 20px auto; background: #ffffff; padding: 28px; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.08);">
     <!-- Cabeçalho da Construtora -->
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 14px; margin-bottom: 18px;">
-      <div>
-        <div style="font-size: 18px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
-          ${settings.companyName}
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 14px; margin-bottom: 18px;">
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <div style="background: #ffffff; padding: 6px 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+          <img src="${window.location.origin}/logo.png" alt="JC Bauer Empreendimentos" style="height: 52px; width: auto; object-fit: contain;" />
         </div>
-        <div style="font-size: 12px; color: #475569; margin-top: 3px;">
-          CNPJ: ${settings.companyCnpj} • Comprador Responsável: <strong>${settings.userName}</strong> (${settings.userRole})
-        </div>
-        <div style="font-size: 12px; color: #0f172a; margin-top: 3px;">
-          <strong>Empreendimento:</strong> ${obraScAtiva.nome} (${obraScAtiva.sigla}) • <strong>Disciplina:</strong> ${scAtiva.categoria}
+        <div>
+          <div style="font-size: 18px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
+            ${settings.companyName}
+          </div>
+          <div style="font-size: 12px; color: #475569; margin-top: 3px;">
+            CNPJ: ${settings.companyCnpj} • Comprador Responsável: <strong>${settings.userName}</strong> (${settings.userRole})
+          </div>
+          <div style="font-size: 12px; color: #0f172a; margin-top: 3px;">
+            <strong>Empreendimento:</strong> ${obraScAtiva.nome} (${obraScAtiva.sigla}) • <strong>Disciplina:</strong> ${scAtiva.categoria}
+          </div>
         </div>
       </div>
       <div style="text-align: right;">
@@ -3735,6 +3740,463 @@ export default function HomePage() {
       <div style="border-top: 1px solid #0f172a; padding-top: 8px;">
         <strong>Diretoria Executiva / Aprovação Final</strong>
         <div style="color: #475569; font-size: 11px;">${settings.companyName}</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.focus();
+        window.print();
+      }, 250);
+    };
+  </script>
+</body>
+</html>`;
+
+    win.document.open();
+    win.document.write(htmlContent);
+    win.document.close();
+  };
+
+  /* ----------------------------------------------------------------------- */
+  /* 2. IMPRESSÃO DA ORDEM DE COMPRA (OC) OFICIAL TIMBRADA                   */
+  /* ----------------------------------------------------------------------- */
+  const handleGerarOrdemCompraPDF = (oc: OrdemCompra) => {
+    const win = window.open("", "_blank", "width=920,height=750");
+    if (!win) {
+      dispararAviso(
+        "Permita pop-ups no navegador para abrir a janela de impressão da Ordem de Compra."
+      );
+      return;
+    }
+
+    const alcadaInfo = obterAlcadaAprovacao(oc.valorTotal);
+
+    const linhasItensHtml = oc.itens
+      .map(
+        (it, idx) => `
+        <tr>
+          <td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;font-weight:600;color:#475569;">
+            ${idx + 1}
+          </td>
+          <td style="padding:8px 10px;border:1px solid #cbd5e1;font-weight:700;color:#0f172a;white-space:nowrap;">
+            ${it.codigo}
+          </td>
+          <td style="padding:8px 10px;border:1px solid #cbd5e1;color:#0f172a;">
+            <div style="font-weight:600;">${it.descricao}</div>
+            ${it.observacaoObra ? `<div style="font-size:11px;color:#64748b;margin-top:2px;">Obs Canteiro: ${it.observacaoObra}</div>` : ""}
+          </td>
+          <td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;font-weight:700;white-space:nowrap;">
+            ${it.quantidade} ${it.unidade}
+          </td>
+          <td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:right;white-space:nowrap;">
+            ${formatBRL(it.precoUnitario)}
+          </td>
+          <td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:right;font-weight:700;color:#0f172a;white-space:nowrap;">
+            ${formatBRL(it.subtotal)}
+          </td>
+        </tr>
+      `
+      )
+      .join("");
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ordem de Compra ${oc.numeroOc} - ${settings.companyName}</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm; }
+    * { box-sizing: border-box; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; padding: 0; background: #f1f5f9; color: #0f172a; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    @media print {
+      body { background: #ffffff !important; }
+      .no-print { display: none !important; }
+      .page-sheet { margin: 0 !important; box-shadow: none !important; border: none !important; max-width: 100% !important; padding: 0 !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="position: sticky; top: 0; background: #0f172a; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; z-index: 9999; border-bottom: 2px solid #059669;">
+    <div style="color: #ffffff; font-size: 14px; font-weight: 600;">
+      📄 Ordem de Compra Oficial — ${oc.numeroOc} (${oc.obraNome})
+    </div>
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <button onclick="window.print()" style="background: #059669; color: #ffffff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer;">
+        🖨️ Baixar / Imprimir PDF Oficial
+      </button>
+      <button onclick="window.close()" style="background: #334155; color: #ffffff; border: 1px solid #64748b; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">
+        Fechar
+      </button>
+    </div>
+  </div>
+
+  <div class="page-sheet" style="max-width: 960px; margin: 16px auto; background: #ffffff; padding: 24px 28px; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.08);">
+    
+    <!-- Cabeçalho Timbrado com Logomarca Oficial JC BAUER -->
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 14px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <div style="background: #ffffff; padding: 6px 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+          <img src="${window.location.origin}/logo.png" alt="JC Bauer Empreendimentos" style="height: 55px; width: auto; object-fit: contain;" />
+        </div>
+        <div>
+          <div style="font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: -0.5px;">
+            ${settings.companyName}
+          </div>
+          <div style="font-size: 11px; color: #475569; margin-top: 2px;">
+            CNPJ: <strong>${settings.companyCnpj}</strong> • Inscrição Estadual: <strong>258.910.340</strong>
+          </div>
+          <div style="font-size: 11px; color: #475569; margin-top: 2px;">
+            Depto. de Suprimentos & Engenharia: <strong>${settings.userName}</strong> • ${settings.userEmail} • ${settings.userPhone}
+          </div>
+        </div>
+      </div>
+      <div style="text-align: right; background: #f8fafc; padding: 10px 16px; border-radius: 8px; border: 1px solid #cbd5e1;">
+        <div style="font-size: 11px; font-weight: 800; color: #059669; text-transform: uppercase;">DOCUMENTO DE COMPRA FORMAL</div>
+        <div style="font-size: 20px; font-weight: 900; color: #0f172a; margin-top: 2px;">${oc.numeroOc}</div>
+        <div style="font-size: 11px; color: #475569; margin-top: 2px;">
+          Emissão: <strong>${oc.dataEmissao}</strong> • Ref: <strong>${oc.scCodigo}</strong>
+        </div>
+        <div style="font-size: 10px; font-weight: 700; color: #0f172a; margin-top: 4px; display: inline-block; padding: 2px 6px; background: #e2e8f0; border-radius: 4px;">
+          ${alcadaInfo.nivel}
+        </div>
+      </div>
+    </div>
+
+    <!-- Dados do Fornecedor e da Obra -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; font-size: 12px;">
+      
+      <!-- Caixa 1: Fornecedor -->
+      <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; line-height: 1.5;">
+        <div style="font-size: 10px; font-weight: 800; color: #059669; text-transform: uppercase; margin-bottom: 4px;">
+          1. FORNECEDOR CONTRATADO
+        </div>
+        <div style="font-size: 14px; font-weight: 800; color: #0f172a;">
+          ${oc.fornecedorRazao || oc.fornecedorNome}
+        </div>
+        <div style="color: #475569; font-size: 11px;">
+          Nome Fantasia: <strong>${oc.fornecedorNome}</strong>
+        </div>
+        <div style="color: #475569; font-size: 11px;">
+          CNPJ: <strong>${oc.fornecedorCnpj}</strong>
+        </div>
+        <div style="color: #475569; font-size: 11px; margin-top: 4px;">
+          Vendedor(a): <strong>${oc.vendedorNome}</strong> • WhatsApp: <strong>${oc.whatsapp}</strong>
+        </div>
+        <div style="color: #475569; font-size: 11px;">
+          Chave PIX / Faturamento: <strong>${oc.chavePix || "Conforme Boleto"}</strong>
+        </div>
+      </div>
+
+      <!-- Caixa 2: Local de Entrega e Condições -->
+      <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; line-height: 1.5;">
+        <div style="font-size: 10px; font-weight: 800; color: #059669; text-transform: uppercase; margin-bottom: 4px;">
+          2. LOCAL DE DESCARGA & FATURAMENTO
+        </div>
+        <div style="font-size: 14px; font-weight: 800; color: #0f172a;">
+          🏗️ ${oc.obraNome}
+        </div>
+        <div style="color: #475569; font-size: 11px;">
+          Endereço: <strong>${oc.obraEndereco}</strong>
+        </div>
+        <div style="color: #475569; font-size: 11px;">
+          Engenheiro / Receptor: <strong>${oc.obraEngenheiro || "Almoxarifado da Obra"}</strong>
+        </div>
+        <div style="color: #475569; font-size: 11px; margin-top: 4px;">
+          Prazo / Condição: <strong>${oc.prazoPagamento}</strong>
+        </div>
+        <div style="color: #475569; font-size: 11px;">
+          Frete: <strong>${oc.tipoFrete} (${oc.freteValor > 0 ? formatBRL(oc.freteValor) : "Incluso no Preço"})</strong> • Prev. Entrega: <strong>${oc.dataPrevistaEntrega || "Imediato"}</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabela Oficial de Itens -->
+    <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 14px;">
+      <thead>
+        <tr style="background: #0f172a; color: #ffffff;">
+          <th style="padding: 8px 10px; border: 1px solid #0f172a; text-align: center; width: 36px;">Item</th>
+          <th style="padding: 8px 10px; border: 1px solid #0f172a; text-align: left; width: 100px;">Código</th>
+          <th style="padding: 8px 10px; border: 1px solid #0f172a; text-align: left;">Descrição do Insumo / Material</th>
+          <th style="padding: 8px 10px; border: 1px solid #0f172a; text-align: center; width: 100px;">Qtd / Unid</th>
+          <th style="padding: 8px 10px; border: 1px solid #0f172a; text-align: right; width: 100px;">Preço Unit.</th>
+          <th style="padding: 8px 10px; border: 1px solid #0f172a; text-align: right; width: 110px;">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${linhasItensHtml}
+      </tbody>
+      <tfoot>
+        <tr style="background: #f8fafc; font-size: 12px;">
+          <td colspan="5" style="padding: 8px 12px; border: 1px solid #cbd5e1; text-align: right; font-weight: 700;">
+            Subtotal Produtos:
+          </td>
+          <td style="padding: 8px 12px; border: 1px solid #cbd5e1; text-align: right; font-weight: 700;">
+            ${formatBRL(oc.valorTotal - (oc.tipoFrete === "FOB" ? oc.freteValor : 0))}
+          </td>
+        </tr>
+        ${
+          oc.freteValor > 0
+            ? `<tr style="background: #f8fafc; font-size: 12px;">
+          <td colspan="5" style="padding: 6px 12px; border: 1px solid #cbd5e1; text-align: right; font-weight: 600;">
+            Frete Destacado (${oc.tipoFrete}):
+          </td>
+          <td style="padding: 6px 12px; border: 1px solid #cbd5e1; text-align: right; font-weight: 600;">
+            ${formatBRL(oc.freteValor)}
+          </td>
+        </tr>`
+            : ""
+        }
+        <tr style="background: #ecfdf5; font-size: 14px;">
+          <td colspan="5" style="padding: 10px 12px; border: 1px solid #a7f3d0; text-align: right; font-weight: 900; color: #065f46;">
+            VALOR TOTAL DA ORDEM DE COMPRA:
+          </td>
+          <td style="padding: 10px 12px; border: 1px solid #a7f3d0; text-align: right; font-weight: 900; color: #065f46; font-size: 16px;">
+            ${formatBRL(oc.valorTotal)}
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <!-- Destaque de Saving Auditado -->
+    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+      <div>
+        <strong style="color: #166534;">💰 Economia Auditada na Negociação (Saving Direto):</strong>
+        <span style="color: #15803d; margin-left: 6px;">Esta contratação gerou redução de custo de</span>
+        <strong style="color: #166534; font-size: 13px; margin-left: 4px;">${formatBRL(oc.savingGerado)}</strong>
+        <span style="color: #15803d; margin-left: 4px;">para o orçamento da obra.</span>
+      </div>
+      <span style="background: #166534; color: #ffffff; font-weight: 700; padding: 3px 8px; border-radius: 4px; font-size: 10px;">
+        AUDITADO
+      </span>
+    </div>
+
+    <!-- Cláusulas Gerais de Fornecimento no Canteiro -->
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; font-size: 10px; color: #475569; line-height: 1.5; margin-bottom: 24px;">
+      <strong style="color: #0f172a; text-transform: uppercase; font-size: 10px;">Termos e Condições Gerais de Fornecimento — JC BAUER:</strong><br />
+      <strong>1. Nota Fiscal:</strong> O DANFE / NF-e deve constar obrigatoriamente no campo de informações complementares o número desta Ordem de Compra (<strong>${oc.numeroOc}</strong>) e o nome do empreendimento (<strong>${oc.obraNome}</strong>).<br />
+      <strong>2. Horário de Descarga:</strong> O recebimento no canteiro opera de Segunda a Quinta das 07h30 às 16h30 e Sexta das 07h30 às 15h30. Não há recebimento em feriados ou finais de semana sem agendamento prévio.<br />
+      <strong>3. Conferência e Aceite:</strong> A descarga está condicionada à conferência cega quantitativa e qualitativa pelo Almoxarifado. Materiais com avaria ou em desacordo serão recusados no canhoto.<br />
+      <strong>4. Documentação Técnica:</strong> Certificados de qualidade da usina, relatórios de conformidade técnica e ensaios laboratoriais devem acompanhar a remessa.
+    </div>
+
+    <!-- Campos de Assinatura Formal da OC -->
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; text-align: center; font-size: 10px; margin-top: 10px;">
+      <div style="border-top: 1px solid #0f172a; padding-top: 6px;">
+        <strong>${settings.userName}</strong>
+        <div style="color: #64748b; font-size: 9px; margin-top: 2px;">Comprador Responsável</div>
+      </div>
+      <div style="border-top: 1px solid #0f172a; padding-top: 6px;">
+        <strong>${oc.obraEngenheiro || "Engenharia de Obras"}</strong>
+        <div style="color: #64748b; font-size: 9px; margin-top: 2px;">Engenheiro / Canteiro</div>
+      </div>
+      <div style="border-top: 1px solid #0f172a; padding-top: 6px;">
+        <strong>Diretoria Executiva / CFO</strong>
+        <div style="color: #64748b; font-size: 9px; margin-top: 2px;">Aprovação Financeira</div>
+      </div>
+      <div style="border-top: 1px solid #0f172a; padding-top: 6px;">
+        <strong>${oc.fornecedorNome}</strong>
+        <div style="color: #64748b; font-size: 9px; margin-top: 2px;">De Acordo do Fornecedor</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.focus();
+        window.print();
+      }, 250);
+    };
+  </script>
+</body>
+</html>`;
+
+    win.document.open();
+    win.document.write(htmlContent);
+    win.document.close();
+  };
+
+  /* ----------------------------------------------------------------------- */
+  /* 3. IMPRESSÃO DO ROMANEIO DE CONFERÊNCIA CEGA PARA O ALMOXARIFADO        */
+  /* ----------------------------------------------------------------------- */
+  const handleGerarRomaneioRecebimentoPDF = (oc: OrdemCompra) => {
+    const win = window.open("", "_blank", "width=920,height=750");
+    if (!win) {
+      dispararAviso(
+        "Permita pop-ups no navegador para abrir a janela de impressão do Romaneio de Recebimento."
+      );
+      return;
+    }
+
+    const dataHoje = new Date().toLocaleDateString("pt-BR");
+
+    const linhasItensHtml = oc.itens
+      .map(
+        (it, idx) => `
+        <tr>
+          <td style="padding:10px 8px;border:1px solid #cbd5e1;text-align:center;font-weight:600;color:#475569;">
+            ${idx + 1}
+          </td>
+          <td style="padding:10px 8px;border:1px solid #cbd5e1;font-weight:700;color:#0f172a;white-space:nowrap;">
+            ${it.codigo}
+          </td>
+          <td style="padding:10px 8px;border:1px solid #cbd5e1;color:#0f172a;">
+            <div style="font-weight:700;">${it.descricao}</div>
+            ${it.observacaoObra ? `<div style="font-size:10px;color:#64748b;">Obs: ${it.observacaoObra}</div>` : ""}
+          </td>
+          <td style="padding:10px 8px;border:1px solid #cbd5e1;text-align:center;font-weight:700;background:#f8fafc;white-space:nowrap;">
+            ${it.quantidade} ${it.unidade}
+          </td>
+          <td style="padding:10px 8px;border:1px solid #cbd5e1;text-align:center;background:#ffffff;">
+            &nbsp;
+          </td>
+          <td style="padding:10px 8px;border:1px solid #cbd5e1;text-align:center;background:#ffffff;">
+            &nbsp;
+          </td>
+          <td style="padding:10px 8px;border:1px solid #cbd5e1;text-align:center;background:#ffffff;">
+            &nbsp;
+          </td>
+          <td style="padding:10px 8px;border:1px solid #cbd5e1;text-align:center;font-size:10px;white-space:nowrap;">
+            [ ] Conf. &nbsp; [ ] Ress. &nbsp; [ ] Rec.
+          </td>
+        </tr>
+      `
+      )
+      .join("");
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Romaneio de Recebimento - OC ${oc.numeroOc} - ${settings.companyName}</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm; }
+    * { box-sizing: border-box; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; padding: 0; background: #f1f5f9; color: #0f172a; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    @media print {
+      body { background: #ffffff !important; }
+      .no-print { display: none !important; }
+      .page-sheet { margin: 0 !important; box-shadow: none !important; border: none !important; max-width: 100% !important; padding: 0 !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="position: sticky; top: 0; background: #0f172a; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; z-index: 9999; border-bottom: 2px solid #059669;">
+    <div style="color: #ffffff; font-size: 14px; font-weight: 600;">
+      📦 Romaneio de Inspeção & Recebimento Cego — ${oc.numeroOc} (${oc.obraNome})
+    </div>
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <button onclick="window.print()" style="background: #059669; color: #ffffff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer;">
+        🖨️ Imprimir Romaneio de Campo
+      </button>
+      <button onclick="window.close()" style="background: #334155; color: #ffffff; border: 1px solid #64748b; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">
+        Fechar
+      </button>
+    </div>
+  </div>
+
+  <div class="page-sheet" style="max-width: 960px; margin: 16px auto; background: #ffffff; padding: 24px 28px; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.08);">
+    
+    <!-- Cabeçalho Timbrado Oficial JC BAUER -->
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 14px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <div style="background: #ffffff; padding: 6px 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+          <img src="${window.location.origin}/logo.png" alt="JC Bauer Empreendimentos" style="height: 55px; width: auto; object-fit: contain;" />
+        </div>
+        <div>
+          <div style="font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase;">
+            ${settings.companyName}
+          </div>
+          <div style="font-size: 12px; font-weight: 700; color: #059669; margin-top: 2px;">
+            SISTEMA DE GESTÃO DA QUALIDADE — INSPEÇÃO & RECEBIMENTO NO CANTEIRO
+          </div>
+          <div style="font-size: 11px; color: #475569; margin-top: 2px;">
+            Canteiro: <strong>${oc.obraNome}</strong> • Endereço: ${oc.obraEndereco}
+          </div>
+        </div>
+      </div>
+      <div style="text-align: right; background: #f8fafc; padding: 10px 16px; border-radius: 8px; border: 1px solid #cbd5e1;">
+        <div style="font-size: 11px; font-weight: 800; color: #0f172a; text-transform: uppercase;">ROMANEIO DE ENTRADA</div>
+        <div style="font-size: 18px; font-weight: 900; color: #059669; margin-top: 2px;">${oc.numeroOc}</div>
+        <div style="font-size: 11px; color: #475569; margin-top: 2px;">
+          Pedido: <strong>${oc.scCodigo}</strong> • Data Impr.: ${dataHoje}
+        </div>
+      </div>
+    </div>
+
+    <!-- Campos de Preenchimento da Carga / Guia de Transporte -->
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 11px;">
+      <div>
+        <div style="color: #64748b; font-size: 10px; font-weight: 700; text-transform: uppercase;">FORNECEDOR CONTRATADO</div>
+        <div style="font-weight: 800; color: #0f172a; font-size: 12px; margin-top: 2px;">${oc.fornecedorNome}</div>
+        <div style="color: #475569;">CNPJ: ${oc.fornecedorCnpj}</div>
+      </div>
+      <div>
+        <div style="color: #64748b; font-size: 10px; font-weight: 700; text-transform: uppercase;">DADOS DO VEÍCULO & NOTA FISCAL</div>
+        <div style="margin-top: 4px;"><strong>NF-e / DANFE nº:</strong> ______________________</div>
+        <div style="margin-top: 4px;"><strong>Data e Hora Chegada:</strong> _____/_____/2026 às ____:____</div>
+      </div>
+      <div>
+        <div style="color: #64748b; font-size: 10px; font-weight: 700; text-transform: uppercase;">TRANSPORTADORA / MOTORISTA</div>
+        <div style="margin-top: 4px;"><strong>Motorista:</strong> _______________________________</div>
+        <div style="margin-top: 4px;"><strong>Placa do Veículo:</strong> ______________ Frete: ${oc.tipoFrete}</div>
+      </div>
+    </div>
+
+    <!-- Tabela de Conferência Cega Física -->
+    <div style="margin-bottom: 6px; font-size: 11px; font-weight: 700; color: #0f172a; text-transform: uppercase;">
+      Grade de Conferência Quantitativa e de Lote (Preenchimento pelo Almoxarife no Descarregamento)
+    </div>
+    <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 16px;">
+      <thead>
+        <tr style="background: #0f172a; color: #ffffff;">
+          <th style="padding: 8px 6px; border: 1px solid #0f172a; text-align: center; width: 32px;">Item</th>
+          <th style="padding: 8px 6px; border: 1px solid #0f172a; text-align: left; width: 85px;">Código</th>
+          <th style="padding: 8px 6px; border: 1px solid #0f172a; text-align: left;">Insumo / Especificação</th>
+          <th style="padding: 8px 6px; border: 1px solid #0f172a; text-align: center; width: 90px;">Qtd OC</th>
+          <th style="padding: 8px 6px; border: 1px solid #0f172a; text-align: center; width: 90px; background: #334155;">Qtd na NF-e</th>
+          <th style="padding: 8px 6px; border: 1px solid #0f172a; text-align: center; width: 95px; background: #059669;">Qtd Contada</th>
+          <th style="padding: 8px 6px; border: 1px solid #0f172a; text-align: center; width: 110px;">Lote / Validade</th>
+          <th style="padding: 8px 6px; border: 1px solid #0f172a; text-align: center; width: 120px;">Aceite Físico</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${linhasItensHtml}
+      </tbody>
+    </table>
+
+    <!-- Checklist de Qualidade do Almoxarifado -->
+    <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 11px;">
+      <div style="font-weight: 800; color: #0f172a; text-transform: uppercase; font-size: 11px; margin-bottom: 8px;">
+        Checklist de Recebimento e Inspeção Visual no Canteiro:
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; line-height: 1.4;">
+        <div>[ &nbsp; ] Embalagens/paletes íntegros, sem avarias de transporte ou umidade</div>
+        <div>[ &nbsp; ] Laudos técnicos / Certificados de qualidade da usina anexados</div>
+        <div>[ &nbsp; ] Dimensões, marcas e bitolas em estrita conformidade com a OC</div>
+        <div>[ &nbsp; ] Material descarregado e estocado no local apropriado do almoxarifado</div>
+      </div>
+    </div>
+
+    <!-- Campo de Ressalvas / Ocorrências -->
+    <div style="border: 1px dashed #94a3b8; border-radius: 6px; padding: 10px 14px; font-size: 11px; margin-bottom: 24px; min-height: 60px;">
+      <strong style="color: #475569;">Observações do Conferente / Ressalvas (faltas, sobras, avarias ou motivos de recusa):</strong>
+      <div style="border-bottom: 1px dotted #cbd5e1; height: 18px; margin-top: 6px;"></div>
+      <div style="border-bottom: 1px dotted #cbd5e1; height: 18px; margin-top: 4px;"></div>
+    </div>
+
+    <!-- Campos de Assinatura -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 48px; text-align: center; font-size: 11px;">
+      <div style="border-top: 1px solid #0f172a; padding-top: 8px;">
+        <strong>Conferente / Almoxarife (JC Bauer)</strong>
+        <div style="color: #64748b; font-size: 10px; margin-top: 2px;">Nome: ____________________________________ Matrícula: _________</div>
+      </div>
+      <div style="border-top: 1px solid #0f172a; padding-top: 8px;">
+        <strong>Motorista / Entregador (Transportadora)</strong>
+        <div style="color: #64748b; font-size: 10px; margin-top: 2px;">Nome: ____________________________________ RG/CPF: ___________</div>
       </div>
     </div>
   </div>
@@ -4821,6 +5283,8 @@ export default function HomePage() {
         onRegistrarMovimentacao={handleRegistrarMovimentacao}
         diariosObra={diariosObra}
         onSalvarDiarioObra={handleSalvarDiarioObra}
+        onGerarOrdemCompraPDF={handleGerarOrdemCompraPDF}
+        onGerarRomaneioRecebimentoPDF={handleGerarRomaneioRecebimentoPDF}
       />
     );
   }
@@ -4837,17 +5301,20 @@ export default function HomePage() {
       <aside className="no-print w-56 shrink-0 bg-slate-900 text-white flex flex-col justify-between h-full">
         <div>
           {/* Identidade Dinâmica da Construtora (vinda das Configurações) */}
-          <div className="h-16 px-4 border-b border-slate-800 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md bg-emerald-600 flex items-center justify-center font-bold text-sm text-white shrink-0">
-              JB
+          <div className="h-20 px-4 border-b border-slate-800 flex items-center gap-3">
+            <div className="bg-white p-1 rounded-lg border border-amber-300/40 shadow-xs shrink-0 flex items-center justify-center">
+              <img
+                src="/logo.png"
+                alt="JC Bauer Empreendimentos"
+                className="h-10 w-auto object-contain"
+              />
             </div>
             <div className="min-w-0">
-              <div className="font-bold text-sm text-white truncate">
-                {settings.companyName.split(" ")[0]}{" "}
-                {settings.companyName.split(" ")[1] || "BAUER"}
+              <div className="font-extrabold text-sm text-white tracking-wide truncate">
+                JC BAUER
               </div>
-              <div className="text-xs text-slate-400 truncate">
-                Suprimentos & Obras
+              <div className="text-[11px] text-amber-400 font-semibold truncate">
+                Empreendimentos & Obras
               </div>
             </div>
           </div>
@@ -7416,12 +7883,28 @@ export default function HomePage() {
                             )}
                           </td>
                           <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            <button
-                              onClick={() => setOrdemVisualizarModal(oc)}
-                              className="px-3 py-1.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
-                            >
-                              Visualizar Pedido
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleGerarOrdemCompraPDF(oc)}
+                                title="Gerar e Imprimir Ordem de Compra Oficial Timbrada (PDF)"
+                                className="px-2.5 py-1.5 rounded-md bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-1 shadow-xs"
+                              >
+                                <span>🖨️</span> OC PDF
+                              </button>
+                              <button
+                                onClick={() => handleGerarRomaneioRecebimentoPDF(oc)}
+                                title="Gerar Romaneio de Conferência Cega para o Canteiro (PDF)"
+                                className="px-2 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold transition flex items-center gap-1"
+                              >
+                                <span>📋</span> Romaneio
+                              </button>
+                              <button
+                                onClick={() => setOrdemVisualizarModal(oc)}
+                                className="px-2.5 py-1.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+                              >
+                                Visualizar
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -9678,10 +10161,25 @@ export default function HomePage() {
         <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-xl border border-slate-300 max-w-3xl w-full p-6 shadow-2xl space-y-5 my-6">
             <div className="no-print flex items-center justify-between border-b border-slate-200 pb-3">
-              <span className="text-xs font-bold text-slate-500 uppercase">
+              <span className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
                 Pedido Formal de Compra — {ordemVisualizarModal.numeroOc}
               </span>
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleGerarOrdemCompraPDF(ordemVisualizarModal)}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+                >
+                  <span>🖨️</span> Imprimir OC Oficial (PDF)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleGerarRomaneioRecebimentoPDF(ordemVisualizarModal)}
+                  className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold flex items-center gap-1.5 transition"
+                >
+                  <span>📋</span> Romaneio Cego
+                </button>
                 <a
                   href={`https://wa.me/${ordemVisualizarModal.whatsapp}?text=${encodeURIComponent(
                     `Olá ${ordemVisualizarModal.vendedorNome}, a Ordem de Compra ${ordemVisualizarModal.numeroOc} (${ordemVisualizarModal.obraNome}) no valor de ${formatBRL(
@@ -9690,46 +10188,50 @@ export default function HomePage() {
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition"
                 >
-                  Enviar no WhatsApp
+                  WhatsApp
                 </a>
                 <button
-                  onClick={() => window.print()}
-                  className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold"
-                >
-                  Gerar PDF
-                </button>
-                <button
+                  type="button"
                   onClick={() => setOrdemVisualizarModal(null)}
-                  className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold"
+                  className="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-semibold transition"
                 >
                   Fechar
                 </button>
               </div>
             </div>
 
-            {/* Cabeçalho da OC */}
-            <div className="flex items-start justify-between border-b-2 border-slate-900 pb-3">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 uppercase">
-                  {settings.companyName}
-                </h2>
-                <p className="text-xs text-slate-600 mt-0.5">
-                  CNPJ: {settings.companyCnpj} • Responsável:{" "}
-                  {settings.userName}
-                </p>
+            {/* Cabeçalho da OC com Logomarca Oficial JC BAUER */}
+            <div className="flex items-center justify-between border-b-2 border-slate-900 pb-4">
+              <div className="flex items-center gap-3.5">
+                <div className="bg-white p-1 rounded-lg border border-amber-300/40 shadow-xs shrink-0 flex items-center justify-center">
+                  <img
+                    src="/logo.png"
+                    alt="JC Bauer Empreendimentos"
+                    className="h-12 w-auto object-contain"
+                  />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold text-slate-900 uppercase tracking-tight">
+                    {settings.companyName}
+                  </h2>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    CNPJ: <strong>{settings.companyCnpj}</strong> • Depto. de Compras:{" "}
+                    <strong>{settings.userName}</strong>
+                  </p>
+                </div>
               </div>
               <div className="text-right">
-                <div className="text-xs font-semibold text-slate-500 uppercase">
+                <div className="text-xs font-extrabold text-emerald-700 uppercase">
                   ORDEM DE COMPRA
                 </div>
-                <div className="text-xl font-bold text-slate-900 tabular-nums">
+                <div className="text-xl font-black text-slate-900 tabular-nums">
                   {ordemVisualizarModal.numeroOc}
                 </div>
-                <div className="text-xs text-slate-600">
-                  Data: {ordemVisualizarModal.dataEmissao} • Ref:{" "}
-                  {ordemVisualizarModal.scCodigo}
+                <div className="text-xs text-slate-600 mt-0.5">
+                  Emissão: {ordemVisualizarModal.dataEmissao} • Ref:{" "}
+                  <strong>{ordemVisualizarModal.scCodigo}</strong>
                 </div>
               </div>
             </div>
@@ -9823,6 +10325,20 @@ export default function HomePage() {
                 </tr>
               </tfoot>
             </table>
+
+            {/* Destaque de Saving Auditado */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center justify-between text-xs">
+              <div className="text-emerald-900">
+                💰 <strong>Saving Gerado na Negociação:</strong> Esta compra economizou{" "}
+                <strong className="text-emerald-700 text-sm">
+                  {formatBRL(ordemVisualizarModal.savingGerado)}
+                </strong>{" "}
+                em relação ao teto orçado.
+              </div>
+              <span className="px-2 py-0.5 rounded bg-emerald-700 text-white font-bold text-[10px] uppercase">
+                Auditado
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -10504,19 +11020,21 @@ function TelaLoginCorporativa({
   return (
     <div className="min-h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-lg p-7 space-y-6">
-        {/* Cabeçalho Corporativo com Logotipo */}
-        <div className="flex items-center gap-3.5 border-b border-slate-200 pb-5">
-          <div className="w-11 h-11 rounded-lg bg-slate-900 flex items-center justify-center font-extrabold text-base text-emerald-400 shrink-0 shadow-xs">
-            JB
+        {/* Cabeçalho Corporativo com Logotipo Oficial Dourado */}
+        <div className="flex flex-col items-center text-center border-b border-slate-200 pb-5">
+          <div className="bg-white p-3 rounded-2xl shadow-sm border border-amber-200/80 mb-3 flex items-center justify-center">
+            <img
+              src="/logo.png"
+              alt="JC Bauer Empreendimentos"
+              className="h-16 w-auto object-contain"
+            />
           </div>
-          <div>
-            <h1 className="text-base font-bold text-slate-900 leading-tight">
-              {companyName}
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Portal Corporativo de Suprimentos & Canteiro de Obras
-            </p>
-          </div>
+          <h1 className="text-lg font-black text-slate-900 tracking-tight uppercase">
+            {companyName}
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Portal Integrado de Suprimentos, Almoxarifado & Canteiro de Obras
+          </p>
         </div>
 
         {/* Formulário de Autenticação */}
@@ -10821,6 +11339,8 @@ function VisaoRestritaObra({
   onRegistrarMovimentacao,
   diariosObra = [],
   onSalvarDiarioObra,
+  onGerarOrdemCompraPDF,
+  onGerarRomaneioRecebimentoPDF,
 }: {
   usuarioLogado: UsuarioSistema;
   companyName: string;
@@ -10849,6 +11369,8 @@ function VisaoRestritaObra({
   onRegistrarMovimentacao?: (mov: MovimentacaoEstoque) => void;
   diariosObra?: DiarioObraRegistro[];
   onSalvarDiarioObra?: (novoDiario: DiarioObraRegistro) => void;
+  onGerarOrdemCompraPDF?: (oc: OrdemCompra) => void;
+  onGerarRomaneioRecebimentoPDF?: (oc: OrdemCompra) => void;
 }) {
   // Estado local para modais do Canteiro
   const [novoBmModalContrato, setNovoBmModalContrato] =
@@ -11109,16 +11631,19 @@ function VisaoRestritaObra({
       {/* SIDEBAR RESTRITA DA OBRA (ABAS PERMITIDAS) */}
       <aside className="w-60 shrink-0 bg-slate-900 text-white flex flex-col justify-between h-full">
         <div>
-          <div className="h-16 px-4 border-b border-slate-800 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md bg-emerald-600 flex items-center justify-center font-bold text-sm text-white shrink-0">
-              JB
+          <div className="h-20 px-4 border-b border-slate-800 flex items-center gap-3">
+            <div className="bg-white p-1 rounded-lg border border-amber-300/40 shadow-xs shrink-0 flex items-center justify-center">
+              <img
+                src="/logo.png"
+                alt="JC Bauer Empreendimentos"
+                className="h-10 w-auto object-contain"
+              />
             </div>
             <div className="min-w-0">
-              <div className="font-bold text-sm text-white truncate">
-                {companyName.split(" ")[0]}{" "}
-                {companyName.split(" ")[1] || "BAUER"}
+              <div className="font-extrabold text-sm text-white tracking-wide truncate">
+                JC BAUER
               </div>
-              <div className="text-xs text-emerald-400 font-medium truncate">
+              <div className="text-[11px] text-emerald-400 font-semibold truncate">
                 Portal do Canteiro de Obras
               </div>
             </div>
@@ -12372,24 +12897,43 @@ function VisaoRestritaObra({
                         </td>
 
                         <td className="py-3.5 px-4 text-right align-top whitespace-nowrap">
-                          {jaRecebido ? (
-                            <span className="text-xs font-semibold text-emerald-800">
-                              Conferido por {oc.recebidoPor || usuarioLogado.nome}
-                            </span>
-                          ) : (
+                          <div className="flex items-center justify-end gap-2 flex-wrap">
                             <button
-                              onClick={() => {
-                                setNotaFiscalInput("NF-e 000.482.910");
-                                setCondicaoInput(
-                                  "Material completo e sem avarias"
-                                );
-                                setOcConfirmarRecebimentoModal(oc);
-                              }}
-                              className="px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-xs"
+                              type="button"
+                              onClick={() => onGerarRomaneioRecebimentoPDF?.(oc)}
+                              title="Gerar e Imprimir Romaneio de Conferência Física (PDF)"
+                              className="px-2.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold transition flex items-center gap-1 shadow-xs"
                             >
-                              ✔️ Confirmar Recebimento do Material na Obra
+                              <span>📋</span> Romaneio Cego
                             </button>
-                          )}
+                            <button
+                              type="button"
+                              onClick={() => onGerarOrdemCompraPDF?.(oc)}
+                              title="Ver e Imprimir Ordem de Compra Oficial Timbrada (PDF)"
+                              className="px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold transition flex items-center gap-1 shadow-xs"
+                            >
+                              <span>🖨️</span> OC PDF
+                            </button>
+                            {jaRecebido ? (
+                              <span className="text-xs font-semibold text-emerald-800 py-1">
+                                Conferido por {oc.recebidoPor || usuarioLogado.nome}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNotaFiscalInput("NF-e 000.482.910");
+                                  setCondicaoInput(
+                                    "Material completo e sem avarias"
+                                  );
+                                  setOcConfirmarRecebimentoModal(oc);
+                                }}
+                                className="px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-xs flex items-center gap-1"
+                              >
+                                <span>✔️</span> Confirmar Recebimento
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

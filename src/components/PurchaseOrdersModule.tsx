@@ -257,15 +257,23 @@ export function PurchaseOrdersModule() {
 
       {/* Documento Formal da Ordem de Compra */}
       <div className="bg-white border border-slate-300 rounded-xl p-6 space-y-6">
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b-2 border-slate-900 pb-5">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">
-              JC Bauer Engenharia e Incorporações S.A.
-            </h1>
-            <p className="text-sm text-slate-700 mt-1 whitespace-nowrap tabular-nums">
-              CNPJ: 04.819.302/0001-71 • IE: 254.991.800 • Central de
-              Suprimentos B2B
-            </p>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b-2 border-slate-900 pb-5">
+          <div className="flex items-center gap-4">
+            <div className="bg-white p-1 rounded-lg border border-amber-200 shrink-0">
+              <img
+                src="/logo.png"
+                alt="JC Bauer Empreendimentos"
+                className="h-12 w-auto object-contain"
+              />
+            </div>
+            <div>
+              <h1 className="text-xl font-extrabold text-slate-900 uppercase">
+                JC Bauer Empreendimentos
+              </h1>
+              <p className="text-sm text-slate-700 mt-1 whitespace-nowrap tabular-nums">
+                CNPJ: 04.819.302/0001-71 • Central de Suprimentos B2B
+              </p>
+            </div>
           </div>
 
           <div className="text-right">

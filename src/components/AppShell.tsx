@@ -127,16 +127,20 @@ export function AppShell() {
       <aside className="no-print print:hidden w-60 bg-white border-r border-slate-300 flex flex-col justify-between shrink-0 h-full overflow-y-auto">
         <div className="space-y-5">
           {/* Identidade da Construtora */}
-          <div className="h-16 px-5 border-b border-slate-300 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center text-white font-bold text-sm shrink-0">
-              JB
+          <div className="h-20 px-5 border-b border-slate-300 flex items-center gap-3">
+            <div className="bg-white p-1 rounded-lg border border-amber-300/40 shadow-xs shrink-0 flex items-center justify-center">
+              <img
+                src="/logo.png"
+                alt="JC Bauer Empreendimentos"
+                className="h-10 w-auto object-contain"
+              />
             </div>
             <div className="leading-snug min-w-0">
-              <div className="font-bold text-base text-slate-900 truncate">
-                JC Bauer
+              <div className="font-extrabold text-base text-slate-900 truncate">
+                JC BAUER
               </div>
-              <div className="text-sm text-slate-700 truncate">
-                Suprimentos & Obras
+              <div className="text-xs text-amber-700 font-semibold truncate">
+                Empreendimentos & Obras
               </div>
             </div>
           </div>

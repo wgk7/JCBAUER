@@ -262,14 +262,22 @@ function ExecutiveReportContent({ onClose }: { onClose?: () => void }) {
       {/* ============================================================ */}
       <div className="p-8 print:p-4 space-y-6 bg-white text-slate-900">
         {/* 1. Cabeçalho Institucional */}
-        <div className="border-b-2 border-slate-900 pb-5 flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-1">
-            <div className="text-sm font-semibold text-slate-700">
-              JC Bauer Engenharia e Incorporações • Diretoria de Suprimentos
+        <div className="border-b-2 border-slate-900 pb-5 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="bg-white p-1 rounded-lg border border-amber-200 shrink-0">
+              <img
+                src="/logo.png"
+                alt="JC Bauer Empreendimentos"
+                className="h-12 w-auto object-contain"
+              />
             </div>
-            <h1 className="text-xl font-bold text-slate-900">
-              Mapa Comparativo de Cotação e Decisão de Compra
-            </h1>
+            <div className="space-y-1">
+              <div className="text-sm font-extrabold text-slate-900 uppercase">
+                JC Bauer Empreendimentos • Diretoria de Suprimentos
+              </div>
+              <h1 className="text-xl font-bold text-slate-900">
+                Mapa Comparativo de Cotação e Decisão de Compra
+              </h1>
             <p className="text-sm text-slate-700">
               Obra:{" "}
               <strong className="text-slate-900">
