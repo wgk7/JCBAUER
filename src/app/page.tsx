@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
@@ -87,12 +87,12 @@ interface UserSettings {
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
-  userName: "João Carlos Bauer",
-  userRole: "Diretoria & Coordenação de Suprimentos",
-  userEmail: "suprimentos@jcbauer.eng.br",
-  userPhone: "(47) 99910-2030",
+  userName: "Gestor de Suprimentos",
+  userRole: "Diretoria & CoordenaÃ§Ã£o de Suprimentos",
+  userEmail: "suprimentos@jcbauer.com.br",
+  userPhone: "",
   companyName: "JC Bauer Empreendimentos",
-  companyCnpj: "04.819.302/0001-71",
+  companyCnpj: "",
 };
 
 const SETTINGS_STORAGE_KEY = "jc_bauer_user_settings_v3";
@@ -110,7 +110,7 @@ const DIARIOS_STORAGE_KEY = "jc_bauer_diarios_v3";
 const FORNECEDORES_STORAGE_KEY = "jc_bauer_fornecedores_v3";
 const ITENS_PLANILHA_STORAGE_KEY = "jc_bauer_itens_planilha_v3";
 const DUPLICIDADES_STORAGE_KEY = "jc_bauer_duplicidades_v3";
-const COMPARATIVO_STORAGE_KEY = "jc_bauer_comparativo_3orc_v3";
+const COMPARATIVO_STORAGE_KEY = "jc_bauer_comparativo_3orc_v4";
 
 interface DiarioObraRegistro {
   id: string;
@@ -544,174 +544,15 @@ const ORDENS_INICIAIS: OrdemCompra[] = [];
 const USUARIOS_INICIAIS: UsuarioSistema[] = [
   {
     id: "usr-admin-1",
-    nome: "João Carlos Bauer",
+    nome: "Administrador do Sistema",
     cargo: "Administrador",
     obraId: "ALL",
     obraNome: "Todas as Obras (Central de Compras)",
-    email: "suprimentos@jcbauer.eng.br",
+    email: "admin@jcbauer.com.br",
     senha: "123",
     status: "Ativo",
   },
 ];
-
-const ITENS_PLANILHA_INICIAIS: ItemPlanilhaImportada[] = [];
-
-const DUPLICIDADES_INICIAIS: DuplicidadeFornecedor[] = [];
-
-const COLABORADORES_INICIAIS: ColaboradorMapeado[] = [];
-
-const CONTRATOS_INICIAIS: ContratoSubempreitada[] = [];
-
-const ORCAMENTOS_INICIAIS: ItemOrcamentoObra[] = [];
-
-const ESTOQUE_INICIAIS: ItemEstoque[] = [];
-
-const MOVIMENTACOES_INICIAIS: MovimentacaoEstoque[] = [];
-
-const PUXADAS_INICIAIS: ContratoPuxadaFornecimento[] = [];
-
-const DIARIOS_INICIAIS: DiarioObraRegistro[] = [];
-
-const DADOS_FINANCEIROS_DIARIOS_OUTUBRO: RegistroDiarioFinanceiro[] = [];
-
-/* ------------------------------------------------------------------------- */
-/* HELPERS DE INTELIGÊNCIA DE COMPRAS, CURVA ABC, ALÇADAS E EXCEL            */
-/* ------------------------------------------------------------------------- */
-
-function calcularClassificacaoAbc(
-  solicitacoes: SolicitacaoCompra[],
-  ordens: OrdemCompra[]
-): Map<string, { classe: ClasseAbc; totalGeral: number; percentual: number }> {
-  const mapa = new Map<string, number>();
-
-  ordens.forEach((o) => {
-    o.itens.forEach((it) => {
-      const desc = it.descricao.trim();
-      mapa.set(desc, (mapa.get(desc) || 0) + it.subtotal);
-    });
-  });
-
-  solicitacoes.forEach((s) => {
-    s.itens.forEach((it) => {
-      const desc = it.descricao.trim();
-      const val = it.quantidade * it.orcamentoUnitario;
-      mapa.set(desc, (mapa.get(desc) || 0) + val);
-    });
-  });
-
-  const lista = Array.from(mapa.entries()).sort((a, b) => b[1] - a[1]);
-  const somaTotal = lista.reduce((acc, [, val]) => acc + val, 0);
-
-  const resultado = new Map<
-    string,
-    { classe: ClasseAbc; totalGeral: number; percentual: number }
-  >();
-
-  let acumulado = 0;
-  lista.forEach(([desc, val]) => {
-    acumulado += val;
-    const pct = somaTotal > 0 ? (acumulado / somaTotal) * 100 : 0;
-    let classe: ClasseAbc = "Classe C";
-    if (pct <= 80) classe = "Classe A";
-    else if (pct <= 95) classe = "Classe B";
-    resultado.set(desc, { classe, totalGeral: val, percentual: pct });
-  });
-
-  return resultado;
-}
-
-function buscarHistoricoInsumo(
-  descricaoItem: string,
-  ordens: OrdemCompra[],
-  historicoEconomia: ItemEconomiaInsumo[]
-): {
-  ultimoPreco: number;
-  dataUltima: string;
-  fornecedor: string;
-  precoMedio: number;
-} | null {
-  const descLimpa = descricaoItem.toLowerCase().trim();
-  const comprasMatching: { preco: number; data: string; forn: string }[] = [];
-
-  ordens.forEach((oc) => {
-    oc.itens.forEach((it) => {
-      if (
-        it.descricao.toLowerCase().includes(descLimpa) ||
-        descLimpa.includes(it.descricao.toLowerCase())
-      ) {
-        comprasMatching.push({
-          preco: it.precoUnitario,
-          data: oc.dataEmissao,
-          forn: oc.fornecedorNome,
-        });
-      }
-    });
-  });
-
-  if (comprasMatching.length > 0) {
-    const soma = comprasMatching.reduce((acc, c) => acc + c.preco, 0);
-    const media = soma / comprasMatching.length;
-    const ultima = comprasMatching[comprasMatching.length - 1];
-    return {
-      ultimoPreco: ultima.preco,
-      dataUltima: ultima.data,
-      fornecedor: ultima.forn,
-      precoMedio: media,
-    };
-  }
-
-  const ecoItem = historicoEconomia.find(
-    (e) =>
-      e.insumo.toLowerCase().includes(descLimpa) ||
-      descLimpa.includes(e.insumo.toLowerCase())
-  );
-  if (ecoItem) {
-    return {
-      ultimoPreco: ecoItem.valorFechado,
-      dataUltima: "Histórico 2026",
-      fornecedor: ecoItem.fornecedorVencedor,
-      precoMedio: (ecoItem.valorMaiorCotado + ecoItem.valorFechado) / 2,
-    };
-  }
-
-  return null;
-}
-
-function obterAlcadaAprovacao(valor: number): {
-  nivel: NivelAlcada;
-  requerDiretoria: boolean;
-  requerGerencia: boolean;
-  badgeClass: string;
-} {
-  if (valor > 100000) {
-    return {
-      nivel: "Diretoria Executiva / CFO",
-      requerDiretoria: true,
-      requerGerencia: true,
-      badgeClass: "bg-red-100 text-red-900 border-red-300",
-    };
-  }
-  if (valor > 20000) {
-    return {
-      nivel: "Gerência de Obras",
-      requerDiretoria: false,
-      requerGerencia: true,
-      badgeClass: "bg-amber-100 text-amber-900 border-amber-300",
-    };
-  }
-  return {
-    nivel: "Comprador Autorizado",
-    requerDiretoria: false,
-    requerGerencia: false,
-    badgeClass: "bg-emerald-100 text-emerald-900 border-emerald-300",
-  };
-}
-
-function exportarCotacaoExcel(
-  sc: SolicitacaoCompra,
-  obraNome: string
-) {
-  const dadosPlanilha: Record<string, unknown>[] = [];
 
   sc.itens.forEach((it) => {
     const row: Record<string, unknown> = {
@@ -1244,64 +1085,37 @@ export default function HomePage() {
     [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido]
   >([
     {
-      nome: "Fornecedor 1",
+      nome: "",
       vendedor: "",
       telefone: "",
-      prazo: "3 a 5 dias",
-      condicao: "28 dias (Faturado)",
+      prazo: "",
+      condicao: "",
       freteTipo: "CIF",
       freteValor: 0,
     },
     {
-      nome: "Fornecedor 2",
+      nome: "",
       vendedor: "",
       telefone: "",
-      prazo: "5 a 7 dias",
-      condicao: "30 dias",
+      prazo: "",
+      condicao: "",
       freteTipo: "CIF",
       freteValor: 0,
     },
     {
-      nome: "Fornecedor 3",
+      nome: "",
       vendedor: "",
       telefone: "",
-      prazo: "Pronta Entrega",
-      condicao: "21 dias",
-      freteTipo: "FOB",
+      prazo: "",
+      condicao: "",
+      freteTipo: "CIF",
       freteValor: 0,
     },
   ]);
   const [comparativoItens, setComparativoItens] = useState<
     ItemComparativoRapido[]
-  >([
-    {
-      id: "comp-item-1",
-      nome: "Cimento CP-II F-32 (Saco 50kg)",
-      quantidade: 150,
-      unidade: "saco",
-      preco1: 34.5,
-      preco2: 36.0,
-      preco3: 33.9,
-    },
-    {
-      id: "comp-item-2",
-      nome: "Aço CA-50 10.0mm (Barra 12m)",
-      quantidade: 80,
-      unidade: "barra",
-      preco1: 58.0,
-      preco2: 54.5,
-      preco3: 56.2,
-    },
-    {
-      id: "comp-item-3",
-      nome: "Areia Média Lavada",
-      quantidade: 15,
-      unidade: "m³",
-      preco1: 110.0,
-      preco2: 115.0,
-      preco3: 108.0,
-    },
-  ]);
+  >([]);
+  const [showModalComparativoPdf, setShowModalComparativoPdf] = useState<boolean>(false);
 
   // Modais de Ação e Governança
   const [showNovaScModal, setShowNovaScModal] = useState<boolean>(false);
@@ -1376,13 +1190,21 @@ export default function HomePage() {
       const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
       if (savedSettings) {
         const parsed = JSON.parse(savedSettings) as Partial<UserSettings>;
+        const isDemoCnpj =
+          !parsed.companyCnpj ||
+          parsed.companyCnpj === "04.819.302/0001-71" ||
+          parsed.companyCnpj === "14.882.310/0001-19";
+        const isDemoName =
+          !parsed.userName ||
+          parsed.userName === "JoÃ£o Carlos Bauer" ||
+          parsed.userName.includes("Carlos Bauer");
         const merged: UserSettings = {
-          userName: parsed.userName || DEFAULT_SETTINGS.userName,
+          userName: isDemoName ? DEFAULT_SETTINGS.userName : parsed.userName,
           userRole: parsed.userRole || DEFAULT_SETTINGS.userRole,
           userEmail: parsed.userEmail || DEFAULT_SETTINGS.userEmail,
           userPhone: parsed.userPhone || DEFAULT_SETTINGS.userPhone,
           companyName: parsed.companyName || DEFAULT_SETTINGS.companyName,
-          companyCnpj: parsed.companyCnpj || DEFAULT_SETTINGS.companyCnpj,
+          companyCnpj: isDemoCnpj ? "" : parsed.companyCnpj,
         };
         setSettings(merged);
         setFormSettings(merged);
@@ -1395,7 +1217,14 @@ export default function HomePage() {
       const savedUsers = window.localStorage.getItem(USERS_STORAGE_KEY);
       let usuariosEfetivos = USUARIOS_INICIAIS;
       if (savedUsers) {
-        const parsedUsers = (JSON.parse(savedUsers) as UsuarioSistema[]).filter((u) => !isDemoUser(u));
+        const parsedUsers = (JSON.parse(savedUsers) as UsuarioSistema[])
+          .filter((u) => !isDemoUser(u))
+          .map((u) => {
+            if (u.nome.includes("Carlos Bauer")) {
+              return { ...u, nome: "Administrador do Sistema" };
+            }
+            return u;
+          });
         if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
           usuariosEfetivos = parsedUsers;
           setUsuarios(parsedUsers);
@@ -1518,6 +1347,12 @@ export default function HomePage() {
         }
       }
 
+      try {
+        window.localStorage.removeItem("jc_bauer_comparativo_3orc_v1");
+        window.localStorage.removeItem("jc_bauer_comparativo_3orc_v2");
+        window.localStorage.removeItem("jc_bauer_comparativo_3orc_v3");
+      } catch {}
+
       const savedComp = window.localStorage.getItem(COMPARATIVO_STORAGE_KEY);
       if (savedComp) {
         try {
@@ -1527,10 +1362,31 @@ export default function HomePage() {
             if (parsedComp.obraId) setComparativoObraId(parsedComp.obraId);
             if (parsedComp.categoria) setComparativoCategoria(parsedComp.categoria);
             if (Array.isArray(parsedComp.fornecedores) && parsedComp.fornecedores.length === 3) {
-              setComparativoFornecedores(parsedComp.fornecedores);
+              const sanitizedFornecedores = parsedComp.fornecedores.map((f: FornecedorCotadoRapido, i: number) => {
+                const isDemoName = f.nome === Fornecedor ${i + 1} && (!f.vendedor && !f.telefone);
+                return {
+                  ...f,
+                  nome: isDemoName ? "" : f.nome || "",
+                  vendedor: f.vendedor || "",
+                  telefone: f.telefone || "",
+                  prazo: f.prazo || "",
+                  condicao: f.condicao || "",
+                  freteTipo: f.freteTipo || "CIF",
+                  freteValor: typeof f.freteValor === "number" ? f.freteValor : 0,
+                };
+              }) as [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido];
+              setComparativoFornecedores(sanitizedFornecedores);
             }
-            if (Array.isArray(parsedComp.itens) && parsedComp.itens.length > 0) {
-              setComparativoItens(parsedComp.itens);
+            if (Array.isArray(parsedComp.itens)) {
+              const DEMO_ITEM_NAMES = new Set([
+                "Cimento CP-II F-32 (Saco 50kg)",
+                "AÃ§o CA-50 10.0mm (Barra 12m)",
+                "Areia MÃ©dia Lavada"
+              ]);
+              const cleanItens = parsedComp.itens.filter((it: ItemComparativoRapido) => 
+                it && !it.id?.startsWith("comp-item-") && !DEMO_ITEM_NAMES.has(it.nome)
+              );
+              setComparativoItens(cleanItens);
             }
           }
         } catch {
@@ -3447,7 +3303,7 @@ export default function HomePage() {
                 /^(\d{3})(\d{3})(\d{3})(\d{2})$/,
                 "$1.$2.$3-$4"
               )
-            : cnpjRaw || "14.882.310/0001-19";
+            : cnpjRaw || "";
 
         const cidadeFinal = cidadeRaw
           ? ufRaw && !cidadeRaw.includes(ufRaw)
@@ -3935,7 +3791,7 @@ export default function HomePage() {
       fornecedorNome: forn.nome || `Fornecedor ${fornIndex + 1}`,
       fornecedorRazao:
         fornCrm?.razaoSocial || forn.nome || `Fornecedor ${fornIndex + 1}`,
-      fornecedorCnpj: fornCrm?.cnpj || "14.882.310/0001-19",
+      fornecedorCnpj: fornCrm?.cnpj || "",
       vendedorNome: forn.vendedor || "Comercial / Vendas",
       whatsapp: forn.telefone || "(11) 99000-0000",
       chavePix:
@@ -4067,11 +3923,16 @@ export default function HomePage() {
   };
 
   const handleGerarComparativoRapidoPDF = () => {
+    if (comparativoItens.length === 0) {
+      dispararAviso("Adicione ao menos um insumo na cotaÃ§Ã£o para gerar o relatÃ³rio impresso.");
+      return;
+    }
+
     const win = window.open("", "_blank");
     if (!win) {
-      alert(
-        "Por favor, habilite pop-ups para gerar a impressão do comparativo."
-      );
+      // Caso pop-ups estejam bloqueados, abre o modal interno sem travar
+      setShowModalComparativoPdf(true);
+      dispararAviso("VisualizaÃ§Ã£o aberta no sistema. Se preferir em nova aba, habilite pop-ups.");
       return;
     }
 
@@ -4082,10 +3943,11 @@ export default function HomePage() {
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>JC BAUER — Quadro Comparativo de Preços (3 Orçamentos)</title>
+  <title>JC BAUER â€” Quadro Comparativo de PreÃ§os (3 OrÃ§amentos)</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; color: #0f172a; padding: 24px; background: #ffffff; }
+    .no-print { position: sticky; top: 0; background: #0f172a; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; z-index: 9999; border-bottom: 2px solid #166534; margin: -24px -24px 20px -24px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
     .header { border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end; }
     .logo { font-size: 20px; font-weight: 900; letter-spacing: -0.5px; color: #0f172a; }
     .logo span { color: #166534; }
@@ -4109,25 +3971,44 @@ export default function HomePage() {
     .winner-cell { background: #dcfce7; font-weight: 700; color: #166534; }
     .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 36px; text-align: center; font-size: 10px; }
     .sign-line { border-top: 1px solid #0f172a; padding-top: 6px; }
-    @media print { body { padding: 0; } .no-print { display: none; } }
+    @media print { body { padding: 0; } .no-print { display: none !important; } }
   </style>
 </head>
 <body>
+  <div class="no-print">
+    <div style="color: #ffffff; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+      <span>ðŸ“„ Mapa Equalizado de PreÃ§os (3 OrÃ§amentos)</span>
+      <span style="font-size: 11px; color: #94a3b8; font-weight: normal;">â€¢ Central de Suprimentos JC Bauer</span>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <button onclick="window.print()" style="background: #166534; color: #ffffff; border: none; padding: 8px 18px; border-radius: 6px; font-size: 13px; font-weight: 800; cursor: pointer;">
+        ðŸ–¨ï¸ Imprimir / Salvar em PDF
+      </button>
+      <button onclick="window.close()" style="background: #334155; color: #ffffff; border: 1px solid #475569; padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">
+        Fechar Aba
+      </button>
+    </div>
+  </div>
+
   <div class="header">
-    <div>
-      <div class="logo">JC <span>BAUER</span></div>
-      <div class="title">Mapa de Equalização e Comparativo de 3 Orçamentos</div>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <img src="${window.location.origin}/logo.png" alt="JC Bauer" style="height: 44px; width: auto; object-fit: contain;" onerror="this.style.display='none'" />
+      <div>
+        <div class="logo">${settings.companyName}</div>
+        <div class="title">Mapa de EqualizaÃ§Ã£o e Comparativo de 3 OrÃ§amentos</div>
+      </div>
     </div>
     <div class="meta">
-      <strong>Data de Emissão:</strong> ${dataHoje}<br>
+      <strong>Data de EmissÃ£o:</strong> ${dataHoje}<br>
       <strong>Empreendimento:</strong> ${obraSel?.nome || "Todas as Obras"}<br>
-      <strong>Categoria:</strong> ${comparativoCategoria}
+      <strong>Categoria:</strong> ${comparativoCategoria}<br>
+      ${settings.companyCnpj ? `<strong>CNPJ:</strong> ${settings.companyCnpj}` : ""}
     </div>
   </div>
 
   <div class="info-bar">
-    <div class="info-item">Objeto da Cotação:<strong>${comparativoTitulo}</strong></div>
-    <div class="info-item">Comprador Responsável:<strong>${settings.userName}</strong></div>
+    <div class="info-item">Objeto da CotaÃ§Ã£o:<strong>${comparativoTitulo || "CotaÃ§Ã£o de Suprimentos"}</strong></div>
+    <div class="info-item">Comprador ResponsÃ¡vel:<strong>${settings.userName}</strong></div>
     <div class="info-item">Vencedor Recomendado:<strong>${resumoComparativo.vencedorGeral?.nome || "A definir"}</strong></div>
     <div class="info-item">Saving Apurado:<strong>${formatBRL(resumoComparativo.savingGlobal)}</strong></div>
   </div>
@@ -4145,14 +4026,14 @@ export default function HomePage() {
         return `
         <div class="kpi-card ${isVencedor ? "vencedor" : ""}">
           <div class="kpi-title">${
-            isVencedor ? "🏆 1º Lugar (Mais em Conta)" : `Orçamento ${i + 1}`
+            isVencedor ? "ðŸ† 1Âº Lugar (Mais em Conta)" : `OrÃ§amento ${i + 1}`
           }</div>
           <div class="kpi-name">${f.nome || `Fornecedor ${i + 1}`}</div>
           <div class="kpi-val">${formatBRL(tot)}</div>
           <div style="font-size: 9px; color: #64748b; margin-top: 2px;">
-            Frete: ${f.freteTipo} (${formatBRL(f.freteValor)}) • Prazo: ${
+            Frete: ${f.freteTipo} (${formatBRL(f.freteValor)}) â€¢ Prazo: ${
           f.prazo || "N/I"
-        } • Pagto: ${f.condicao || "N/I"}
+        } â€¢ Pagto: ${f.condicao || "N/I"}
           </div>
         </div>
       `;
@@ -4243,7 +4124,7 @@ export default function HomePage() {
   <div class="signatures">
     <div class="sign-line">
       <strong>${settings.userName}</strong><br>
-      Comprador Responsável
+      Comprador ResponsÃ¡vel
     </div>
     <div class="sign-line">
       <strong>${obraSel?.engenheiro || "Engenharia de Obras"}</strong><br>
@@ -4251,14 +4132,26 @@ export default function HomePage() {
     </div>
     <div class="sign-line">
       <strong>Diretoria Executiva / CFO</strong><br>
-      Aprovação Financeira
+      AprovaÃ§Ã£o Financeira
     </div>
   </div>
 
   <script>
-    window.onload = function() {
-      setTimeout(function() { window.focus(); window.print(); }, 250);
-    };
+    function dispararImpressao() {
+      try {
+        window.focus();
+        window.print();
+      } catch (err) {
+        console.error("Erro ao imprimir:", err);
+      }
+    }
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      setTimeout(dispararImpressao, 400);
+    } else {
+      window.addEventListener('DOMContentLoaded', function() { setTimeout(dispararImpressao, 400); });
+      window.addEventListener('load', function() { setTimeout(dispararImpressao, 400); });
+      setTimeout(dispararImpressao, 850);
+    }
   </script>
 </body>
 </html>`;
@@ -4266,6 +4159,15 @@ export default function HomePage() {
     win.document.open();
     win.document.write(html);
     win.document.close();
+    win.focus();
+    setTimeout(() => {
+      try {
+        win.focus();
+        win.print();
+      } catch (e) {
+        // jÃ¡ acionado pelo script interno
+      }
+    }, 450);
   };
 
   /* ----------------------------------------------------------------------- */
@@ -4288,20 +4190,7 @@ export default function HomePage() {
             loginLimpo === "master" ||
             loginLimpo === "administrador" ||
             loginLimpo === "suprimentos" ||
-            loginLimpo === "joao" ||
-            loginLimpo === "joão");
-
-        const matchSenha =
-          u.senha === senhaInput ||
-          (u.cargo === "Administrador" &&
-            (senhaInput === "123" || senhaInput === "admin" || senhaInput === "master"));
-
-        return (matchEmail || matchNome || matchAdminAlias) && matchSenha;
-      }) ||
-      ((loginLimpo === "admin" ||
-        loginLimpo === "master" ||
-        loginLimpo === "suprimentos@jcbauer.eng.br" ||
-        loginLimpo === "joão carlos bauer") &&
+            (loginLimpo === "admin@jcbauer.com.br" || loginLimpo === "suprimentos" || loginLimpo === "administrador")) &&
       (senhaInput === "123" || senhaInput === "admin" || senhaInput === "master")
         ? usuarios.find((u) => u.cargo === "Administrador") || USUARIOS_INICIAIS[0]
         : null);
@@ -7218,6 +7107,14 @@ export default function HomePage() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => setShowModalComparativoPdf(true)}
+                      className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs font-semibold flex items-center gap-1.5 transition"
+                      title="Visualizar prÃ©via executiva na tela"
+                    >
+                      <span>ðŸ‘ï¸</span> Visualizar PrÃ©via
+                    </button>
+                    <button
+                      type="button"
                       onClick={handleGerarComparativoRapidoPDF}
                       className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
                       title="Gerar mapa comparativo impresso ou em PDF"
@@ -7565,6 +7462,7 @@ export default function HomePage() {
                   </div>
 
                   {/* Banner de Economia e Inteligência de Compra (Saving) */}
+                  {resumoComparativo.savingGlobal > 0 && (
                   <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-xs">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center text-lg font-bold shadow-xs">
@@ -7604,6 +7502,7 @@ export default function HomePage() {
                       </div>
                     )}
                   </div>
+                  )}
 
                   {/* Tabela Comparativa Interativa (Itens, Quantidades e Preços lado a lado) */}
                   <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -7950,6 +7849,13 @@ export default function HomePage() {
                           className="px-3.5 py-2 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs font-semibold transition flex items-center gap-1.5"
                         >
                           <span>📥</span> Importar Itens (.xlsx)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowModalComparativoPdf(true)}
+                          className="px-3.5 py-2 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs font-semibold transition flex items-center gap-1.5"
+                        >
+                          <span>ðŸ‘ï¸</span> Visualizar RelatÃ³rio
                         </button>
                         <button
                           type="button"
@@ -10755,7 +10661,7 @@ export default function HomePage() {
                             userName: e.target.value,
                           }))
                         }
-                        placeholder="Ex: João Carlos Bauer"
+                        placeholder="Ex: Seu Nome / Gestor de Suprimentos"
                         className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-slate-900 font-medium focus:outline-none focus:border-slate-900"
                       />
                     </div>
@@ -10848,6 +10754,7 @@ export default function HomePage() {
                         required
                         type="text"
                         value={formSettings.companyCnpj}
+                        placeholder="00.000.000/0001-00"
                         onChange={(e) =>
                           setFormSettings((prev) => ({
                             ...prev,
@@ -11424,6 +11331,21 @@ export default function HomePage() {
           onCriarLote={handleCriarCompraAgrupada}
         />
       )}
+      {/* MODAL DE VISUALIZAÃ‡ÃƒO E IMPRESSÃƒO DO MAPA DE 3 ORÃ‡AMENTOS */}
+      {showModalComparativoPdf && (
+        <ModalVisualizarComparativoPdf
+          comparativoTitulo={comparativoTitulo}
+          comparativoObraId={comparativoObraId}
+          comparativoCategoria={comparativoCategoria}
+          comparativoFornecedores={comparativoFornecedores}
+          comparativoItens={comparativoItens}
+          resumoComparativo={resumoComparativo}
+          settings={settings}
+          obras={obras}
+          onClose={() => setShowModalComparativoPdf(false)}
+          onAbrirNovaAba={handleGerarComparativoRapidoPDF}
+        />
+      )}
     </div>
   );
 }
@@ -11939,8 +11861,7 @@ function TelaLoginCorporativa({
     usuarios.find((u) => u.cargo === "Administrador") ||
     USUARIOS_INICIAIS[0] || {
       id: "usr-admin-1",
-      nome: "João Carlos Bauer",
-      cargo: "Administrador" as const,
+      nome: "Administrador do Sistema", cargo: "Administrador" as const,
       obraId: "ALL",
       obraNome: "Todas as Obras (Central de Compras)",
       email: "suprimentos@jcbauer.eng.br",
@@ -15020,9 +14941,7 @@ function ModalAprovacaoDiretoria({
   onClose: () => void;
   onConfirmar: (assinatura: string) => void;
 }) {
-  const [assinatura, setAssinatura] = useState(
-    "João Carlos Bauer — Diretor Executivo"
-  );
+  const [assinatura, setAssinatura] = useState("Diretoria Executiva");
   const [declaracaoCiente, setDeclaracaoCiente] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -16387,3 +16306,217 @@ function ModalAgruparDemandas({
 }
 
 
+
+
+/* ========================================================================= */
+/* MODAL EXECUTIVO DE PRÃ‰VIA & IMPRESSÃƒO DO MAPA DE 3 ORÃ‡AMENTOS             */
+/* ========================================================================= */
+function ModalVisualizarComparativoPdf({
+  comparativoTitulo,
+  comparativoObraId,
+  comparativoCategoria,
+  comparativoFornecedores,
+  comparativoItens,
+  resumoComparativo,
+  settings,
+  obras,
+  onClose,
+  onAbrirNovaAba,
+}: {
+  comparativoTitulo: string;
+  comparativoObraId: string;
+  comparativoCategoria: string;
+  comparativoFornecedores: [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido];
+  comparativoItens: ItemComparativoRapido[];
+  resumoComparativo: any;
+  settings: UserSettings;
+  obras: Obra[];
+  onClose: () => void;
+  onAbrirNovaAba: () => void;
+}) {
+  const obraSel = obras.find((o) => o.id === comparativoObraId) || obras[0];
+  const dataHoje = new Date().toLocaleDateString("pt-BR");
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+      <div className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+        {/* Barra superior de controle */}
+        <div className="bg-slate-900 text-white px-5 py-3 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-emerald-400 text-lg">ðŸ“„</span>
+            <div>
+              <div className="text-sm font-bold text-white">
+                VisualizaÃ§Ã£o do Mapa Equalizado de PreÃ§os
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Pronto para impressÃ£o em formato A4 ou exportaÃ§Ã£o em PDF
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+            >
+              <span>ðŸ–¨ï¸</span> Imprimir / Salvar PDF
+            </button>
+            <button
+              type="button"
+              onClick={onAbrirNovaAba}
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition flex items-center gap-1"
+            >
+              <span>â†—ï¸</span> Nova Aba
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-300 hover:text-white text-xs font-semibold transition"
+            >
+              âœ• Fechar
+            </button>
+          </div>
+        </div>
+
+        {/* ConteÃºdo imprimÃ­vel da folha executiva */}
+        <div className="p-4 sm:p-6 overflow-y-auto bg-slate-100 flex-1">
+          <div className="max-w-4xl mx-auto bg-white p-6 sm:p-8 rounded-xl border border-slate-200 shadow-sm print:p-0 print:border-none print:shadow-none text-slate-900 text-xs space-y-4">
+            {/* CabeÃ§alho */}
+            <div className="border-b-2 border-slate-900 pb-3 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <img
+                  src="/logo.png"
+                  alt="JC Bauer"
+                  className="h-10 w-auto object-contain"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = "none";
+                  }}
+                />
+                <div>
+                  <h1 className="text-sm font-black uppercase text-slate-900">
+                    {settings.companyName}
+                  </h1>
+                  <p className="text-[11px] text-slate-600">
+                    {settings.companyCnpj && (
+                      <>CNPJ: <strong>{settings.companyCnpj}</strong> â€¢ </>
+                    )}
+                    Depto. de Suprimentos: <strong>{settings.userName}</strong>
+                  </p>
+                </div>
+              </div>
+              <div className="text-right text-[10px] text-slate-600 leading-tight">
+                <div><strong>Data:</strong> {dataHoje}</div>
+                <div><strong>Obra:</strong> {obraSel?.nome || "Todas as Obras"}</div>
+                <div><strong>Categoria:</strong> {comparativoCategoria}</div>
+              </div>
+            </div>
+
+            {/* Info bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[11px]">
+              <div>
+                <span className="text-slate-500 block text-[10px]">Objeto:</span>
+                <strong className="text-slate-900 truncate block">{comparativoTitulo || "CotaÃ§Ã£o Geral"}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[10px]">Comprador:</span>
+                <strong className="text-slate-900 truncate block">{settings.userName}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[10px]">RecomendaÃ§Ã£o:</span>
+                <strong className="text-emerald-700 truncate block">{resumoComparativo.vencedorGeral?.nome || "A definir"}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[10px]">Saving Apurado:</span>
+                <strong className="text-emerald-800">{formatBRL(resumoComparativo.savingGlobal)}</strong>
+              </div>
+            </div>
+
+            {/* Cards 3 Fornecedores */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {comparativoFornecedores.map((f, i) => {
+                const tot = i === 0 ? resumoComparativo.total1 : i === 1 ? resumoComparativo.total2 : resumoComparativo.total3;
+                const isVenc = resumoComparativo.vencedorGeral?.index === i;
+                return (
+                  <div key={i} className={`p-3 rounded-lg border text-xs ${isVenc ? 'bg-emerald-50/70 border-emerald-400' : 'bg-white border-slate-200'}`}>
+                    <div className="text-[10px] font-bold uppercase text-slate-500 mb-1">
+                      {isVenc ? "ðŸ† 1Âº Lugar (Mais em Conta)" : `OrÃ§amento #${i + 1}`}
+                    </div>
+                    <div className="font-extrabold text-slate-900 text-sm truncate">
+                      {f.nome || `Fornecedor ${i + 1}`}
+                    </div>
+                    <div className={`text-base font-black mt-1 ${isVenc ? 'text-emerald-700' : 'text-slate-900'}`}>
+                      {formatBRL(tot)}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-1">
+                      Frete: {f.freteTipo} ({formatBRL(f.freteValor)}) â€¢ Prazo: {f.prazo || "N/I"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Tabela de Itens */}
+            <table className="w-full text-[11px] border-collapse">
+              <thead>
+                <tr className="bg-slate-100 border border-slate-300 font-bold text-slate-800">
+                  <th className="p-2 text-left w-[34%]">Insumo / Material</th>
+                  <th className="p-2 text-center w-[12%]">Qtd</th>
+                  <th className="p-2 text-right w-[18%]">{comparativoFornecedores[0]?.nome || "Fornecedor 1"}</th>
+                  <th className="p-2 text-right w-[18%]">{comparativoFornecedores[1]?.nome || "Fornecedor 2"}</th>
+                  <th className="p-2 text-right w-[18%]">{comparativoFornecedores[2]?.nome || "Fornecedor 3"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resumoComparativo.itensCalculados.map((it: any) => (
+                  <tr key={it.id} className="border-b border-slate-200 hover:bg-slate-50">
+                    <td className="p-2 font-semibold text-slate-900">{it.nome}</td>
+                    <td className="p-2 text-center text-slate-600">{it.quantidade} {it.unidade}</td>
+                    <td className={`p-2 text-right ${it.vencedor1 ? 'bg-emerald-100/70 font-bold text-emerald-900' : 'text-slate-800'}`}>
+                      {formatBRL(it.preco1)}
+                    </td>
+                    <td className={`p-2 text-right ${it.vencedor2 ? 'bg-emerald-100/70 font-bold text-emerald-900' : 'text-slate-800'}`}>
+                      {formatBRL(it.preco2)}
+                    </td>
+                    <td className={`p-2 text-right ${it.vencedor3 ? 'bg-emerald-100/70 font-bold text-emerald-900' : 'text-slate-800'}`}>
+                      {formatBRL(it.preco3)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-50 font-bold border-t-2 border-slate-300">
+                  <td colSpan={2} className="p-2">Subtotal dos Materiais</td>
+                  <td className="p-2 text-right">{formatBRL(resumoComparativo.subtotal1)}</td>
+                  <td className="p-2 text-right">{formatBRL(resumoComparativo.subtotal2)}</td>
+                  <td className="p-2 text-right">{formatBRL(resumoComparativo.subtotal3)}</td>
+                </tr>
+                <tr className="bg-slate-900 text-white font-extrabold text-xs">
+                  <td colSpan={2} className="p-2.5">VALOR TOTAL (COM FRETE)</td>
+                  <td className="p-2.5 text-right">{formatBRL(resumoComparativo.total1)}</td>
+                  <td className="p-2.5 text-right">{formatBRL(resumoComparativo.total2)}</td>
+                  <td className="p-2.5 text-right">{formatBRL(resumoComparativo.total3)}</td>
+                </tr>
+              </tfoot>
+            </table>
+
+            {/* Assinaturas */}
+            <div className="grid grid-cols-3 gap-6 pt-4 text-center text-[10px] text-slate-700">
+              <div className="border-t border-slate-900 pt-1.5">
+                <strong>{settings.userName}</strong>
+                <div className="text-slate-500">Comprador ResponsÃ¡vel</div>
+              </div>
+              <div className="border-t border-slate-900 pt-1.5">
+                <strong>{obraSel?.engenheiro || "Engenharia de Obras"}</strong>
+                <div className="text-slate-500">Fiscal de Obras</div>
+              </div>
+              <div className="border-t border-slate-900 pt-1.5">
+                <strong>Diretoria Executiva / CFO</strong>
+                <div className="text-slate-500">AprovaÃ§Ã£o Financeira</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
