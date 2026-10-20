@@ -1981,6 +1981,12 @@ export default function HomePage() {
       }
 
       setProcessosCotacoes(listaProcessos);
+      try {
+        window.localStorage.setItem(
+          PROCESSOS_COTACOES_STORAGE_KEY,
+          JSON.stringify(listaProcessos)
+        );
+      } catch {}
       const ativa = listaProcessos[0];
       if (ativa) {
         setCotacaoAtivaId(ativa.id);
@@ -2528,9 +2534,7 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
 
     setProcessosCotacoes((prev) => {
       const idx = prev.findIndex((p) => p.id === cotacaoAtivaId);
-      if (idx === -1) return prev;
-
-      const atual = prev[idx];
+      const atual = idx !== -1 ? prev[idx] : null;
       const obraSel = obras.find((o) => o.id === comparativoObraId);
 
       const t1 = Math.max(
@@ -2575,12 +2579,16 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
         melhorNome = validos[0].nome;
       }
 
+      const anoAtual = new Date().getFullYear();
       const atualizado: ProcessoCotacao = {
-        ...atual,
-        titulo: comparativoTitulo || atual.titulo,
+        id: cotacaoAtivaId,
+        codigo: atual?.codigo || `COT-${anoAtual}-001`,
+        titulo: comparativoTitulo || atual?.titulo || "CotaÃ§Ã£o de Insumos #001",
         obraId: comparativoObraId,
         obraNome: obraSel?.nome || "Todas as Obras / Canteiro Central",
-        categoria: comparativoCategoria || atual.categoria,
+        categoria: comparativoCategoria || atual?.categoria || "Geral / Suprimentos",
+        status: atual?.status || "Aguardando Fornecedores",
+        dataCriacao: atual?.dataCriacao || new Date().toLocaleDateString("pt-BR"),
         fornecedores: comparativoFornecedores,
         itens: comparativoItens,
         menorValor: menorVal,
@@ -2595,8 +2603,12 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
           }),
       };
 
-      const novaLista = [...prev];
-      novaLista[idx] = atualizado;
+      let novaLista = [...prev];
+      if (idx === -1) {
+        novaLista = [atualizado, ...prev];
+      } else {
+        novaLista[idx] = atualizado;
+      }
 
       try {
         window.localStorage.setItem(
