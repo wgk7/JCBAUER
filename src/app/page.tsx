@@ -2088,6 +2088,27 @@ export default function HomePage() {
                 );
               } catch {}
             }
+            if (dadosNuvem[ESTOQUE_ALMOXARIFADO_STORAGE_KEY]) {
+              setEstoqueAlmoxarifado(dadosNuvem[ESTOQUE_ALMOXARIFADO_STORAGE_KEY]);
+              try {
+                window.localStorage.setItem(
+                  ESTOQUE_ALMOXARIFADO_STORAGE_KEY,
+                  JSON.stringify(dadosNuvem[ESTOQUE_ALMOXARIFADO_STORAGE_KEY])
+                );
+              } catch {}
+            }
+            if (dadosNuvem[PROCESSOS_COTACOES_STORAGE_KEY]) {
+              const processosNuvem = dadosNuvem[PROCESSOS_COTACOES_STORAGE_KEY];
+              if (Array.isArray(processosNuvem) && processosNuvem.length > 0) {
+                setProcessosCotacoes(processosNuvem);
+                try {
+                  window.localStorage.setItem(
+                    PROCESSOS_COTACOES_STORAGE_KEY,
+                    JSON.stringify(processosNuvem)
+                  );
+                } catch {}
+              }
+            }
           }
         }
       } catch (e) {
@@ -2133,10 +2154,11 @@ export default function HomePage() {
       await salvarChaveSupabase(CONTRATOS_STORAGE_KEY, contratos);
       await salvarChaveSupabase(ORCAMENTO_STORAGE_KEY, orcamento);
       await salvarChaveSupabase(ESTOQUE_STORAGE_KEY, estoque);
+      await salvarChaveSupabase(ESTOQUE_ALMOXARIFADO_STORAGE_KEY, estoqueAlmoxarifado);
       await salvarChaveSupabase(ITENS_PLANILHA_STORAGE_KEY, itensPlanilha);
+      await salvarChaveSupabase(PROCESSOS_COTACOES_STORAGE_KEY, processosCotacoes);
       if (comparativoSalvo) {
         await salvarChaveSupabase(COMPARATIVO_STORAGE_KEY, comparativoSalvo);
-      await salvarChaveSupabase(PROCESSOS_COTACOES_STORAGE_KEY, processosCotacoes);
       }
       await sincronizarFornecedoresRelacional(fornecedores);
 
@@ -2217,6 +2239,23 @@ export default function HomePage() {
           ITENS_PLANILHA_STORAGE_KEY,
           JSON.stringify(dados[ITENS_PLANILHA_STORAGE_KEY])
         );
+      }
+      if (dados[ESTOQUE_ALMOXARIFADO_STORAGE_KEY]) {
+        setEstoqueAlmoxarifado(dados[ESTOQUE_ALMOXARIFADO_STORAGE_KEY]);
+        window.localStorage.setItem(
+          ESTOQUE_ALMOXARIFADO_STORAGE_KEY,
+          JSON.stringify(dados[ESTOQUE_ALMOXARIFADO_STORAGE_KEY])
+        );
+      }
+      if (dados[PROCESSOS_COTACOES_STORAGE_KEY]) {
+        const procNuvem = dados[PROCESSOS_COTACOES_STORAGE_KEY];
+        if (Array.isArray(procNuvem) && procNuvem.length > 0) {
+          setProcessosCotacoes(procNuvem);
+          window.localStorage.setItem(
+            PROCESSOS_COTACOES_STORAGE_KEY,
+            JSON.stringify(procNuvem)
+          );
+        }
       }
 
       dispararAviso("Dados baixados do Supabase com sucesso!");
@@ -5039,7 +5078,21 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     };
 
     setProcessosCotacoes((prev) => {
-      const list = [nova, ...prev];
+      let base = [...prev];
+      if (cotacaoAtivaId) {
+        const idxAtual = base.findIndex((p) => p.id === cotacaoAtivaId);
+        if (idxAtual !== -1) {
+          base[idxAtual] = {
+            ...base[idxAtual],
+            titulo: comparativoTitulo || base[idxAtual].titulo,
+            obraId: comparativoObraId,
+            categoria: comparativoCategoria,
+            fornecedores: comparativoFornecedores,
+            itens: comparativoItens,
+          };
+        }
+      }
+      const list = [nova, ...base];
       try {
         window.localStorage.setItem(
           PROCESSOS_COTACOES_STORAGE_KEY,
@@ -5067,7 +5120,42 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   };
 
   const handleTrocarCotacaoAtiva = (targetId: string) => {
-    const alvo = processosCotacoes.find((p) => p.id === targetId);
+    if (targetId === cotacaoAtivaId) return;
+
+    let listaAtual = processosCotacoes;
+    if (cotacaoAtivaId) {
+      const idx = processosCotacoes.findIndex((p) => p.id === cotacaoAtivaId);
+      if (idx !== -1) {
+        listaAtual = [...processosCotacoes];
+        listaAtual[idx] = {
+          ...listaAtual[idx],
+          titulo: comparativoTitulo || listaAtual[idx].titulo,
+          obraId: comparativoObraId,
+          categoria: comparativoCategoria,
+          fornecedores: comparativoFornecedores,
+          itens: comparativoItens,
+          dataAtualizacao:
+            new Date().toLocaleDateString("pt-BR") +
+            " " +
+            new Date().toLocaleTimeString("pt-BR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+        };
+        setProcessosCotacoes(listaAtual);
+        try {
+          window.localStorage.setItem(
+            PROCESSOS_COTACOES_STORAGE_KEY,
+            JSON.stringify(listaAtual)
+          );
+          salvarChaveSupabase(PROCESSOS_COTACOES_STORAGE_KEY, listaAtual).catch(
+            () => {}
+          );
+        } catch {}
+      }
+    }
+
+    const alvo = listaAtual.find((p) => p.id === targetId);
     if (!alvo) return;
 
     setCotacaoAtivaId(alvo.id);
