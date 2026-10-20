@@ -6327,18 +6327,18 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       } catch {}
     }
     setUsuarioEditandoModal(null);
-    dispararAviso(`UsuÃ¡rio "${uAtualizado.nome}" atualizado com sucesso!`);
+    dispararAviso(`Usuário "${uAtualizado.nome}" atualizado com sucesso!`);
   };
 
   const handleExcluirUsuario = (id: string, nome: string) => {
     if (usuarios.length <= 1) {
-      alert("NÃ£o Ã© possÃ­vel excluir o Ãºnico usuÃ¡rio do sistema. Cadastre outro usuÃ¡rio antes de excluir este.");
+      alert("NÃ£o Ã© possÃ­vel excluir o Ãºnico usuário do sistema. Cadastre outro usuário antes de excluir este.");
       return;
     }
     const adminRestantes = usuarios.filter((u) => u.cargo === "Administrador" && u.id !== id);
     const user = usuarios.find((u) => u.id === id);
     if (user?.cargo === "Administrador" && adminRestantes.length === 0) {
-      alert("NÃ£o Ã© possÃ­vel excluir o Ãºnico Administrador do sistema. Promova outro usuÃ¡rio a Administrador antes de excluir este.");
+      alert("NÃ£o Ã© possÃ­vel excluir o Ãºnico Administrador do sistema. Promova outro usuário a Administrador antes de excluir este.");
       return;
     }
     if (!window.confirm(`Deseja realmente excluir o acesso de "${nome}" do sistema?\n\nEsta aÃ§Ã£o revogarÃ¡ definitivamente as credenciais deste colaborador.`)) {
@@ -6355,13 +6355,13 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     if (usuarioLogado?.id === id) {
       handleLogout();
     }
-    dispararAviso(`UsuÃ¡rio "${nome}" excluÃ­do com sucesso.`);
+    dispararAviso(`Usuário "${nome}" excluÃ­do com sucesso.`);
   };
 
   const handleToggleStatusUsuario = (u: UsuarioSistema) => {
     const novoStatus: "Ativo" | "Bloqueado" = u.status === "Ativo" ? "Bloqueado" : "Ativo";
     if (u.id === usuarioLogado?.id && novoStatus === "Bloqueado") {
-      if (!window.confirm("VocÃª estÃ¡ prestes a bloquear o seu prÃ³prio usuÃ¡rio logado no momento. Deseja continuar?")) {
+      if (!window.confirm("VocÃª estÃ¡ prestes a bloquear o seu prÃ³prio usuário logado no momento. Deseja continuar?")) {
         return;
       }
     }
@@ -13421,9 +13421,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                 type="button"
                                 onClick={() => setUsuarioEditandoModal(u)}
                                 className="px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold flex items-center gap-1 transition shadow-xs"
-                                title="Editar usuÃ¡rio e credenciais"
+                                title="Editar usuário e credenciais"
                               >
-                                <span>âœï¸</span> Editar
+                                <span>✏️</span> Editar
                               </button>
                               <button
                                 type="button"
@@ -13441,9 +13441,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                 type="button"
                                 onClick={() => handleExcluirUsuario(u.id, u.nome)}
                                 className="px-2 py-1 rounded-md bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold flex items-center gap-1 transition shadow-xs"
-                                title="Excluir usuÃ¡rio do sistema"
+                                title="Excluir usuário do sistema"
                               >
-                                <span>ðŸ—‘ï¸</span> Excluir
+                                <span>🗑️</span> Excluir
                               </button>
                             </div>
                           </td>
@@ -15520,7 +15520,7 @@ function ModalEditarUsuario({
         <div className="flex items-center justify-between border-b border-slate-200 pb-3">
           <div>
             <h3 className="text-base font-bold text-slate-900">
-              Editar UsuÃ¡rio do Sistema
+              Editar Usuário do Sistema
             </h3>
             <p className="text-xs text-slate-500">
               Altere nome, cargo, obra, e-mail de acesso e senha
@@ -15538,7 +15538,7 @@ function ModalEditarUsuario({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="sm:col-span-2">
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Nome Completo do UsuÃ¡rio *
+              Nome Completo do Usuário *
             </label>
             <input
               required
@@ -15637,7 +15637,7 @@ function ModalEditarUsuario({
             type="submit"
             className="px-5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-xs"
           >
-            Salvar AlteraÃ§Ãµes
+            Salvar Alterações
           </button>
         </div>
       </form>
