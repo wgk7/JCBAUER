@@ -271,7 +271,7 @@ export function PurchaseOrdersModule() {
                 JC Bauer Empreendimentos
               </h1>
               <p className="text-sm text-slate-700 mt-1 whitespace-nowrap tabular-nums">
-                CNPJ: 04.819.302/0001-71 • Central de Suprimentos B2B
+                Central de Suprimentos B2B
               </p>
             </div>
           </div>
