@@ -527,6 +527,43 @@ function formatBRL(valor: number): string {
   }).format(Number.isFinite(valor) ? valor : 0);
 }
 
+function extrairContatoEPhone(texto: string): {
+  nome: string;
+  telefone: string;
+  whatsapp: string;
+} {
+  if (!texto) return { nome: "", telefone: "", whatsapp: "" };
+
+  const match = texto.match(
+    /(?:^|\(?)([0-9]{2})[-.\s\)]*([0-9]{4,5})[-.\s]*([0-9]{4})\)?/
+  );
+  if (match) {
+    const ddd = match[1];
+    const parte1 = match[2];
+    const parte2 = match[3];
+    const telefoneFormatado = `(${ddd}) ${parte1}-${parte2}`;
+    const whatsappDigitos = `55${ddd}${parte1}${parte2}`;
+
+    const nomeLimpo = texto
+      .replace(match[0], "")
+      .replace(/[\(\)\[\]\-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return {
+      nome: nomeLimpo,
+      telefone: telefoneFormatado,
+      whatsapp: whatsappDigitos,
+    };
+  }
+
+  return {
+    nome: texto.trim(),
+    telefone: "",
+    whatsapp: "",
+  };
+}
+
 /* ========================================================================= */
 /* DADOS INICIAIS REALISTAS DE CONSTRUTORA                                   */
 /* ========================================================================= */
@@ -1395,12 +1432,60 @@ export default function HomePage() {
 
       const savedForn = window.localStorage.getItem(FORNECEDORES_STORAGE_KEY);
       if (savedForn) {
-        const parsedForn = JSON.parse(savedForn) as FornecedorCadastro[];
-        if (Array.isArray(parsedForn) && parsedForn.length > 0) {
-          setFornecedores(parsedForn);
+        try {
+          const parsedForn = JSON.parse(savedForn) as FornecedorCadastro[];
+          if (Array.isArray(parsedForn) && parsedForn.length > 0) {
+            const sanitizedForn = parsedForn.map((f) => {
+              const contatoInfo = extrairContatoEPhone(
+                f.vendedor || f.cidade || ""
+              );
+              const cidadeInfo = extrairContatoEPhone(f.cidade || "");
+
+              const isCidadeInvalida = Boolean(
+                cidadeInfo.telefone ||
+                  f.cidade === f.vendedor ||
+                  (f.cidade && f.vendedor && f.vendedor.includes(f.cidade)) ||
+                  (f.cidade && f.cidade.includes("(4"))
+              );
+              const novaCidade = isCidadeInvalida ? "" : f.cidade;
+
+              let novoVendedor = f.vendedor;
+              let novoTel = f.telefone;
+              let novoWhats = f.whatsapp;
+
+              if (contatoInfo.telefone) {
+                novoTel = contatoInfo.telefone;
+                novoWhats = contatoInfo.whatsapp;
+                if (contatoInfo.nome) {
+                  novoVendedor = contatoInfo.nome;
+                }
+              }
+
+              if (novoTel === "(11) 3200-0000" || !novoTel) {
+                novoTel = contatoInfo.telefone || "";
+                novoWhats = contatoInfo.whatsapp || "";
+              }
+
+              return {
+                ...f,
+                cidade: novaCidade,
+                vendedor: novoVendedor,
+                telefone: novoTel,
+                whatsapp: novoWhats,
+              };
+            });
+            setFornecedores(sanitizedForn);
+            try {
+              window.localStorage.setItem(
+                FORNECEDORES_STORAGE_KEY,
+                JSON.stringify(sanitizedForn)
+              );
+            } catch {}
+          }
+        } catch {
+          // ignore
         }
       }
-
       const savedSc = window.localStorage.getItem(SOLICITACOES_STORAGE_KEY);
       if (savedSc) {
         const parsedSc = JSON.parse(savedSc) as SolicitacaoCompra[];
@@ -3295,20 +3380,15 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           /\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}|\d{3}\.?\d{3}\.?\d{3}-?\d{2}/
         );
 
-        const cidadeRaw = acharValor(
-          row,
-          [
-            "cidade",
-            "municipio",
-            "praca",
-            "localidade",
-            "cidadeuf",
-            "endereco",
-            "local",
-          ],
-          undefined,
-          2
-        );
+        const cidadeRaw = acharValor(row, [
+          "cidade",
+          "municipio",
+          "praca",
+          "localidade",
+          "cidadeuf",
+          "endereco",
+          "local",
+        ]);
 
         const ufRaw = acharValor(row, ["uf", "estado"]);
 
@@ -3323,27 +3403,21 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           "tipo",
         ]);
 
-        const vendedorRaw = acharValor(
-          row,
-          [
-            "vendedor",
-            "contato",
-            "responsavel",
-            "representante",
-            "atendente",
-            "consultor",
-            "comercial",
-          ],
-          undefined,
-          3
-        );
+        const vendedorRaw = acharValor(row, [
+          "vendedor",
+          "contato",
+          "responsavel",
+          "representante",
+          "atendente",
+          "consultor",
+          "comercial",
+        ]);
 
         const telefoneRaw = acharValor(
           row,
           ["telefone", "fone", "tel", "fixo", "contatotelefone"],
-          /\(?\d{2}\)?\s*9?\d{4}[-\s]?\d{4}/
+          /(?:^|\(?)([0-9]{2})[-.\s\)]*([0-9]{4,5})[-.\s]*([0-9]{4})\)?/
         );
-
         const whatsRaw = acharValor(row, [
           "whatsapp",
           "whats",
@@ -3445,23 +3519,45 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               )
             : cnpjRaw || "";
 
-        const cidadeFinal = cidadeRaw
+        // Extrai contato e telefone inteligente da linha
+        let parsedContato = extrairContatoEPhone(vendedorRaw || "");
+        if (!parsedContato.telefone) {
+          for (const cell of row) {
+            const strCell = String(cell ?? "").trim();
+            const p = extrairContatoEPhone(strCell);
+            if (p.telefone) {
+              parsedContato = p;
+              break;
+            }
+          }
+        }
+
+        const vendedorFinal = parsedContato.nome || vendedorRaw || "";
+        const telefoneFinal = parsedContato.telefone || telefoneRaw || "";
+        const whatsFinal = parsedContato.whatsapp || whatsRaw || "";
+
+        let cidadeFinal = cidadeRaw
           ? ufRaw && !cidadeRaw.includes(ufRaw)
             ? `${cidadeRaw} - ${ufRaw}`
             : cidadeRaw
           : "";
 
-        const categoriaFinal = categoriaRaw
-          ? inferirCategoria(categoriaRaw)
-          : inferirCategoria(`${empresaFinal} ${insumoRaw}`);
+        // Se cidade contém telefone ou coincide com contato/vendedor, anula cidade
+        if (cidadeFinal) {
+          const checkTel = extrairContatoEPhone(cidadeFinal);
+          if (
+            checkTel.telefone ||
+            cidadeFinal === vendedorFinal ||
+            cidadeFinal === vendedorRaw ||
+            cidadeFinal.includes("(4")
+          ) {
+            cidadeFinal = "";
+          }
+        }
 
-        const vendedorFinal = vendedorRaw || "";
-        const telefoneFinal = telefoneRaw || whatsRaw || "";
-        const whatsFinal = whatsRaw || telefoneRaw || "";
         const emailFinal = emailRaw || "";
         const pixFinal = pixRaw || cnpjFinal || "";
         const condicaoFinal = condicaoRaw || "";
-
         const insumoFinal =
           insumoRaw || `Fornecimento e Insumos (${categoriaFinal})`;
 
@@ -8464,7 +8560,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             {f.empresa}
                           </td>
                           <td className="py-3.5 px-4 text-slate-700">
-                            {f.cidade}
+                            {f.cidade || "—"}
                           </td>
                           <td className="py-3.5 px-4">
                             <span className="px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-xs font-medium text-slate-800">
@@ -8485,21 +8581,23 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             </button>
                           </td>
                           <td className="py-3.5 px-4 font-medium text-slate-900">
-                            {f.vendedor}
+                            {f.vendedor || "—"}
                           </td>
                           <td className="py-3.5 px-4 whitespace-nowrap tabular-nums">
                             <div className="flex items-center gap-2">
-                              <span className="text-slate-800">{f.telefone}</span>
-                              <a
-                                href={`https://wa.me/${f.whatsapp}?text=${encodeURIComponent(
-                                  `Olá ${f.vendedor}, tudo bem? Aqui é ${settings.userName} (${settings.companyName}). Gostaria de solicitar uma cotação.`
-                                )}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-2 py-1 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
-                              >
-                                WhatsApp
-                              </a>
+                              <span className="text-slate-800">{f.telefone || "—"}</span>
+                              {f.whatsapp && !f.whatsapp.includes("1199000") && (
+                                <a
+                                  href={`https://wa.me/${f.whatsapp}?text=${encodeURIComponent(
+                                    `Olá ${f.vendedor || "Amigo"}, tudo bem? Aqui é ${settings.userName} (${settings.companyName}). Gostaria de solicitar uma cotação.`
+                                  )}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2 py-1 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
+                                >
+                                  WhatsApp
+                                </a>
+                              )}
                             </div>
                           </td>
                           <td className="py-3.5 px-4 text-right whitespace-nowrap">
