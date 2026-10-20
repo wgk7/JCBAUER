@@ -96,10 +96,10 @@ interface UserSettings {
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
-  userName: "Gestor de Suprimentos",
+  userName: "Welliton Schmidt",
   userRole: "Diretoria & CoordenaÃ§Ã£o de Suprimentos",
   userEmail: "suprimentos@jcbauer.com.br",
-  userPhone: "",
+  userPhone: "47 997810384",
   companyName: "JC Bauer Empreendimentos",
   companyCnpj: "",
 };
@@ -625,31 +625,11 @@ const ORDENS_INICIAIS: OrdemCompra[] = [];
 const USUARIOS_INICIAIS: UsuarioSistema[] = [
   {
     id: "usr-admin-1",
-    nome: "Joao Carlos Bauer",
-    cargo: "Administrador",
-    obraId: "ALL",
-    obraNome: "Todas as Obras (Central de Compras)",
-    email: "suprimentos@jcbauer.com.br",
-    senha: "123",
-    status: "Ativo",
-  },
-  {
-    id: "usr-welliton",
     nome: "Welliton Schmidt",
     cargo: "Administrador",
     obraId: "ALL",
     obraNome: "Todas as Obras (Central de Compras)",
-    email: "welliton@jcbauer.com.br",
-    senha: "123",
-    status: "Ativo",
-  },
-  {
-    id: "usr-eng-marcos",
-    nome: "Eng. Marcos Viana",
-    cargo: "Engenheiro",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    email: "marcos.viana@jcbauer.com.br",
+    email: "suprimentos@jcbauer.com.br",
     senha: "123",
     status: "Ativo",
   },
@@ -1665,6 +1645,8 @@ export default function HomePage() {
     useState<boolean>(false);
   const [showNovoUsuarioModal, setShowNovoUsuarioModal] =
     useState<boolean>(false);
+  const [usuarioEditandoModal, setUsuarioEditandoModal] =
+    useState<UsuarioSistema | null>(null);
   const [showNovoContratoModal, setShowNovoContratoModal] =
     useState<boolean>(false);
   const [showNovoBmModalContrato, setShowNovoBmModalContrato] =
@@ -1751,11 +1733,43 @@ export default function HomePage() {
       const savedUsers = window.localStorage.getItem(USERS_STORAGE_KEY);
       let usuariosEfetivos = USUARIOS_INICIAIS;
       if (savedUsers) {
-        const parsedUsers = (JSON.parse(savedUsers) as UsuarioSistema[]).filter((u) => !isDemoUser(u)).map((u) => u.nome?.includes("Carlos Bauer") ? { ...u, nome: "Administrador do Sistema" } : u);
-        if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
-          usuariosEfetivos = parsedUsers;
-          setUsuarios(parsedUsers);
+        try {
+          const parsedUsers = (JSON.parse(savedUsers) as UsuarioSistema[])
+            .filter((u) => !isDemoUser(u))
+            .map((u) => {
+              if (
+                u.nome?.toLowerCase().includes("carlos bauer") ||
+                u.nome === "Administrador do Sistema" ||
+                u.email === "suprimentos@jcbauer.com.br" ||
+                u.id === "usr-admin-1"
+              ) {
+                return {
+                  ...u,
+                  id: "usr-admin-1",
+                  nome: "Welliton Schmidt",
+                  email: "suprimentos@jcbauer.com.br",
+                  cargo: "Administrador" as const,
+                  obraId: "ALL",
+                  obraNome: "Todas as Obras (Central de Compras)",
+                };
+              }
+              return u;
+            });
+          if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
+            usuariosEfetivos = parsedUsers;
+            setUsuarios(parsedUsers);
+            window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(parsedUsers));
+          } else {
+            setUsuarios(USUARIOS_INICIAIS);
+            window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(USUARIOS_INICIAIS));
+          }
+        } catch {
+          setUsuarios(USUARIOS_INICIAIS);
+          window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(USUARIOS_INICIAIS));
         }
+      } else {
+        setUsuarios(USUARIOS_INICIAIS);
+        window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(USUARIOS_INICIAIS));
       }
 
             const savedObras = window.localStorage.getItem(OBRAS_STORAGE_KEY);
@@ -2286,6 +2300,7 @@ export default function HomePage() {
 
       await salvarChaveSupabase(SETTINGS_STORAGE_KEY, settings);
       await salvarChaveSupabase(FORNECEDORES_STORAGE_KEY, fornecedores);
+      await salvarChaveSupabase(USERS_STORAGE_KEY, usuarios);
       if (Array.isArray(obras) && obras.length > 0) {
         await salvarChaveSupabase(OBRAS_STORAGE_KEY, obras);
       }
@@ -2346,6 +2361,16 @@ export default function HomePage() {
         window.localStorage.setItem(
           SETTINGS_STORAGE_KEY,
           JSON.stringify(dados[SETTINGS_STORAGE_KEY])
+        );
+      }
+      if (
+        Array.isArray(dados[USERS_STORAGE_KEY]) &&
+        dados[USERS_STORAGE_KEY].length > 0
+      ) {
+        setUsuarios(dados[USERS_STORAGE_KEY]);
+        window.localStorage.setItem(
+          USERS_STORAGE_KEY,
+          JSON.stringify(dados[USERS_STORAGE_KEY])
         );
       }
       if (
@@ -3277,6 +3302,21 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
   /* DISPARADOR UNIVERSAL DE IMPRESSÃO / PDF (À PROVA DE POPUP BLOCKERS)     */
   /* ----------------------------------------------------------------------- */
   const imprimirDocumentoHtml = (htmlContent: string) => {
+    // 1. MÃ©todo primÃ¡rio e mais seguro em navegadores modernos: Blob URL direta
+    try {
+      const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+      const blobUrl = URL.createObjectURL(blob);
+      const win = window.open(blobUrl, "_blank");
+      if (win) {
+        win.focus();
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        return;
+      }
+    } catch (e) {
+      console.warn("Falha ao abrir via Blob URL:", e);
+    }
+
+    // 2. MÃ©todo secundÃ¡rio: Janela limpa com document.write
     let win: Window | null = null;
     try {
       win = window.open(
@@ -3300,19 +3340,19 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
       }
     }
 
-    // Fallback à prova de falhas: Iframe invisível para navegadores que bloqueiam pop-ups
+    // 3. Fallback: Iframe visÃ­vel off-screen (Chromium permite window.print em iframes visÃ­veis)
     try {
       let iframe = document.getElementById("jc-print-iframe") as HTMLIFrameElement;
       if (!iframe) {
         iframe = document.createElement("iframe");
         iframe.id = "jc-print-iframe";
         iframe.style.position = "fixed";
-        iframe.style.right = "0";
-        iframe.style.bottom = "0";
-        iframe.style.width = "0";
-        iframe.style.height = "0";
-        iframe.style.border = "0";
-        iframe.style.visibility = "hidden";
+        iframe.style.top = "-9999px";
+        iframe.style.left = "-9999px";
+        iframe.style.width = "1024px";
+        iframe.style.height = "768px";
+        iframe.style.border = "none";
+        iframe.style.visibility = "visible";
         document.body.appendChild(iframe);
       }
 
@@ -3326,14 +3366,15 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
             iframe.contentWindow?.focus();
             iframe.contentWindow?.print();
           } catch (e) {
-            console.error("Erro na impressão do iframe:", e);
+            console.error("Erro na impressÃ£o do iframe:", e);
           }
-        }, 450);
+        }, 500);
       }
     } catch (e) {
-      console.error("Erro no fallback de impressão:", e);
+      console.error("Erro no fallback de impressÃ£o:", e);
     }
   };
+
   const handleGeneratePDF = () => {
     if (!scAtiva) return;
 
@@ -5968,8 +6009,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           u.cargo === "Administrador" &&
           (loginLimpo === "admin" ||
             loginLimpo === "master" ||
-            loginLimpo === "administrador" ||
-            loginLimpo === "suprimentos" ||
+            loginLimpo === "administrador" || loginLimpo === "suprimentos" || loginLimpo === "suprimentos@jcbauer.com.br" || loginLimpo === "welliton" || loginLimpo === "welliton@jcbauer.com.br" ||
             loginLimpo === "joao" ||
             loginLimpo === "joão");
 
@@ -5982,7 +6022,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       }) ||
       ((loginLimpo === "admin" ||
         loginLimpo === "master" ||
-        loginLimpo === "suprimentos@jcbauer.eng.br" ||
+        loginLimpo === "suprimentos@jcbauer.com.br" || loginLimpo === "welliton@jcbauer.com.br" ||
         loginLimpo === "admin@jcbauer.com.br" || loginLimpo === "suprimentos" || loginLimpo === "administrador") &&
       (senhaInput === "123" || senhaInput === "admin" || senhaInput === "master")
         ? usuarios.find((u) => u.cargo === "Administrador") || USUARIOS_INICIAIS[0]
@@ -6270,6 +6310,70 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     } catch {}
     salvarChaveSupabase(ESTOQUE_STORAGE_KEY, []).catch(() => {});
     dispararAviso("Almoxarifado e estoque limpos com sucesso.");
+  };
+
+  const handleSalvarUsuarioEditado = (uAtualizado: UsuarioSistema) => {
+    const novos = usuarios.map((u) => (u.id === uAtualizado.id ? uAtualizado : u));
+    setUsuarios(novos);
+    try {
+      window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(novos));
+    } catch {}
+    salvarChaveSupabase(USERS_STORAGE_KEY, novos).catch(() => {});
+
+    if (usuarioLogado?.id === uAtualizado.id) {
+      setUsuarioLogado(uAtualizado);
+      try {
+        window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(uAtualizado));
+      } catch {}
+    }
+    setUsuarioEditandoModal(null);
+    dispararAviso(`UsuÃ¡rio "${uAtualizado.nome}" atualizado com sucesso!`);
+  };
+
+  const handleExcluirUsuario = (id: string, nome: string) => {
+    if (usuarios.length <= 1) {
+      alert("NÃ£o Ã© possÃ­vel excluir o Ãºnico usuÃ¡rio do sistema. Cadastre outro usuÃ¡rio antes de excluir este.");
+      return;
+    }
+    const adminRestantes = usuarios.filter((u) => u.cargo === "Administrador" && u.id !== id);
+    const user = usuarios.find((u) => u.id === id);
+    if (user?.cargo === "Administrador" && adminRestantes.length === 0) {
+      alert("NÃ£o Ã© possÃ­vel excluir o Ãºnico Administrador do sistema. Promova outro usuÃ¡rio a Administrador antes de excluir este.");
+      return;
+    }
+    if (!window.confirm(`Deseja realmente excluir o acesso de "${nome}" do sistema?\n\nEsta aÃ§Ã£o revogarÃ¡ definitivamente as credenciais deste colaborador.`)) {
+      return;
+    }
+
+    const novos = usuarios.filter((u) => u.id !== id);
+    setUsuarios(novos);
+    try {
+      window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(novos));
+    } catch {}
+    salvarChaveSupabase(USERS_STORAGE_KEY, novos).catch(() => {});
+
+    if (usuarioLogado?.id === id) {
+      handleLogout();
+    }
+    dispararAviso(`UsuÃ¡rio "${nome}" excluÃ­do com sucesso.`);
+  };
+
+  const handleToggleStatusUsuario = (u: UsuarioSistema) => {
+    const novoStatus: "Ativo" | "Bloqueado" = u.status === "Ativo" ? "Bloqueado" : "Ativo";
+    if (u.id === usuarioLogado?.id && novoStatus === "Bloqueado") {
+      if (!window.confirm("VocÃª estÃ¡ prestes a bloquear o seu prÃ³prio usuÃ¡rio logado no momento. Deseja continuar?")) {
+        return;
+      }
+    }
+    const novos = usuarios.map((item) =>
+      item.id === u.id ? { ...item, status: novoStatus } : item
+    );
+    setUsuarios(novos);
+    try {
+      window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(novos));
+    } catch {}
+    salvarChaveSupabase(USERS_STORAGE_KEY, novos).catch(() => {});
+    dispararAviso(`Status de ${u.nome} alterado para ${novoStatus}!`);
   };
 
   const handleConfirmarRecebimentoObra = (
@@ -13312,38 +13416,36 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             </span>
                           </td>
                           <td className="py-3 px-4 text-right whitespace-nowrap">
-                            {u.cargo !== "Administrador" ? (
+                            <div className="flex items-center justify-end gap-1.5">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setUsuarios((prev) =>
-                                    prev.map((item) =>
-                                      item.id === u.id
-                                        ? {
-                                            ...item,
-                                            status:
-                                              item.status === "Ativo"
-                                                ? "Bloqueado"
-                                                : "Ativo",
-                                          }
-                                        : item
-                                    )
-                                  );
-                                  dispararAviso(
-                                    `Status de ${u.nome} alterado com sucesso!`
-                                  );
-                                }}
-                                className="px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs font-semibold text-slate-800"
+                                onClick={() => setUsuarioEditandoModal(u)}
+                                className="px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold flex items-center gap-1 transition shadow-xs"
+                                title="Editar usuÃ¡rio e credenciais"
                               >
-                                {u.status === "Ativo"
-                                  ? "Bloquear Acesso"
-                                  : "Reativar Acesso"}
+                                <span>âœï¸</span> Editar
                               </button>
-                            ) : (
-                              <span className="text-xs text-slate-400 font-medium">
-                                Acesso Mestre
-                              </span>
-                            )}
+                              <button
+                                type="button"
+                                onClick={() => handleToggleStatusUsuario(u)}
+                                className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition shadow-xs ${
+                                  u.status === "Ativo"
+                                    ? "bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700"
+                                    : "bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-800"
+                                }`}
+                                title={u.status === "Ativo" ? "Bloquear acesso" : "Reativar acesso"}
+                              >
+                                {u.status === "Ativo" ? "Bloquear" : "Reativar"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleExcluirUsuario(u.id, u.nome)}
+                                className="px-2 py-1 rounded-md bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold flex items-center gap-1 transition shadow-xs"
+                                title="Excluir usuÃ¡rio do sistema"
+                              >
+                                <span>ðŸ—‘ï¸</span> Excluir
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -13659,6 +13761,16 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               `Acesso criado para ${novoUser.nome} (${novoUser.cargo} — ${novoUser.obraNome})! Já disponível para Login.`
             );
           }}
+        />
+      )}
+
+      {/* MODAL DE EDIÃ‡ÃƒO DE USUÃRIO DO SISTEMA */}
+      {usuarioEditandoModal && (
+        <ModalEditarUsuario
+          usuario={usuarioEditandoModal}
+          obras={obras}
+          onClose={() => setUsuarioEditandoModal(null)}
+          onSalvar={handleSalvarUsuarioEditado}
         />
       )}
 
@@ -15062,11 +15174,11 @@ function TelaLoginCorporativa({
     usuarios.find((u) => u.cargo === "Administrador") ||
     USUARIOS_INICIAIS[0] || {
       id: "usr-admin-1",
-      nome: "João Carlos Bauer",
+      nome: "Welliton Schmidt",
       cargo: "Administrador" as const,
       obraId: "ALL",
       obraNome: "Todas as Obras (Central de Compras)",
-      email: "suprimentos@jcbauer.eng.br",
+      email: "suprimentos@jcbauer.com.br",
       senha: "123",
       status: "Ativo" as const,
     };
@@ -15115,7 +15227,7 @@ function TelaLoginCorporativa({
           <div className="bg-white/80 border border-amber-200/60 rounded-lg p-2.5 text-[11px] text-slate-600 space-y-1">
             <div className="flex items-center justify-between">
               <span>E-mail / Usuário:</span>
-              <strong className="text-slate-900 font-mono">suprimentos@jcbauer.eng.br</strong>
+              <strong className="text-slate-900 font-mono">{adminUser.email}</strong>
             </div>
             <div className="flex items-center justify-between">
               <span>Usuário Simplificado:</span>
@@ -15145,7 +15257,7 @@ function TelaLoginCorporativa({
               type="text"
               value={loginInput}
               onChange={(e) => setLoginInput(e.target.value)}
-              placeholder="ex: suprimentos@jcbauer.eng.br ou admin"
+              placeholder="ex: suprimentos@jcbauer.com.br ou admin"
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
             />
           </div>
@@ -15217,7 +15329,7 @@ function ModalNovoUsuarioObra({
 }) {
   const [nome, setNome] = useState("");
   const [cargo, setCargo] = useState<PerfilAcesso>("Engenheiro");
-  const [obraId, setObraId] = useState(obras[0]?.id || "obra-1");
+  const [obraId, setObraId] = useState(obras[0]?.id || "ALL");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("obra123");
 
@@ -15229,11 +15341,11 @@ function ModalNovoUsuarioObra({
       id: `user-${Date.now()}`,
       nome: nome.trim(),
       cargo,
-      obraId: cargo === "Administrador" ? "ALL" : obraId,
+      obraId: cargo === "Administrador" || obraId === "ALL" ? "ALL" : obraId,
       obraNome:
-        cargo === "Administrador"
-          ? "Todas as Obras (Acesso Total)"
-          : obraObj?.nome || "Obra Vinculada",
+        cargo === "Administrador" || obraId === "ALL"
+          ? "Todas as Obras (Central de Compras)"
+          : obraObj?.nome || "Todas as Obras (Central de Compras)",
       email: email.trim(),
       senha: senha.trim(),
       status: "Ativo",
@@ -15248,7 +15360,7 @@ function ModalNovoUsuarioObra({
       >
         <div className="flex items-center justify-between border-b border-slate-200 pb-3">
           <h3 className="text-base font-bold text-slate-900">
-            Cadastrar Novo Acesso da Obra
+            Cadastrar Novo Acesso da Obra / Sistema
           </h3>
           <button
             type="button"
@@ -15268,24 +15380,24 @@ function ModalNovoUsuarioObra({
               required
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              placeholder="Ex: Eng. Fernanda Costa"
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+              placeholder="Ex: Nome do Colaborador"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-medium text-slate-900 focus:outline-none focus:border-slate-900"
             />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Cargo / Perfil de Permissão *
+              Cargo / Perfil de PermissÃ£o *
             </label>
             <select
               value={cargo}
               onChange={(e) => setCargo(e.target.value as PerfilAcesso)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-medium text-slate-900 focus:outline-none focus:border-slate-900"
             >
+              <option value="Administrador">Administrador (Compras / Total)</option>
               <option value="Engenheiro">Engenheiro de Obra</option>
               <option value="Almoxarife">Almoxarife</option>
               <option value="Encarregado">Encarregado de Obra</option>
-              <option value="Administrador">Administrador (Compras)</option>
             </select>
           </div>
 
@@ -15295,10 +15407,11 @@ function ModalNovoUsuarioObra({
             </label>
             <select
               disabled={cargo === "Administrador"}
-              value={obraId}
+              value={cargo === "Administrador" ? "ALL" : obraId}
               onChange={(e) => setObraId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 disabled:opacity-60"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-medium text-slate-900 disabled:opacity-60 focus:outline-none focus:border-slate-900"
             >
+              <option value="ALL">Todas as Obras (Central de Compras)</option>
               {obras.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.nome}
@@ -15315,8 +15428,8 @@ function ModalNovoUsuarioObra({
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="fernanda@jcbauer.eng.br"
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+              placeholder="colaborador@jcbauer.com.br"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-xs text-slate-900 focus:outline-none focus:border-slate-900"
             />
           </div>
 
@@ -15328,25 +15441,203 @@ function ModalNovoUsuarioObra({
               required
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
-              placeholder="Ex: obra123"
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+              placeholder="Ex: 123"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-xs text-slate-900 focus:outline-none focus:border-slate-900"
             />
           </div>
         </div>
 
-        <div className="flex justify-end gap-2.5 pt-2">
+        <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold"
+            className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition"
           >
             Cancelar
           </button>
           <button
             type="submit"
-            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold"
+            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition shadow-xs"
           >
             Salvar Acesso e Liberar Login
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* MODAL DE EDIÃ‡ÃƒO DE USUÃRIO DO SISTEMA (ACESSO COMPLETO)                  */
+/* ========================================================================= */
+
+function ModalEditarUsuario({
+  usuario,
+  obras,
+  onClose,
+  onSalvar,
+}: {
+  usuario: UsuarioSistema;
+  obras: Obra[];
+  onClose: () => void;
+  onSalvar: (u: UsuarioSistema) => void;
+}) {
+  const [nome, setNome] = useState(usuario.nome);
+  const [cargo, setCargo] = useState<PerfilAcesso>(usuario.cargo);
+  const [obraId, setObraId] = useState(usuario.obraId || "ALL");
+  const [email, setEmail] = useState(usuario.email);
+  const [senha, setSenha] = useState(usuario.senha);
+  const [status, setStatus] = useState<"Ativo" | "Bloqueado">(usuario.status);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nome.trim() || !email.trim() || !senha.trim()) return;
+
+    const obraObj = obras.find((o) => o.id === obraId);
+    const obraNomeFinal =
+      cargo === "Administrador" || obraId === "ALL"
+        ? "Todas as Obras (Central de Compras)"
+        : obraObj?.nome || usuario.obraNome || "Todas as Obras (Central de Compras)";
+
+    onSalvar({
+      ...usuario,
+      nome: nome.trim(),
+      cargo,
+      obraId: cargo === "Administrador" ? "ALL" : obraId,
+      obraNome: obraNomeFinal,
+      email: email.trim(),
+      senha: senha.trim(),
+      status,
+    });
+  };
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4 text-sm"
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">
+              Editar UsuÃ¡rio do Sistema
+            </h3>
+            <p className="text-xs text-slate-500">
+              Altere nome, cargo, obra, e-mail de acesso e senha
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+          >
+            Fechar
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Nome Completo do UsuÃ¡rio *
+            </label>
+            <input
+              required
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Ex: Welliton Schmidt"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-semibold focus:outline-none focus:border-slate-900"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Cargo / Perfil de Acesso *
+            </label>
+            <select
+              value={cargo}
+              onChange={(e) => setCargo(e.target.value as PerfilAcesso)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-medium focus:outline-none focus:border-slate-900"
+            >
+              <option value="Administrador">Administrador (Compras / Total)</option>
+              <option value="Engenheiro">Engenheiro de Obra</option>
+              <option value="Almoxarife">Almoxarife</option>
+              <option value="Encarregado">Encarregado de Obra</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Obra Vinculada *
+            </label>
+            <select
+              disabled={cargo === "Administrador"}
+              value={cargo === "Administrador" ? "ALL" : obraId}
+              onChange={(e) => setObraId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 disabled:opacity-60 focus:outline-none focus:border-slate-900"
+            >
+              <option value="ALL">Todas as Obras (Central de Compras)</option>
+              {obras.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Login / E-mail *
+            </label>
+            <input
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="suprimentos@jcbauer.com.br"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono text-xs focus:outline-none focus:border-slate-900"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Senha de Acesso *
+            </label>
+            <input
+              required
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              placeholder="Ex: 123"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono text-xs focus:outline-none focus:border-slate-900"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Status da Conta *
+            </label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as "Ativo" | "Bloqueado")}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-semibold focus:outline-none focus:border-slate-900"
+            >
+              <option value="Ativo">Ativo (Acesso Liberado)</option>
+              <option value="Bloqueado">Bloqueado (Acesso Suspenso)</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="px-5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-xs"
+          >
+            Salvar AlteraÃ§Ãµes
           </button>
         </div>
       </form>
