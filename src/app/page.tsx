@@ -1920,6 +1920,14 @@ export default function HomePage() {
       }
 
       // Se ainda não houver processos salvos, migra o comparativo existente ou cria o primeiro
+      let parsedComp: any = null;
+      const savedComp = window.localStorage.getItem(COMPARATIVO_STORAGE_KEY);
+      if (savedComp) {
+        try {
+          parsedComp = JSON.parse(savedComp);
+        } catch {}
+      }
+
       if (!Array.isArray(listaProcessos) || listaProcessos.length === 0) {
         const anoAtual = new Date().getFullYear();
         const fornMigrados: [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido] =
