@@ -2,6 +2,15 @@
 
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
+import {
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  testarConexaoSupabase,
+  carregarTudoSupabase,
+  salvarChaveSupabase,
+  sincronizarFornecedoresRelacional,
+  type SupabaseHealth,
+} from "../lib/supabase";
 
 /* ========================================================================= */
 /* TIPOS E ESTRUTURA DE DADOS                                                */
@@ -1242,6 +1251,13 @@ export default function HomePage() {
     useState<FornecedorCadastro | null>(null);
   const [fornecedorEditando, setFornecedorEditando] =
     useState<FornecedorCadastro | null>(null);
+  const [supabaseStatus, setSupabaseStatus] = useState<SupabaseHealth>({
+    connected: false,
+    schemaReady: false,
+    message: "Conectando ao Supabase...",
+  });
+  const [supabaseSincronizando, setSupabaseSincronizando] =
+    useState<boolean>(false);
   const [ordemVisualizarModal, setOrdemVisualizarModal] =
     useState<OrdemCompra | null>(null);
   const [filtroObraContratos, setFiltroObraContratos] =
@@ -1639,6 +1655,302 @@ export default function HomePage() {
     } finally {
       setStorageCarregado(true);
     }
+  // Sincronização e verificação inicial com a nuvem Supabase
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      try {
+        const health = await testarConexaoSupabase();
+        if (!ativo) return;
+        setSupabaseStatus(health);
+
+        if (health.connected && health.schemaReady) {
+          const dadosNuvem = await carregarTudoSupabase();
+          if (!ativo) return;
+          if (dadosNuvem && Object.keys(dadosNuvem).length > 0) {
+            if (dadosNuvem[FORNECEDORES_STORAGE_KEY]) {
+              setFornecedores(dadosNuvem[FORNECEDORES_STORAGE_KEY]);
+              try {
+                window.localStorage.setItem(
+                  FORNECEDORES_STORAGE_KEY,
+                  JSON.stringify(dadosNuvem[FORNECEDORES_STORAGE_KEY])
+                );
+              } catch {}
+            }
+            if (dadosNuvem[SETTINGS_STORAGE_KEY]) {
+              setSettings(dadosNuvem[SETTINGS_STORAGE_KEY]);
+              setFormSettings(dadosNuvem[SETTINGS_STORAGE_KEY]);
+              try {
+                window.localStorage.setItem(
+                  SETTINGS_STORAGE_KEY,
+                  JSON.stringify(dadosNuvem[SETTINGS_STORAGE_KEY])
+                );
+              } catch {}
+            }
+            if (dadosNuvem[OBRAS_STORAGE_KEY]) {
+              setObras(dadosNuvem[OBRAS_STORAGE_KEY]);
+              try {
+                window.localStorage.setItem(
+                  OBRAS_STORAGE_KEY,
+                  JSON.stringify(dadosNuvem[OBRAS_STORAGE_KEY])
+                );
+              } catch {}
+            }
+            if (dadosNuvem[COMPARATIVO_STORAGE_KEY]) {
+              setComparativoSalvo(dadosNuvem[COMPARATIVO_STORAGE_KEY]);
+              try {
+                window.localStorage.setItem(
+                  COMPARATIVO_STORAGE_KEY,
+                  JSON.stringify(dadosNuvem[COMPARATIVO_STORAGE_KEY])
+                );
+              } catch {}
+            }
+            if (dadosNuvem[ORDENS_STORAGE_KEY]) {
+              setOrdens(dadosNuvem[ORDENS_STORAGE_KEY]);
+              try {
+                window.localStorage.setItem(
+                  ORDENS_STORAGE_KEY,
+                  JSON.stringify(dadosNuvem[ORDENS_STORAGE_KEY])
+                );
+              } catch {}
+            }
+            if (dadosNuvem[SOLICITACOES_STORAGE_KEY]) {
+              setSolicitacoes(dadosNuvem[SOLICITACOES_STORAGE_KEY]);
+              try {
+                window.localStorage.setItem(
+                  SOLICITACOES_STORAGE_KEY,
+                  JSON.stringify(dadosNuvem[SOLICITACOES_STORAGE_KEY])
+                );
+              } catch {}
+            }
+            if (dadosNuvem[ITENS_PLANILHA_STORAGE_KEY]) {
+              setItensPlanilha(dadosNuvem[ITENS_PLANILHA_STORAGE_KEY]);
+              try {
+                window.localStorage.setItem(
+                  ITENS_PLANILHA_STORAGE_KEY,
+                  JSON.stringify(dadosNuvem[ITENS_PLANILHA_STORAGE_KEY])
+                );
+              } catch {}
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Aviso ao conectar com Supabase:", e);
+      }
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  const handleTestarConexaoSupabase = async () => {
+    setSupabaseSincronizando(true);
+    try {
+      const health = await testarConexaoSupabase();
+      setSupabaseStatus(health);
+      dispararAviso(health.message);
+    } catch {
+      dispararAviso("Erro ao testar conexão com o Supabase.");
+    } finally {
+      setSupabaseSincronizando(false);
+    }
+  };
+
+  const handleSincronizarParaNuvem = async () => {
+    setSupabaseSincronizando(true);
+    try {
+      const health = await testarConexaoSupabase();
+      setSupabaseStatus(health);
+      if (!health.schemaReady) {
+        dispararAviso(
+          "As tabelas ainda não foram criadas no Supabase. Crie-as com o script SQL no painel primeiro."
+        );
+        setSupabaseSincronizando(false);
+        return;
+      }
+
+      await salvarChaveSupabase(SETTINGS_STORAGE_KEY, settings);
+      await salvarChaveSupabase(FORNECEDORES_STORAGE_KEY, fornecedores);
+      await salvarChaveSupabase(OBRAS_STORAGE_KEY, obras);
+      await salvarChaveSupabase(ORDENS_STORAGE_KEY, ordens);
+      await salvarChaveSupabase(SOLICITACOES_STORAGE_KEY, solicitacoes);
+      await salvarChaveSupabase(CONTRATOS_STORAGE_KEY, contratos);
+      await salvarChaveSupabase(ORCAMENTO_STORAGE_KEY, orcamento);
+      await salvarChaveSupabase(ESTOQUE_STORAGE_KEY, estoque);
+      await salvarChaveSupabase(ITENS_PLANILHA_STORAGE_KEY, itensPlanilha);
+      if (comparativoSalvo) {
+        await salvarChaveSupabase(COMPARATIVO_STORAGE_KEY, comparativoSalvo);
+      }
+      await sincronizarFornecedoresRelacional(fornecedores);
+
+      dispararAviso("Banco de dados na nuvem Supabase sincronizado com sucesso!");
+    } catch {
+      dispararAviso("Erro ao sincronizar com o Supabase.");
+    } finally {
+      setSupabaseSincronizando(false);
+    }
+  };
+
+  const handleBaixarDaNuvem = async () => {
+    setSupabaseSincronizando(true);
+    try {
+      const health = await testarConexaoSupabase();
+      setSupabaseStatus(health);
+      if (!health.schemaReady) {
+        dispararAviso(
+          "As tabelas ainda não foram criadas no Supabase. Crie-as pelo SQL Editor primeiro."
+        );
+        setSupabaseSincronizando(false);
+        return;
+      }
+
+      const dados = await carregarTudoSupabase();
+      if (!dados || Object.keys(dados).length === 0) {
+        dispararAviso("Nenhum dado encontrado no Supabase ainda.");
+        setSupabaseSincronizando(false);
+        return;
+      }
+
+      if (dados[FORNECEDORES_STORAGE_KEY]) {
+        setFornecedores(dados[FORNECEDORES_STORAGE_KEY]);
+        window.localStorage.setItem(
+          FORNECEDORES_STORAGE_KEY,
+          JSON.stringify(dados[FORNECEDORES_STORAGE_KEY])
+        );
+      }
+      if (dados[SETTINGS_STORAGE_KEY]) {
+        setSettings(dados[SETTINGS_STORAGE_KEY]);
+        setFormSettings(dados[SETTINGS_STORAGE_KEY]);
+        window.localStorage.setItem(
+          SETTINGS_STORAGE_KEY,
+          JSON.stringify(dados[SETTINGS_STORAGE_KEY])
+        );
+      }
+      if (dados[OBRAS_STORAGE_KEY]) {
+        setObras(dados[OBRAS_STORAGE_KEY]);
+        window.localStorage.setItem(
+          OBRAS_STORAGE_KEY,
+          JSON.stringify(dados[OBRAS_STORAGE_KEY])
+        );
+      }
+      if (dados[COMPARATIVO_STORAGE_KEY]) {
+        setComparativoSalvo(dados[COMPARATIVO_STORAGE_KEY]);
+        window.localStorage.setItem(
+          COMPARATIVO_STORAGE_KEY,
+          JSON.stringify(dados[COMPARATIVO_STORAGE_KEY])
+        );
+      }
+      if (dados[ORDENS_STORAGE_KEY]) {
+        setOrdens(dados[ORDENS_STORAGE_KEY]);
+        window.localStorage.setItem(
+          ORDENS_STORAGE_KEY,
+          JSON.stringify(dados[ORDENS_STORAGE_KEY])
+        );
+      }
+      if (dados[SOLICITACOES_STORAGE_KEY]) {
+        setSolicitacoes(dados[SOLICITACOES_STORAGE_KEY]);
+        window.localStorage.setItem(
+          SOLICITACOES_STORAGE_KEY,
+          JSON.stringify(dados[SOLICITACOES_STORAGE_KEY])
+        );
+      }
+      if (dados[ITENS_PLANILHA_STORAGE_KEY]) {
+        setItensPlanilha(dados[ITENS_PLANILHA_STORAGE_KEY]);
+        window.localStorage.setItem(
+          ITENS_PLANILHA_STORAGE_KEY,
+          JSON.stringify(dados[ITENS_PLANILHA_STORAGE_KEY])
+        );
+      }
+
+      dispararAviso("Dados baixados do Supabase com sucesso!");
+    } catch {
+      dispararAviso("Erro ao baixar dados do Supabase.");
+    } finally {
+      setSupabaseSincronizando(false);
+    }
+  };
+
+  const SQL_SCHEMA_SUPABASE = `-- SCHEMA JC BAUER PROCUREMENT - SUPABASE
+CREATE TABLE IF NOT EXISTS public.system_store (
+    key TEXT PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.fornecedores (
+    id TEXT PRIMARY KEY,
+    empresa TEXT NOT NULL,
+    razao_social TEXT,
+    cnpj TEXT,
+    cidade TEXT,
+    categoria_principal TEXT,
+    especialidades TEXT[] DEFAULT '{}',
+    vendedor TEXT,
+    telefone TEXT,
+    whatsapp TEXT,
+    email TEXT,
+    chave_pix TEXT,
+    condicao_padrao TEXT,
+    observacoes TEXT,
+    iqf_nota NUMERIC DEFAULT 5.0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.obras (
+    id TEXT PRIMARY KEY,
+    nome TEXT NOT NULL,
+    sigla TEXT,
+    responsavel TEXT,
+    endereco TEXT,
+    status TEXT DEFAULT 'ativo',
+    orcamento_mensal NUMERIC DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.comparativos (
+    id TEXT PRIMARY KEY,
+    titulo TEXT NOT NULL,
+    obra_id TEXT,
+    data_criacao TEXT,
+    orcamentos JSONB DEFAULT '[]'::jsonb,
+    itens JSONB DEFAULT '[]'::jsonb,
+    status TEXT DEFAULT 'equalizado',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.system_store ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fornecedores ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.obras ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.comparativos ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Acesso publico system_store" ON public.system_store;
+CREATE POLICY "Acesso publico system_store" ON public.system_store FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Acesso publico fornecedores" ON public.fornecedores;
+CREATE POLICY "Acesso publico fornecedores" ON public.fornecedores FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Acesso publico obras" ON public.obras;
+CREATE POLICY "Acesso publico obras" ON public.obras FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Acesso publico comparativos" ON public.comparativos;
+CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING (true) WITH CHECK (true);
+`;
+
+  const handleCopiarSqlSupabase = async () => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(SQL_SCHEMA_SUPABASE);
+        dispararAviso("Script SQL copiado para a área de transferência! Cole no SQL Editor do Supabase.");
+      } else {
+        dispararAviso("Copie o script SQL exibido no bloco de configuração.");
+      }
+    } catch {
+      dispararAviso("Não foi possível copiar automaticamente.");
+    }
+  };
+
   }, []);
 
   // Salvar automaticamente sessão do usuário logado e dados no localStorage
@@ -3167,6 +3479,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     } catch {
       // ignore storage errors
     }
+    salvarChaveSupabase(SETTINGS_STORAGE_KEY, formSettings).catch(() => {});
     dispararAviso("Configurações atualizadas com sucesso!");
   };
 
@@ -3180,6 +3493,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           JSON.stringify(novos)
         );
       } catch {}
+      salvarChaveSupabase(FORNECEDORES_STORAGE_KEY, novos).catch(() => {});
+      sincronizarFornecedoresRelacional(novos).catch(() => {});
       return novos;
     });
     setFornecedorEditando(null);
@@ -5427,6 +5742,36 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
           {/* Direita: Notificações + Selo do Perfil + Select de Obra + Botão Primário + Sair */}
           <div className="flex items-center gap-2.5 shrink-0">
+            {/* Indicador Nuvem Supabase */}
+            <button
+              type="button"
+              onClick={() => setActiveTab("Configuracoes")}
+              className={hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                supabaseStatus.schemaReady
+                  ? "bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-800"
+                  : supabaseStatus.connected
+                  ? "bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800"
+                  : "bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700"
+              }}
+              title={supabaseStatus.message}
+            >
+              <span
+                className={w-2 h-2 rounded-full ${
+                  supabaseStatus.schemaReady
+                    ? "bg-emerald-500 animate-pulse"
+                    : supabaseStatus.connected
+                    ? "bg-amber-500"
+                    : "bg-slate-400"
+                }}
+              />
+              <span>
+                {supabaseStatus.schemaReady
+                  ? "â˜ï¸ Supabase Nuvem"
+                  : supabaseStatus.connected
+                  ? "âš¡ Supabase (Configurar)"
+                  : "ðŸ”Œ Supabase"}
+              </span>
+            </button>
             {/* Botão de Notificações com Badge */}
             <div className="relative">
               <button
@@ -11033,6 +11378,98 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                     >
                       <span>🗑️ Zerar Base de Dados / Limpar Tudo</span>
                     </button>
+                  </div>
+                </div>
+
+                {/* Bloco 4: Banco de Dados na Nuvem (Supabase) */}
+                <div className="space-y-4 pt-4 border-t border-slate-200">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs font-semibold text-slate-700 flex items-center gap-2">
+                      <span>4. Banco de Dados na Nuvem Oficial (Supabase PostgreSQL)</span>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                          supabaseStatus.schemaReady
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                            : supabaseStatus.connected
+                            ? "bg-amber-50 text-amber-800 border-amber-300"
+                            : "bg-red-50 text-red-800 border-red-300"
+                        }`}
+                      >
+                        {supabaseStatus.schemaReady
+                          ? "● Conectado & Operacional"
+                          : supabaseStatus.connected
+                          ? "▲ Conectado (Tabelas Pendentes)"
+                          : "✕ Desconectado"}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleTestarConexaoSupabase}
+                      disabled={supabaseSincronizando}
+                      className="px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-semibold transition"
+                    >
+                      {supabaseSincronizando ? "Testando..." : "Testar Conexão"}
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Seus dados de compras, fornecedores e orçamentos são sincronizados no PostgreSQL do Supabase, permitindo acesso centralizado de múltiplos computadores e celulares em tempo real.
+                  </p>
+
+                  <div className="bg-slate-50 rounded-lg p-3.5 border border-slate-200 text-xs space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-1">
+                      <span className="font-semibold text-slate-700">Projeto Supabase:</span>
+                      <code className="text-emerald-700 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
+                        {SUPABASE_URL}
+                      </code>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-1">
+                      <span className="font-semibold text-slate-700">Status do Banco:</span>
+                      <span className="text-slate-600">{supabaseStatus.message}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleSincronizarParaNuvem}
+                      disabled={supabaseSincronizando}
+                      className="px-4 py-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-2 shadow-xs"
+                    >
+                      <span>☁️</span>
+                      <span>{supabaseSincronizando ? "Sincronizando..." : "Sincronizar Tudo para a Nuvem"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleBaixarDaNuvem}
+                      disabled={supabaseSincronizando}
+                      className="px-4 py-2.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs font-bold transition flex items-center gap-2 shadow-xs"
+                    >
+                      <span>📥</span>
+                      <span>Baixar Dados da Nuvem</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleCopiarSqlSupabase}
+                      className="px-4 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-bold transition flex items-center gap-2"
+                      title="Copiar script SQL para criar as tabelas no Supabase Dashboard"
+                    >
+                      <span>📋</span>
+                      <span>Copiar Script SQL</span>
+                    </button>
+
+                    <a
+                      href="https://supabase.com/dashboard/project/vetuphedvhpvhoassnwz/sql/new"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center gap-2 ml-auto"
+                    >
+                      <span>🔗</span>
+                      <span>Abrir SQL Editor do Supabase</span>
+                    </a>
                   </div>
                 </div>
 
