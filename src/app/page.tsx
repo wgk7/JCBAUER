@@ -4854,7 +4854,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
     if (total <= 0) {
       dispararAviso(
-        "Insira preÃ§os vÃ¡lidos para este fornecedor antes de emitir a Ordem de Compra."
+        "Insira preços válidos para este fornecedor antes de emitir a Ordem de Compra."
       );
       return;
     }
@@ -4866,24 +4866,24 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
     const proximaSeq = ordens.length + 1;
     const anoAtual = new Date().getFullYear();
-    const numeroOcFormatado = OC-${anoAtual}-${String(proximaSeq).padStart(
+    const numeroOcFormatado = `OC-${anoAtual}-${String(proximaSeq).padStart(
       3,
       "0"
-    )};
+    )}`;
 
     const novaOc: OrdemCompra = {
-      id: oc-comp-${Date.now()},
+      id: `oc-comp-${Date.now()}`,
       numeroOc: numeroOcFormatado,
-      scId: sc-comp-${Date.now()},
-      scCodigo: COMP-3ORC,
+      scId: `sc-comp-${Date.now()}`,
+      scCodigo: `COMP-3ORC`,
       obraId: obraSel?.id || "obra-1",
       obraNome: obraSel?.nome || "Empreendimento JC BAUER",
       obraEndereco: obraSel?.endereco || "Canteiro Central de Obras",
       obraEngenheiro: obraSel?.engenheiro || "Engenharia JC BAUER",
       categoria: comparativoCategoria || "Geral / Suprimentos",
-      fornecedorNome: forn.nome || Fornecedor ${fornIndex + 1},
+      fornecedorNome: forn.nome || `Fornecedor ${fornIndex + 1}`,
       fornecedorRazao:
-        fornCrm?.razaoSocial || forn.nome || Fornecedor ${fornIndex + 1},
+        fornCrm?.razaoSocial || forn.nome || `Fornecedor ${fornIndex + 1}`,
       fornecedorCnpj: fornCrm?.cnpj || "",
       vendedorNome: forn.vendedor || "",
       whatsapp: forn.telefone || "",
@@ -4906,8 +4906,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             ? it.preco2
             : it.preco3;
         return {
-          codigo: MAT-${idx + 1},
-          descricao: it.nome || Insumo #${idx + 1},
+          codigo: `MAT-${idx + 1}`,
+          descricao: it.nome || `Insumo #${idx + 1}`,
           unidade: it.unidade || "un",
           quantidade: it.quantidade || 1,
           precoUnitario: unit,
@@ -4918,14 +4918,14 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
     setOrdens((prev) => [novaOc, ...prev]);
 
-    // Marca a cotaÃ§Ã£o ativa como ConcluÃ­da no histÃ³rico mantendo todas as propostas intactas
+    // Marca a cotação ativa como Concluída no histórico mantendo todas as propostas intactas
     if (cotacaoAtivaId) {
       setProcessosCotacoes((prev) => {
         const list = prev.map((p) =>
           p.id === cotacaoAtivaId
             ? {
                 ...p,
-                status: "ConcluÃ­da" as const,
+                status: "Concluída" as const,
                 ordemCompraEmitidaId: novaOc.id,
                 numeroOcEmitida: novaOc.numeroOc,
                 menorValor: total,
@@ -4954,7 +4954,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     }
 
     dispararAviso(
-      Ordem de Compra ${novaOc.numeroOc} emitida com sucesso para ""! O mapa comparativo foi salvo no histÃ³rico com todas as propostas.
+      `Ordem de Compra ${novaOc.numeroOc} emitida com sucesso para "${forn.nome}"! O mapa comparativo foi salvo no histórico com todas as propostas.`
     );
     setActiveTab("Ordens");
     setOrdemVisualizarModal(novaOc);
@@ -4963,7 +4963,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   const handleLimparComparativo = () => {
     if (
       window.confirm(
-        "Deseja iniciar uma NOVA COTAÃ‡ÃƒO em branco (mantendo a atual salva no histÃ³rico)?\n\n- Clique em [OK] para abrir uma Nova CotaÃ§Ã£o sem perder a atual.\n- Clique em [Cancelar] se desejava manter a cotaÃ§Ã£o na tela."
+        "Deseja iniciar uma NOVA COTAÇÃO em branco (mantendo a atual salva no histórico)?\n\n- Clique em [OK] para abrir uma Nova Cotação sem perder a atual.\n- Clique em [Cancelar] se desejava manter a cotação na tela."
       )
     ) {
       handleCriarNovaCotacao();
