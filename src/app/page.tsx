@@ -5746,30 +5746,30 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             <button
               type="button"
               onClick={() => setActiveTab("Configuracoes")}
-              className={hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition ${
+              className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition ${
                 supabaseStatus.schemaReady
                   ? "bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-800"
                   : supabaseStatus.connected
                   ? "bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800"
                   : "bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700"
-              }}
+              }`}
               title={supabaseStatus.message}
             >
               <span
-                className={w-2 h-2 rounded-full ${
+                className={`w-2 h-2 rounded-full ${
                   supabaseStatus.schemaReady
                     ? "bg-emerald-500 animate-pulse"
                     : supabaseStatus.connected
                     ? "bg-amber-500"
                     : "bg-slate-400"
-                }}
+                }`}
               />
               <span>
                 {supabaseStatus.schemaReady
-                  ? "â˜ï¸ Supabase Nuvem"
+                  ? "☁️ Supabase Nuvem"
                   : supabaseStatus.connected
-                  ? "âš¡ Supabase (Configurar)"
-                  : "ðŸ”Œ Supabase"}
+                  ? "⚡ Supabase (Configurar)"
+                  : "🔌 Supabase"}
               </span>
             </button>
             {/* Botão de Notificações com Badge */}
