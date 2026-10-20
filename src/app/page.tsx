@@ -612,401 +612,15 @@ function extrairContatoEPhone(texto: string): {
 /* DADOS INICIAIS REALISTAS DE CONSTRUTORA                                   */
 /* ========================================================================= */
 
-const OBRAS_INICIAIS: Obra[] = [
-  {
-    id: "obra-kairos",
-    nome: "Residencial Kairos",
-    sigla: "RSK-01",
-    endereco: "Rua 2500, Centro - Balneario Camboriu / SC",
-    engenheiro: "Eng. Cassiano / Joao Carlos Bauer",
-  },
-  {
-    id: "obra-belvedere",
-    nome: "Residencial Belvedere",
-    sigla: "RSB-02",
-    endereco: "Rua Otto Boehm, America - Joinville / SC",
-    engenheiro: "Eng. Cassiano",
-  },
-  {
-    id: "obra-petit",
-    nome: "Residencial Petit",
-    sigla: "RSP-03",
-    endereco: "Rua Expedicionario Holz, Atiradores - Joinville / SC",
-    engenheiro: "Eng. Cassiano",
-  },
-  {
-    id: "obra-carmelo",
-    nome: "Residencial Carmelo",
-    sigla: "RSC-04",
-    endereco: "Balneario Camboriu / SC",
-    engenheiro: "Eng. Marcos Viana",
-  },
-  {
-    id: "obra-1",
-    nome: "Residencial Horizon Tower",
-    sigla: "RHT-05",
-    endereco: "Av. Atlantica, 2450 - Balneario Camboriu / SC",
-    engenheiro: "Eng. Marcos Viana",
-  },
-  {
-    id: "obra-2",
-    nome: "Edificio Comercial Atrium Bauer",
-    sigla: "EAB-06",
-    endereco: "Rua XV de Novembro, 1120 - Joinville / SC",
-    engenheiro: "Enga. Camila Dorneles",
-  },
-  {
-    id: "obra-3",
-    nome: "Condominio Logistico SulPark",
-    sigla: "CLS-07",
-    endereco: "Rod. BR-101, Km 118 - Itajai / SC",
-    engenheiro: "Eng. Roberto Siqueira",
-  },
-];
+const OBRAS_INICIAIS: Obra[] = [];
 
-const ECONOMIA_INSUMOS_HISTORICO: ItemEconomiaInsumo[] = [
-  {
-    id: "eco-1",
-    insumo: "Concreto Usinado Bombeavel FCK 35/40 MPa",
-    categoria: "Fundacoes & Terraplenagem",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    fornecedorVencedor: "Supermix Concreto S.A.",
-    valorMaiorCotado: 95600.0,
-    valorFechado: 84200.0,
-  },
-  {
-    id: "eco-2",
-    insumo: "Aco CA-50 / CA-60 (Diam. 10mm, 12.5mm e 16mm)",
-    categoria: "Estrutura (Aco & Concreto)",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    fornecedorVencedor: "SulAco Distribuidora",
-    valorMaiorCotado: 89396.0,
-    valorFechado: 75522.0,
-  },
-  {
-    id: "eco-3",
-    insumo: "Esquadrias de Aluminio Linha Gold + Pele de Vidro",
-    categoria: "Esquadrias & Fachadas de Vidro",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    fornecedorVencedor: "AluGlass Fachadas & Esquadrias",
-    valorMaiorCotado: 472100.0,
-    valorFechado: 431800.0,
-  },
-  {
-    id: "eco-4",
-    insumo: "Elevadores Regenerativos Inox (2 Unidades + Montagem)",
-    categoria: "Elevadores & Equipamentos",
-    obraId: "obra-2",
-    obraNome: "Edificio Comercial Atrium Bauer",
-    fornecedorVencedor: "Atlas Schindler Elevadores",
-    valorMaiorCotado: 475000.0,
-    valorFechado: 438000.0,
-  },
-  {
-    id: "eco-5",
-    insumo: "Porcelanato Tecnico Retificado 90x90cm + Argamassa AC-III",
-    categoria: "Revestimentos, Loucas & Metais",
-    obraId: "obra-2",
-    obraNome: "Edificio Comercial Atrium Bauer",
-    fornecedorVencedor: "Portobello Corporate B2B",
-    valorMaiorCotado: 82400.0,
-    valorFechado: 66940.0,
-  },
-  {
-    id: "eco-6",
-    insumo: "Tubulacoes PPR, PVC Serie R e Bombas de Recalque",
-    categoria: "Instalacoes Hidrossanitarias",
-    obraId: "obra-kairos",
-    obraNome: "Residencial Kairos",
-    fornecedorVencedor: "CASAS DA AGUA",
-    valorMaiorCotado: 21650.0,
-    valorFechado: 18450.0,
-  },
-  {
-    id: "eco-7",
-    insumo: "Argamassa AC2 Porcelanato 20kg",
-    categoria: "Revestimentos, Loucas & Metais",
-    obraId: "obra-belvedere",
-    obraNome: "Residencial Belvedere",
-    fornecedorVencedor: "FORMAFIX",
-    valorMaiorCotado: 9950.0,
-    valorFechado: 8500.0,
-  },
-];
+const ECONOMIA_INSUMOS_HISTORICO: ItemEconomiaInsumo[] = [];
 
 const FORNECEDORES_INICIAIS: FornecedorCadastro[] = [];
 
-const SOLICITACOES_INICIAIS: SolicitacaoCompra[] = [
-  {
-    id: "sc-1",
-    codigo: "SC-2026-0135",
-    obraId: "obra-1",
-    categoria: "Fundacoes & Terraplenagem",
-    solicitante: "Eng. Marcos Viana",
-    solicitanteCargo: "Engenheiro",
-    urgencia: "Normal",
-    dataNecessaria: "20/10/2026",
-    dataAbertura: "10/10/2026",
-    horarioPedido: "09:30",
-    status: "Comprada",
-    propostas: [],
-    itens: [
-      {
-        id: "it-sc-1",
-        codigo: "SINAPI-00001524",
-        descricao: "Concreto Usinado Bombeavel fck 40 MPa Brita 0/1 Slump 12+-2",
-        unidade: "m3",
-        quantidade: 160,
-        orcamentoUnitario: 580.0,
-        observacaoObra: "Programar betoneira",
-      },
-    ],
-  },
-  {
-    id: "sc-2",
-    codigo: "SC-2026-0138",
-    obraId: "obra-2",
-    categoria: "Revestimentos, Loucas & Metais",
-    solicitante: "Enga. Camila Dorneles",
-    solicitanteCargo: "Engenheiro",
-    urgencia: "Normal",
-    dataNecessaria: "21/10/2026",
-    dataAbertura: "12/10/2026",
-    horarioPedido: "14:15",
-    status: "Comprada",
-    propostas: [],
-    itens: [
-      {
-        id: "it-sc-2",
-        codigo: "POR-9090-TEC",
-        descricao: "Porcelanato Tecnico Polido 90x90cm Retificado Trafego Intenso",
-        unidade: "m2",
-        quantidade: 680,
-        orcamentoUnitario: 110.0,
-        observacaoObra: "Paletes na doca terrea",
-      },
-    ],
-  },
-  {
-    id: "sc-3",
-    codigo: "SC-2026-0142",
-    obraId: "obra-kairos",
-    categoria: "Instalacoes Hidrossanitarias",
-    solicitante: "Eng. Cassiano",
-    solicitanteCargo: "Engenheiro",
-    urgencia: "Normal",
-    dataNecessaria: "24/10/2026",
-    dataAbertura: "20/10/2026",
-    horarioPedido: "10:00",
-    status: "Comprada",
-    propostas: [],
-    itens: [
-      {
-        id: "it-sc-3",
-        codigo: "SKU-HID-001",
-        descricao: "Tubos, Conexoes e Acabamentos Hidrossanitarios Tigre",
-        unidade: "cj",
-        quantidade: 1,
-        orcamentoUnitario: 21650.0,
-        observacaoObra: "Residencial Kairos",
-      },
-    ],
-  },
-];
+const SOLICITACOES_INICIAIS: SolicitacaoCompra[] = [];
 
-const ORDENS_INICIAIS: OrdemCompra[] = [
-  {
-    id: "oc-1",
-    numeroOc: "OC-2026-0089",
-    scId: "sc-hist-1",
-    scCodigo: "SC-2026-0135",
-    obraId: "obra-1",
-    obraNome: "Residencial Horizon Tower",
-    obraEndereco: "Av. Atlantica, 2450 - Balneario Camboriu / SC",
-    obraEngenheiro: "Eng. Marcos Viana",
-    categoria: "Fundacoes & Terraplenagem",
-    fornecedorNome: "Supermix Concreto S.A.",
-    fornecedorRazao: "Supermix Concreto e Bombeamento S.A.",
-    fornecedorCnpj: "16.509.210/0008-40",
-    vendedorNome: "Henrique Bastos",
-    whatsapp: "5547999014455",
-    chavePix: "16.509.210/0008-40",
-    dataEmissao: "10/10/2026",
-    dataPrevistaEntrega: "20/10/2026",
-    prazoPagamento: "28/56 ddl Boleto",
-    tipoFrete: "CIF",
-    freteValor: 0,
-    descontoValor: 0,
-    valorTotal: 84200.0,
-    savingGerado: 11400.0,
-    status: "Aguardando Entrega",
-    itens: [
-      {
-        codigo: "SINAPI-00001524",
-        descricao:
-          "Concreto Usinado Bombeavel fck 40 MPa Brita 0/1 Slump 12+-2",
-        unidade: "m3",
-        quantidade: 160,
-        precoUnitario: 526.25,
-        subtotal: 84200.0,
-        observacaoObra: "Programar caminhao betoneira a cada 40 min no portao A",
-      },
-    ],
-  },
-  {
-    id: "oc-2",
-    numeroOc: "OC-2026-0090",
-    scId: "sc-hist-2",
-    scCodigo: "SC-2026-0138",
-    obraId: "obra-2",
-    obraNome: "Edificio Comercial Atrium Bauer",
-    obraEndereco: "Rua XV de Novembro, 1120 - Joinville / SC",
-    obraEngenheiro: "Enga. Camila Dorneles",
-    categoria: "Revestimentos, Loucas & Metais",
-    fornecedorNome: "Portobello Corporate B2B",
-    fornecedorRazao: "Portobello S.A. Divisao Engenharia",
-    fornecedorCnpj: "83.475.913/0001-91",
-    vendedorNome: "Mariana Borges",
-    whatsapp: "5548991045566",
-    chavePix: "83.475.913/0001-91",
-    dataEmissao: "12/10/2026",
-    dataPrevistaEntrega: "21/10/2026",
-    prazoPagamento: "28/56/84 ddl Faturado",
-    tipoFrete: "CIF",
-    freteValor: 0,
-    descontoValor: 0,
-    valorTotal: 66940.0,
-    savingGerado: 15460.0,
-    status: "Emitida",
-    itens: [
-      {
-        codigo: "POR-9090-TEC",
-        descricao:
-          "Porcelanato Tecnico Polido 90x90cm Retificado Trafego Intenso",
-        unidade: "m2",
-        quantidade: 680,
-        precoUnitario: 98.44,
-        subtotal: 66940.0,
-        observacaoObra: "Descarregar paletes com empilhadeira na doca terrea",
-      },
-    ],
-  },
-  {
-    id: "oc-3",
-    numeroOc: "OC-2026-0091",
-    scId: "sc-hist-3",
-    scCodigo: "SC-2026-0140",
-    obraId: "obra-3",
-    obraNome: "Condominio Logistico SulPark",
-    obraEndereco: "Rod. BR-101, Km 118 - Itajai / SC",
-    obraEngenheiro: "Eng. Roberto Siqueira",
-    categoria: "Pintura & Texturas",
-    fornecedorNome: "ImperSul Quimicos & Tintas",
-    fornecedorRazao: "ImperSul Distribuidora Tecnica para Construcao Ltda",
-    fornecedorCnpj: "21.904.118/0001-60",
-    vendedorNome: "Diego Fontes",
-    whatsapp: "5547996553210",
-    chavePix: "21.904.118/0001-60",
-    dataEmissao: "14/10/2026",
-    dataPrevistaEntrega: "22/10/2026",
-    prazoPagamento: "28/56 ddl Boleto",
-    tipoFrete: "CIF",
-    freteValor: 0,
-    descontoValor: 0,
-    valorTotal: 44600.0,
-    savingGerado: 8300.0,
-    status: "Aguardando Entrega",
-    itens: [
-      {
-        codigo: "TIN-ACR-18L",
-        descricao:
-          "Tinta Acrilica Premium Fachada Fosca Cinza Urbano (Lata 18L)",
-        unidade: "un",
-        quantidade: 120,
-        precoUnitario: 371.67,
-        subtotal: 44600.0,
-        observacaoObra: "Entregar no Galpao B - Almoxarifado Central",
-      },
-    ],
-  },
-  {
-    id: "oc-4",
-    numeroOc: "OC-2026-0092",
-    scId: "sc-hist-4",
-    scCodigo: "SC-2026-0142",
-    obraId: "obra-kairos",
-    obraNome: "Residencial Kairos",
-    obraEndereco: "Rua 2500, Centro - Balneario Camboriu / SC",
-    obraEngenheiro: "Eng. Cassiano / Joao Carlos Bauer",
-    categoria: "Instalacoes Hidrossanitarias",
-    fornecedorNome: "CASAS DA AGUA",
-    fornecedorRazao: "Casas da Agua Materiais para Construcao Ltda",
-    fornecedorCnpj: "82.802.100/0001-08",
-    vendedorNome: "Carlos Eduardo",
-    whatsapp: "5547997810384",
-    chavePix: "82.802.100/0001-08",
-    dataEmissao: "20/10/2026",
-    dataPrevistaEntrega: "24/10/2026",
-    prazoPagamento: "28/56 ddl Faturado",
-    tipoFrete: "CIF",
-    freteValor: 0,
-    descontoValor: 250.0,
-    valorTotal: 18450.0,
-    savingGerado: 3200.0,
-    status: "Emitida",
-    itens: [
-      {
-        codigo: "SKU-HID-001",
-        descricao: "Tubos, Conexoes e Acabamentos Hidrossanitarios Tigre",
-        unidade: "cj",
-        quantidade: 1,
-        precoUnitario: 18700.0,
-        subtotal: 18700.0,
-        observacaoObra: "Conforme cotacao CASAS DA AGUA gerada",
-      },
-    ],
-  },
-  {
-    id: "oc-5",
-    numeroOc: "OC-2026-0093",
-    scId: "sc-hist-5",
-    scCodigo: "SC-2026-0145",
-    obraId: "obra-belvedere",
-    obraNome: "Residencial Belvedere",
-    obraEndereco: "Rua Otto Boehm, America - Joinville / SC",
-    obraEngenheiro: "Eng. Cassiano",
-    categoria: "Revestimentos, Loucas & Metais",
-    fornecedorNome: "FORMAFIX",
-    fornecedorRazao: "Formafix Argamassas e Revestimentos Eireli",
-    fornecedorCnpj: "07.391.220/0001-12",
-    vendedorNome: "Atendimento Comercial",
-    whatsapp: "5547997810384",
-    chavePix: "07.391.220/0001-12",
-    dataEmissao: "20/10/2026",
-    dataPrevistaEntrega: "25/10/2026",
-    prazoPagamento: "30 ddl",
-    tipoFrete: "CIF",
-    freteValor: 0,
-    descontoValor: 120.0,
-    valorTotal: 8500.0,
-    savingGerado: 1450.0,
-    status: "Emitida",
-    itens: [
-      {
-        codigo: "SKU-MAT-001",
-        descricao: "AC2 Porcelanato 20kg Cinza / Argamassa Colante",
-        unidade: "sc",
-        quantidade: 500,
-        precoUnitario: 17.0,
-        subtotal: 8500.0,
-        observacaoObra: "Cotacao AC2 Porcelanato 01 - Almoxarifado Central",
-      },
-    ],
-  },
-];
+const ORDENS_INICIAIS: OrdemCompra[] = [];
 
 const USUARIOS_INICIAIS: UsuarioSistema[] = [
   {
@@ -1841,6 +1455,10 @@ export default function HomePage() {
     useState<boolean>(false);
   const [ordemVisualizarModal, setOrdemVisualizarModal] =
     useState<OrdemCompra | null>(null);
+  const [ordemEditarModal, setOrdemEditarModal] =
+    useState<OrdemCompra | null>(null);
+  const [obraEmEdicao, setObraEmEdicao] =
+    useState<Obra | null>(null);
   const [filtroObraContratos, setFiltroObraContratos] =
     useState<string>("ALL");
 
@@ -6381,20 +5999,94 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   };
 
   const handleSalvarNovaObra = (novaObra: Obra) => {
-    setObras((prev) => [...prev, novaObra]);
+    const novasObras = [...obras, novaObra];
+    setObras(novasObras);
+    try {
+      window.localStorage.setItem(OBRAS_STORAGE_KEY, JSON.stringify(novasObras));
+    } catch {}
+    salvarChaveSupabase(OBRAS_STORAGE_KEY, novasObras).catch(() => {});
+    setShowModalNovaObra(false);
     dispararAviso(`Empreendimento "${novaObra.nome}" cadastrado com sucesso!`);
+  };
+
+  const handleSalvarEdicaoObra = (obraAtualizada: Obra) => {
+    const novasObras = obras.map((o) =>
+      o.id === obraAtualizada.id ? obraAtualizada : o
+    );
+    setObras(novasObras);
+    try {
+      window.localStorage.setItem(OBRAS_STORAGE_KEY, JSON.stringify(novasObras));
+    } catch {}
+    salvarChaveSupabase(OBRAS_STORAGE_KEY, novasObras).catch(() => {});
+    setObraEmEdicao(null);
+    dispararAviso(`Empreendimento "${obraAtualizada.nome}" atualizado com sucesso!`);
   };
 
   const handleExcluirObra = (obraId: string, obraNome: string) => {
     const confirmou = window.confirm(
-      `Deseja realmente excluir o canteiro "${obraNome}"?\n\nEsta ação removerá a obra da visualização de compras.`
+      `Deseja realmente excluir o canteiro "${obraNome}"?\n\nEsta ação removerá o empreendimento definitivamente do sistema.`
     );
     if (!confirmou) return;
-    setObras((prev) => prev.filter((o) => o.id !== obraId));
+    const novasObras = obras.filter((o) => o.id !== obraId);
+    setObras(novasObras);
+    try {
+      window.localStorage.setItem(OBRAS_STORAGE_KEY, JSON.stringify(novasObras));
+    } catch {}
+    salvarChaveSupabase(OBRAS_STORAGE_KEY, novasObras).catch(() => {});
     if (obraFiltro === obraId) {
       setObraFiltro("ALL");
     }
+    if (obraEmEdicao?.id === obraId) {
+      setObraEmEdicao(null);
+    }
     dispararAviso(`Obra "${obraNome}" removida com sucesso.`);
+  };
+
+  const handleSalvarEdicaoOrdem = (ordemAtualizada: OrdemCompra) => {
+    const novasOrdens = ordens.map((o) =>
+      o.id === ordemAtualizada.id ? ordemAtualizada : o
+    );
+    setOrdens(novasOrdens);
+    try {
+      window.localStorage.setItem(
+        ORDENS_STORAGE_KEY,
+        JSON.stringify(novasOrdens)
+      );
+    } catch {}
+    salvarChaveSupabase(ORDENS_STORAGE_KEY, novasOrdens).catch(() => {});
+    setOrdemEditarModal(null);
+    if (ordemVisualizarModal?.id === ordemAtualizada.id) {
+      setOrdemVisualizarModal(ordemAtualizada);
+    }
+    dispararAviso(
+      `Ordem de Compra ${ordemAtualizada.numeroOc} atualizada com sucesso!`
+    );
+  };
+
+  const handleExcluirOrdem = (ocId: string, numeroOc: string) => {
+    if (
+      !window.confirm(
+        `Tem certeza que deseja EXCLUIR a Ordem de Compra ${numeroOc}?\n\nEsta ação removerá o pedido definitivamente do sistema.`
+      )
+    ) {
+      return;
+    }
+    const novasOrdens = ordens.filter((o) => o.id !== ocId);
+    setOrdens(novasOrdens);
+    try {
+      window.localStorage.setItem(
+        ORDENS_STORAGE_KEY,
+        JSON.stringify(novasOrdens)
+      );
+    } catch {}
+    salvarChaveSupabase(ORDENS_STORAGE_KEY, novasOrdens).catch(() => {});
+    if (ordemVisualizarModal?.id === ocId) {
+      setOrdemVisualizarModal(null);
+    }
+    if (ordemEditarModal?.id === ocId) {
+      setOrdemEditarModal(null);
+    }
+    dispararAviso(`Ordem de Compra ${numeroOc} excluída com sucesso.`);
   };
 
   const handleCriarPedidoCanteiro = (novaSc: SolicitacaoCompra) => {
@@ -7667,6 +7359,14 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                   >
                                     {diarioHojePreenchido ? "🟢 Em Dia Hoje" : "🟡 Pendente Hoje"}
                                   </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setObraEmEdicao(ob)}
+                                    title="Editar dados deste empreendimento"
+                                    className="text-slate-400 hover:text-amber-600 text-xs p-1 transition rounded hover:bg-slate-100"
+                                  >
+                                    ✏️
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={() => handleExcluirObra(ob.id, ob.nome)}
@@ -11404,6 +11104,20 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                               >
                                 Visualizar
                               </button>
+                              <button
+                                onClick={() => setOrdemEditarModal(oc)}
+                                title="Editar dados da Ordem de Compra"
+                                className="px-2.5 py-1.5 rounded-md bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-semibold transition flex items-center gap-1 shadow-xs"
+                              >
+                                <span>✏️</span> Editar
+                              </button>
+                              <button
+                                onClick={() => handleExcluirOrdem(oc.id, oc.numeroOc)}
+                                title="Excluir Ordem de Compra definitivamente"
+                                className="px-2 py-1.5 rounded-md bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 text-xs font-semibold transition flex items-center gap-1"
+                              >
+                                <span>🗑️</span> Excluir
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -13964,6 +13678,26 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                 </a>
                 <button
                   type="button"
+                  onClick={() => {
+                    const oc = ordemVisualizarModal;
+                    setOrdemVisualizarModal(null);
+                    setOrdemEditarModal(oc);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+                >
+                  <span>✏️</span> Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleExcluirOrdem(ordemVisualizarModal.id, ordemVisualizarModal.numeroOc);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+                >
+                  <span>🗑️</span> Excluir
+                </button>
+                <button
+                  type="button"
                   onClick={() => setOrdemVisualizarModal(null)}
                   className="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-semibold transition"
                 >
@@ -14118,6 +13852,28 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         <ModalNovaObra
           onClose={() => setShowModalNovaObra(false)}
           onSalvar={handleSalvarNovaObra}
+        />
+      )}
+
+      {/* MODAL EDITAR EMPREENDIMENTO / OBRA */}
+      {obraEmEdicao && (
+        <ModalEditarObra
+          obra={obraEmEdicao}
+          onClose={() => setObraEmEdicao(null)}
+          onSalvar={handleSalvarEdicaoObra}
+          onExcluir={handleExcluirObra}
+        />
+      )}
+
+      {/* MODAL EDITAR ORDEM DE COMPRA */}
+      {ordemEditarModal && (
+        <ModalEditarOrdemCompra
+          ordem={ordemEditarModal}
+          obras={obras}
+          fornecedores={fornecedores}
+          onClose={() => setOrdemEditarModal(null)}
+          onSalvar={handleSalvarEdicaoOrdem}
+          onExcluir={handleExcluirOrdem}
         />
       )}
 
@@ -17646,6 +17402,672 @@ function ModalNovaObra({
     </div>
   );
 }
+
+/* ========================================================================= */
+/* MODAL EDITAR EMPREENDIMENTO / OBRA                                        */
+/* ========================================================================= */
+
+function ModalEditarObra({
+  obra,
+  onClose,
+  onSalvar,
+  onExcluir,
+}: {
+  obra: Obra;
+  onClose: () => void;
+  onSalvar: (obraAtualizada: Obra) => void;
+  onExcluir: (obraId: string, obraNome: string) => void;
+}) {
+  const [nome, setNome] = useState(obra.nome || "");
+  const [sigla, setSigla] = useState(obra.sigla || "");
+  const [endereco, setEndereco] = useState(obra.endereco || "");
+  const [engenheiro, setEngenheiro] = useState(obra.engenheiro || "");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nome.trim()) return;
+
+    const obraAtualizada: Obra = {
+      ...obra,
+      nome: nome.trim(),
+      sigla: sigla.trim().toUpperCase() || nome.trim().substring(0, 3).toUpperCase(),
+      endereco: endereco.trim() || "A Definir",
+      engenheiro: engenheiro.trim() || "A Definir",
+    };
+
+    onSalvar(obraAtualizada);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden">
+        <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🏗️</span>
+            <div>
+              <h3 className="font-bold text-sm">Editar Empreendimento / Obra</h3>
+              <p className="text-xs text-slate-400">Atualize os dados cadastrais ou remova o canteiro</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-white text-lg font-bold p-1 transition"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Nome do Empreendimento / Obra *
+            </label>
+            <input
+              required
+              type="text"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 font-semibold focus:outline-none focus:border-slate-900"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                Sigla / Código Interno
+              </label>
+              <input
+                type="text"
+                value={sigla}
+                onChange={(e) => setSigla(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900 uppercase font-mono"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                Engenheiro / Responsável
+              </label>
+              <input
+                type="text"
+                value={engenheiro}
+                onChange={(e) => setEngenheiro(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Endereço / Localização do Canteiro
+            </label>
+            <input
+              type="text"
+              value={endereco}
+              onChange={(e) => setEndereco(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
+            />
+          </div>
+
+          <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => onExcluir(obra.id, obra.nome)}
+              className="px-3.5 py-2 rounded-lg bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 font-bold transition flex items-center gap-1.5"
+            >
+              <span>🗑️</span>
+              <span>Excluir Obra</span>
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition flex items-center gap-1.5 shadow-xs"
+              >
+                <span>✓</span>
+                <span>Salvar Alterações</span>
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* MODAL EDITAR ORDEM DE COMPRA                                              */
+/* ========================================================================= */
+
+function ModalEditarOrdemCompra({
+  ordem,
+  obras,
+  fornecedores,
+  onClose,
+  onSalvar,
+  onExcluir,
+}: {
+  ordem: OrdemCompra;
+  obras: Obra[];
+  fornecedores: FornecedorCadastro[];
+  onClose: () => void;
+  onSalvar: (ordemAtualizada: OrdemCompra) => void;
+  onExcluir: (ocId: string, numeroOc: string) => void;
+}) {
+  const [numeroOc, setNumeroOc] = useState(ordem.numeroOc || "");
+  const [scCodigo, setScCodigo] = useState(ordem.scCodigo || "");
+  const [status, setStatus] = useState<OrdemCompra["status"]>(ordem.status || "Emitida");
+  const [obraId, setObraId] = useState(ordem.obraId || (obras[0]?.id || ""));
+  const [obraNome, setObraNome] = useState(ordem.obraNome || (obras[0]?.nome || ""));
+  const [obraEndereco, setObraEndereco] = useState(ordem.obraEndereco || (obras[0]?.endereco || ""));
+  
+  const [fornecedorNome, setFornecedorNome] = useState(ordem.fornecedorNome || "");
+  const [fornecedorRazao, setFornecedorRazao] = useState(ordem.fornecedorRazao || "");
+  const [fornecedorCnpj, setFornecedorCnpj] = useState(ordem.fornecedorCnpj || "");
+  const [vendedorNome, setVendedorNome] = useState(ordem.vendedorNome || "");
+  const [whatsapp, setWhatsapp] = useState(ordem.whatsapp || "");
+  const [chavePix, setChavePix] = useState(ordem.chavePix || "");
+  
+  const [dataEmissao, setDataEmissao] = useState(ordem.dataEmissao || "");
+  const [dataPrevistaEntrega, setDataPrevistaEntrega] = useState(ordem.dataPrevistaEntrega || "");
+  const [prazoPagamento, setPrazoPagamento] = useState(ordem.prazoPagamento || "");
+  const [tipoFrete, setTipoFrete] = useState<"CIF" | "FOB">(ordem.tipoFrete || "CIF");
+  const [freteValor, setFreteValor] = useState<number>(ordem.freteValor || 0);
+  const [descontoValor, setDescontoValor] = useState<number>(ordem.descontoValor || 0);
+
+  // Lista de itens
+  const [itens, setItens] = useState(
+    ordem.itens && ordem.itens.length > 0
+      ? ordem.itens.map((it) => ({ ...it }))
+      : [
+          {
+            codigo: "ITEM-01",
+            descricao: "Insumo / Material",
+            unidade: "UN",
+            quantidade: 1,
+            precoUnitario: 0,
+            subtotal: 0,
+          },
+        ]
+  );
+
+  const handleObraChange = (id: string) => {
+    setObraId(id);
+    const sel = obras.find((o) => o.id === id);
+    if (sel) {
+      setObraNome(sel.nome);
+      setObraEndereco(sel.endereco);
+    }
+  };
+
+  const handleFornecedorChange = (nome: string) => {
+    setFornecedorNome(nome);
+    const f = fornecedores.find((forn) => forn.nomeFantasia === nome || forn.razaoSocial === nome);
+    if (f) {
+      setFornecedorRazao(f.razaoSocial || f.nomeFantasia);
+      setFornecedorCnpj(f.cnpj || "");
+      if (f.contatoPrincipal) setVendedorNome(f.contatoPrincipal);
+      if (f.telefoneWhatsapp) setWhatsapp(f.telefoneWhatsapp);
+      if (f.chavePix) setChavePix(f.chavePix);
+      if (f.condicoesPagamentoPadrao) setPrazoPagamento(f.condicoesPagamentoPadrao);
+    }
+  };
+
+  const handleItemFieldChange = (index: number, field: string, val: any) => {
+    setItens((prev) => {
+      const copy = prev.map((item, i) => {
+        if (i !== index) return item;
+        const updated = { ...item, [field]: val };
+        const q = field === "quantidade" ? parseFloat(val) || 0 : updated.quantidade;
+        const p = field === "precoUnitario" ? parseFloat(val) || 0 : updated.precoUnitario;
+        updated.subtotal = Math.round(q * p * 100) / 100;
+        return updated;
+      });
+      return copy;
+    });
+  };
+
+  const handleRemoverItem = (index: number) => {
+    setItens((prev) => {
+      if (prev.length <= 1) {
+        return prev;
+      }
+      return prev.filter((_, idx) => idx !== index);
+    });
+  };
+
+  const handleAdicionarItem = () => {
+    setItens((prev) => [
+      ...prev,
+      {
+        codigo: `ITEM-${String(prev.length + 1).padStart(2, "0")}`,
+        descricao: "",
+        unidade: "UN",
+        quantidade: 1,
+        precoUnitario: 0,
+        subtotal: 0,
+      },
+    ]);
+  };
+
+  const subtotalItens = itens.reduce((acc, it) => acc + (it.subtotal || 0), 0);
+  const freteNum = tipoFrete === "FOB" ? Number(freteValor) || 0 : 0;
+  const descontoNum = Number(descontoValor) || 0;
+  const valorTotalFinal = Math.max(0, subtotalItens + freteNum - descontoNum);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const ordemAtualizada: OrdemCompra = {
+      ...ordem,
+      numeroOc: numeroOc.trim(),
+      scCodigo: scCodigo.trim(),
+      status,
+      obraId,
+      obraNome,
+      obraEndereco,
+      fornecedorNome: fornecedorNome.trim(),
+      fornecedorRazao: fornecedorRazao.trim(),
+      fornecedorCnpj: fornecedorCnpj.trim(),
+      vendedorNome: vendedorNome.trim(),
+      whatsapp: whatsapp.trim(),
+      chavePix: chavePix.trim(),
+      dataEmissao: dataEmissao.trim(),
+      dataPrevistaEntrega: dataPrevistaEntrega.trim(),
+      prazoPagamento: prazoPagamento.trim(),
+      tipoFrete,
+      freteValor: Number(freteValor) || 0,
+      descontoValor: descontoNum,
+      valorTotal: valorTotalFinal,
+      itens,
+    };
+    onSalvar(ordemAtualizada);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden my-6">
+        <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">✏️</span>
+            <div>
+              <h3 className="font-bold text-sm">Editar Ordem de Compra — {numeroOc}</h3>
+              <p className="text-xs text-slate-400">Modifique fornecedor, itens, valores, descontos ou status da OC</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-white text-lg font-bold p-1 transition"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 text-xs max-h-[80vh] overflow-y-auto">
+          {/* Identificação e Status */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Número da OC *</label>
+              <input
+                required
+                type="text"
+                value={numeroOc}
+                onChange={(e) => setNumeroOc(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Cotação / SC Ref.</label>
+              <input
+                type="text"
+                value={scCodigo}
+                onChange={(e) => setScCodigo(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Status da Ordem</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as any)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
+              >
+                <option value="Emitida">Emitida</option>
+                <option value="Aguardando Entrega">Aguardando Entrega</option>
+                <option value="Entregue">Entregue</option>
+                <option value="Entregue na Obra (Confirmado pelo Almoxarifado)">Entregue na Obra</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Empreendimento / Obra</label>
+              {obras.length > 0 ? (
+                <select
+                  value={obraId}
+                  onChange={(e) => handleObraChange(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
+                >
+                  {obras.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.nome}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={obraNome}
+                  onChange={(e) => {
+                    setObraNome(e.target.value);
+                    setObraId(`obra-${Date.now()}`);
+                  }}
+                  placeholder="Nome do Empreendimento"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Dados do Fornecedor */}
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+            <h4 className="font-bold text-slate-800 flex items-center gap-1.5">
+              <span>🏢</span> Dados do Fornecedor & Vendedor
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block font-medium text-slate-600 mb-1">Nome Fantasia / Fornecedor *</label>
+                <input
+                  required
+                  list="lista-fornecedores-editar"
+                  type="text"
+                  value={fornecedorNome}
+                  onChange={(e) => handleFornecedorChange(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-semibold focus:outline-none focus:border-slate-900"
+                />
+                <datalist id="lista-fornecedores-editar">
+                  {fornecedores.map((f, i) => (
+                    <option key={i} value={f.nomeFantasia}>
+                      {f.razaoSocial}
+                    </option>
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label className="block font-medium text-slate-600 mb-1">CNPJ do Fornecedor</label>
+                <input
+                  type="text"
+                  value={fornecedorCnpj}
+                  onChange={(e) => setFornecedorCnpj(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono focus:outline-none focus:border-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block font-medium text-slate-600 mb-1">Vendedor / Contato</label>
+                <input
+                  type="text"
+                  value={vendedorNome}
+                  onChange={(e) => setVendedorNome(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block font-medium text-slate-600 mb-1">WhatsApp / Telefone</label>
+                <input
+                  type="text"
+                  value={whatsapp}
+                  onChange={(e) => setWhatsapp(e.target.value)}
+                  placeholder="Ex: 47999998888"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono focus:outline-none focus:border-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block font-medium text-slate-600 mb-1">Chave PIX</label>
+                <input
+                  type="text"
+                  value={chavePix}
+                  onChange={(e) => setChavePix(e.target.value)}
+                  placeholder="E-mail, CNPJ ou Telefone"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono focus:outline-none focus:border-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block font-medium text-slate-600 mb-1">Condição de Pagamento</label>
+                <input
+                  type="text"
+                  value={prazoPagamento}
+                  onChange={(e) => setPrazoPagamento(e.target.value)}
+                  placeholder="Ex: 28 DDL, Boleto 30 dias, À vista"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Datas */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Data de Emissão</label>
+              <input
+                type="text"
+                value={dataEmissao}
+                onChange={(e) => setDataEmissao(e.target.value)}
+                placeholder="Ex: 20/10/2026"
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Previsão de Entrega na Obra</label>
+              <input
+                type="text"
+                value={dataPrevistaEntrega}
+                onChange={(e) => setDataPrevistaEntrega(e.target.value)}
+                placeholder="Ex: 25/10/2026"
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+          </div>
+
+          {/* Tabela de Itens */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                <span>📦</span> Insumos / Materiais da Ordem de Compra
+              </label>
+              <button
+                type="button"
+                onClick={handleAdicionarItem}
+                className="px-3 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition flex items-center gap-1"
+              >
+                <span>+</span> Adicionar Item
+              </button>
+            </div>
+
+            <div className="border border-slate-300 rounded-lg overflow-hidden">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="bg-slate-100 text-slate-700 border-b border-slate-300">
+                  <tr>
+                    <th className="p-2 border-r border-slate-300 w-24">Código</th>
+                    <th className="p-2 border-r border-slate-300">Descrição do Insumo</th>
+                    <th className="p-2 border-r border-slate-300 w-20">Unid.</th>
+                    <th className="p-2 border-r border-slate-300 w-24">Qtd.</th>
+                    <th className="p-2 border-r border-slate-300 w-32">Preço Unit. (R$)</th>
+                    <th className="p-2 border-r border-slate-300 w-32 text-right">Subtotal</th>
+                    <th className="p-2 w-12 text-center">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {itens.map((it, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="p-1.5 border-r border-slate-200">
+                        <input
+                          type="text"
+                          value={it.codigo}
+                          onChange={(e) => handleItemFieldChange(idx, "codigo", e.target.value)}
+                          className="w-full bg-transparent px-1.5 py-1 text-slate-800 font-mono text-xs focus:bg-white focus:outline-none border border-transparent focus:border-slate-300 rounded"
+                        />
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200">
+                        <input
+                          type="text"
+                          value={it.descricao}
+                          onChange={(e) => handleItemFieldChange(idx, "descricao", e.target.value)}
+                          className="w-full bg-transparent px-1.5 py-1 text-slate-900 font-medium text-xs focus:bg-white focus:outline-none border border-transparent focus:border-slate-300 rounded"
+                        />
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200">
+                        <input
+                          type="text"
+                          value={it.unidade}
+                          onChange={(e) => handleItemFieldChange(idx, "unidade", e.target.value)}
+                          className="w-full bg-transparent px-1.5 py-1 text-slate-800 text-center uppercase text-xs focus:bg-white focus:outline-none border border-transparent focus:border-slate-300 rounded"
+                        />
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200">
+                        <input
+                          type="number"
+                          step="any"
+                          value={it.quantidade}
+                          onChange={(e) => handleItemFieldChange(idx, "quantidade", e.target.value)}
+                          className="w-full bg-transparent px-1.5 py-1 text-slate-900 font-mono text-right text-xs focus:bg-white focus:outline-none border border-transparent focus:border-slate-300 rounded"
+                        />
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={it.precoUnitario}
+                          onChange={(e) => handleItemFieldChange(idx, "precoUnitario", e.target.value)}
+                          className="w-full bg-transparent px-1.5 py-1 text-slate-900 font-mono text-right text-xs focus:bg-white focus:outline-none border border-transparent focus:border-slate-300 rounded"
+                        />
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200 text-right font-mono font-bold text-slate-900">
+                        {formatBRL(it.subtotal || 0)}
+                      </td>
+                      <td className="p-1.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoverItem(idx)}
+                          disabled={itens.length <= 1}
+                          title="Remover este item"
+                          className="text-slate-400 hover:text-red-600 disabled:opacity-30 disabled:hover:text-slate-400 p-1 transition"
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Frete, Desconto e Totalização */}
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Modalidade de Frete</label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={tipoFrete}
+                  onChange={(e) => setTipoFrete(e.target.value as any)}
+                  className="bg-white border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-900 focus:outline-none focus:border-slate-900 text-xs w-28"
+                >
+                  <option value="CIF">CIF (Incluso)</option>
+                  <option value="FOB">FOB (À parte)</option>
+                </select>
+                {tipoFrete === "FOB" && (
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={freteValor}
+                    onChange={(e) => setFreteValor(parseFloat(e.target.value) || 0)}
+                    placeholder="Valor do Frete R$"
+                    className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 text-xs focus:outline-none focus:border-slate-900"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                Desconto Comercial Dado (R$)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={descontoValor}
+                onChange={(e) => setDescontoValor(parseFloat(e.target.value) || 0)}
+                placeholder="R$ 0,00"
+                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold text-emerald-800 text-xs focus:outline-none focus:border-slate-900"
+              />
+            </div>
+
+            <div className="bg-white p-3 rounded-lg border border-slate-300 text-right space-y-1">
+              <div className="text-slate-500 text-[11px] flex justify-between">
+                <span>Subtotal Itens:</span>
+                <span className="font-mono">{formatBRL(subtotalItens)}</span>
+              </div>
+              {tipoFrete === "FOB" && freteNum > 0 && (
+                <div className="text-slate-500 text-[11px] flex justify-between">
+                  <span>Frete (FOB):</span>
+                  <span className="font-mono">+{formatBRL(freteNum)}</span>
+                </div>
+              )}
+              {descontoNum > 0 && (
+                <div className="text-emerald-700 font-semibold text-[11px] flex justify-between">
+                  <span>Desconto:</span>
+                  <span className="font-mono">-{formatBRL(descontoNum)}</span>
+                </div>
+              )}
+              <div className="border-t border-slate-200 pt-1 flex justify-between items-center">
+                <span className="font-bold text-slate-900 text-xs">VALOR TOTAL:</span>
+                <span className="font-bold font-mono text-base text-emerald-700">
+                  {formatBRL(valorTotalFinal)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Rodapé com Ações */}
+          <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => onExcluir(ordem.id, numeroOc)}
+              className="px-3.5 py-2 rounded-lg bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 font-bold transition flex items-center gap-1.5"
+            >
+              <span>🗑️</span>
+              <span>Excluir Ordem de Compra</span>
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition flex items-center gap-1.5 shadow-xs"
+              >
+                <span>💾</span>
+                <span>Salvar Alterações</span>
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 
 function ModalNovoContrato({
   obras,
