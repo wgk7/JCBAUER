@@ -751,7 +751,8 @@ const SOLICITACOES_INICIAIS: SolicitacaoCompra[] = [
     dataNecessaria: "20/10/2026",
     dataAbertura: "10/10/2026",
     horarioPedido: "09:30",
-    status: "OC Gerada",
+    status: "Comprada",
+    propostas: [],
     itens: [
       {
         id: "it-sc-1",
@@ -775,7 +776,8 @@ const SOLICITACOES_INICIAIS: SolicitacaoCompra[] = [
     dataNecessaria: "21/10/2026",
     dataAbertura: "12/10/2026",
     horarioPedido: "14:15",
-    status: "OC Gerada",
+    status: "Comprada",
+    propostas: [],
     itens: [
       {
         id: "it-sc-2",
@@ -799,7 +801,8 @@ const SOLICITACOES_INICIAIS: SolicitacaoCompra[] = [
     dataNecessaria: "24/10/2026",
     dataAbertura: "20/10/2026",
     horarioPedido: "10:00",
-    status: "OC Gerada",
+    status: "Comprada",
+    propostas: [],
     itens: [
       {
         id: "it-sc-3",
@@ -2216,10 +2219,22 @@ export default function HomePage() {
       }
       const savedSc = window.localStorage.getItem(SOLICITACOES_STORAGE_KEY);
       if (savedSc) {
-        const parsedSc = JSON.parse(savedSc) as SolicitacaoCompra[];
-        if (Array.isArray(parsedSc) && parsedSc.length > 0) {
-          setSolicitacoes(parsedSc);
+        try {
+          const parsedSc = JSON.parse(savedSc) as SolicitacaoCompra[];
+          if (Array.isArray(parsedSc) && parsedSc.length > 0) {
+            setSolicitacoes(parsedSc);
+          } else {
+            setSolicitacoes(SOLICITACOES_INICIAIS);
+            window.localStorage.setItem(SOLICITACOES_STORAGE_KEY, JSON.stringify(SOLICITACOES_INICIAIS));
+          }
+        } catch {
+          setSolicitacoes(SOLICITACOES_INICIAIS);
         }
+      } else {
+        setSolicitacoes(SOLICITACOES_INICIAIS);
+        try {
+          window.localStorage.setItem(SOLICITACOES_STORAGE_KEY, JSON.stringify(SOLICITACOES_INICIAIS));
+        } catch {}
       }
 
             const savedOc = window.localStorage.getItem(ORDENS_STORAGE_KEY);
@@ -2547,12 +2562,12 @@ export default function HomePage() {
                 );
               } catch {}
             }
-            if (dadosNuvem[ESTOQUE_ALMOXARIFADO_STORAGE_KEY]) {
-              setEstoqueAlmoxarifado(dadosNuvem[ESTOQUE_ALMOXARIFADO_STORAGE_KEY]);
+            if (dadosNuvem[ESTOQUE_STORAGE_KEY]) {
+              setEstoque(dadosNuvem[ESTOQUE_STORAGE_KEY]);
               try {
                 window.localStorage.setItem(
-                  ESTOQUE_ALMOXARIFADO_STORAGE_KEY,
-                  JSON.stringify(dadosNuvem[ESTOQUE_ALMOXARIFADO_STORAGE_KEY])
+                  ESTOQUE_STORAGE_KEY,
+                  JSON.stringify(dadosNuvem[ESTOQUE_STORAGE_KEY])
                 );
               } catch {}
             }
@@ -2617,9 +2632,8 @@ export default function HomePage() {
         await salvarChaveSupabase(SOLICITACOES_STORAGE_KEY, solicitacoes);
       }
       await salvarChaveSupabase(CONTRATOS_STORAGE_KEY, contratos);
-      await salvarChaveSupabase(ORCAMENTO_STORAGE_KEY, orcamento);
+      await salvarChaveSupabase(ORCAMENTO_STORAGE_KEY, orcamentos);
       await salvarChaveSupabase(ESTOQUE_STORAGE_KEY, estoque);
-      await salvarChaveSupabase(ESTOQUE_ALMOXARIFADO_STORAGE_KEY, estoqueAlmoxarifado);
       await salvarChaveSupabase(ITENS_PLANILHA_STORAGE_KEY, itensPlanilha);
       await salvarChaveSupabase(PROCESSOS_COTACOES_STORAGE_KEY, processosCotacoes);
       if (comparativoSalvo) {
@@ -2722,11 +2736,11 @@ export default function HomePage() {
           JSON.stringify(dados[ITENS_PLANILHA_STORAGE_KEY])
         );
       }
-      if (dados[ESTOQUE_ALMOXARIFADO_STORAGE_KEY]) {
-        setEstoqueAlmoxarifado(dados[ESTOQUE_ALMOXARIFADO_STORAGE_KEY]);
+      if (dados[ESTOQUE_STORAGE_KEY]) {
+        setEstoque(dados[ESTOQUE_STORAGE_KEY]);
         window.localStorage.setItem(
-          ESTOQUE_ALMOXARIFADO_STORAGE_KEY,
-          JSON.stringify(dados[ESTOQUE_ALMOXARIFADO_STORAGE_KEY])
+          ESTOQUE_STORAGE_KEY,
+          JSON.stringify(dados[ESTOQUE_STORAGE_KEY])
         );
       }
       if (dados[PROCESSOS_COTACOES_STORAGE_KEY]) {
