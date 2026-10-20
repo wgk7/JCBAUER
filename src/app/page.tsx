@@ -1459,6 +1459,10 @@ export default function HomePage() {
     useState<OrdemCompra | null>(null);
   const [obraEmEdicao, setObraEmEdicao] =
     useState<Obra | null>(null);
+  const [scEmEdicao, setScEmEdicao] =
+    useState<SolicitacaoCompra | null>(null);
+  const [itemEditarEstoqueModal, setItemEditarEstoqueModal] =
+    useState<ItemEstoque | null>(null);
   const [filtroObraContratos, setFiltroObraContratos] =
     useState<string>("ALL");
 
@@ -1605,12 +1609,7 @@ export default function HomePage() {
     });
   };
 
-  // Sincroniza continuamente insumos do comparativo para o estoque
-  useEffect(() => {
-    if (storageCarregado && comparativoItens && comparativoItens.length > 0) {
-      sincronizarInsumosAoEstoque(comparativoItens);
-    }
-  }, [comparativoItens, storageCarregado]);
+  // Insumos do comparativo só são catalogados no almoxarifado sob comando explícito ou emissão de OC
 
   const handleSalvarAjusteRapidoSaldo = (
     itemId: string,
@@ -1840,23 +1839,32 @@ export default function HomePage() {
         try {
           const parsedSc = JSON.parse(savedSc) as SolicitacaoCompra[];
           if (Array.isArray(parsedSc) && parsedSc.length > 0) {
-            const sanitizedSc = parsedSc.map((s) => ({
+            const FAKE_SC_LIST = ["sc-1", "sc-2", "sc-3", "SC-2026-0135", "SC-2026-0138", "SC-2026-0142"];
+            const validSc = parsedSc.filter(
+              (s) =>
+                !FAKE_SC_LIST.includes(s.id) &&
+                !FAKE_SC_LIST.includes(s.codigo) &&
+                s.solicitante !== "Eng. Marcos Viana" &&
+                s.solicitante !== "Enga. Camila Dorneles"
+            ).map((s) => ({
               ...s,
               itens: Array.isArray(s.itens) ? s.itens : [],
               propostas: Array.isArray(s.propostas) ? s.propostas : [],
             }));
-            setSolicitacoes(sanitizedSc);
+            setSolicitacoes(validSc);
+            window.localStorage.setItem(SOLICITACOES_STORAGE_KEY, JSON.stringify(validSc));
           } else {
-            setSolicitacoes(SOLICITACOES_INICIAIS);
-            window.localStorage.setItem(SOLICITACOES_STORAGE_KEY, JSON.stringify(SOLICITACOES_INICIAIS));
+            setSolicitacoes([]);
+            window.localStorage.setItem(SOLICITACOES_STORAGE_KEY, "[]");
           }
         } catch {
-          setSolicitacoes(SOLICITACOES_INICIAIS);
+          setSolicitacoes([]);
+          window.localStorage.setItem(SOLICITACOES_STORAGE_KEY, "[]");
         }
       } else {
-        setSolicitacoes(SOLICITACOES_INICIAIS);
+        setSolicitacoes([]);
         try {
-          window.localStorage.setItem(SOLICITACOES_STORAGE_KEY, JSON.stringify(SOLICITACOES_INICIAIS));
+          window.localStorage.setItem(SOLICITACOES_STORAGE_KEY, "[]");
         } catch {}
       }
 
@@ -1898,10 +1906,31 @@ export default function HomePage() {
 
       const savedEst = window.localStorage.getItem(ESTOQUE_STORAGE_KEY);
       if (savedEst) {
-        const parsedEst = JSON.parse(savedEst) as ItemEstoque[];
-        if (Array.isArray(parsedEst) && parsedEst.length > 0) {
-          setEstoque(parsedEst);
+        try {
+          const parsedEst = JSON.parse(savedEst) as ItemEstoque[];
+          if (Array.isArray(parsedEst) && parsedEst.length > 0) {
+            const JUNK_EST_LIST = ["jo", "joe", "joel", "joelh", "joelho", "joelho t"];
+            const validEst = parsedEst.filter((it) => {
+              const d = (it.descricao || "").trim().toLowerCase();
+              if (JUNK_EST_LIST.includes(d)) return false;
+              if (it.id?.startsWith("est-auto-") && it.saldoAtual === 0 && d.length < 4) return false;
+              return true;
+            });
+            setEstoque(validEst);
+            window.localStorage.setItem(ESTOQUE_STORAGE_KEY, JSON.stringify(validEst));
+          } else {
+            setEstoque([]);
+            window.localStorage.setItem(ESTOQUE_STORAGE_KEY, "[]");
+          }
+        } catch {
+          setEstoque([]);
+          window.localStorage.setItem(ESTOQUE_STORAGE_KEY, "[]");
         }
+      } else {
+        setEstoque([]);
+        try {
+          window.localStorage.setItem(ESTOQUE_STORAGE_KEY, "[]");
+        } catch {}
       }
 
       const savedMov = window.localStorage.getItem(MOVIMENTACOES_STORAGE_KEY);
@@ -2164,20 +2193,20 @@ export default function HomePage() {
                 } catch {}
               }
             }
-            if (
-              Array.isArray(dadosNuvem[SOLICITACOES_STORAGE_KEY]) &&
-              dadosNuvem[SOLICITACOES_STORAGE_KEY].length > 0
-            ) {
-              const nuvemSc = (dadosNuvem[SOLICITACOES_STORAGE_KEY] as SolicitacaoCompra[]).map((s) => ({
-                ...s,
-                itens: Array.isArray(s.itens) ? s.itens : [],
-                propostas: Array.isArray(s.propostas) ? s.propostas : [],
-              }));
+            if (Array.isArray(dadosNuvem[SOLICITACOES_STORAGE_KEY])) {
+              const FAKE_SC_LIST = ["sc-1", "sc-2", "sc-3", "SC-2026-0135", "SC-2026-0138", "SC-2026-0142"];
+              const nuvemSc = (dadosNuvem[SOLICITACOES_STORAGE_KEY] as SolicitacaoCompra[])
+                .filter(s => !FAKE_SC_LIST.includes(s.id) && !FAKE_SC_LIST.includes(s.codigo) && s.solicitante !== "Eng. Marcos Viana" && s.solicitante !== "Enga. Camila Dorneles")
+                .map((s) => ({
+                  ...s,
+                  itens: Array.isArray(s.itens) ? s.itens : [],
+                  propostas: Array.isArray(s.propostas) ? s.propostas : [],
+                }));
               setSolicitacoes(nuvemSc);
               try {
                 window.localStorage.setItem(
                   SOLICITACOES_STORAGE_KEY,
-                  JSON.stringify(dadosNuvem[SOLICITACOES_STORAGE_KEY])
+                  JSON.stringify(nuvemSc)
                 );
               } catch {}
             }
@@ -2190,12 +2219,19 @@ export default function HomePage() {
                 );
               } catch {}
             }
-            if (dadosNuvem[ESTOQUE_STORAGE_KEY]) {
-              setEstoque(dadosNuvem[ESTOQUE_STORAGE_KEY]);
+            if (Array.isArray(dadosNuvem[ESTOQUE_STORAGE_KEY])) {
+              const JUNK_EST_LIST = ["jo", "joe", "joel", "joelh", "joelho", "joelho t"];
+              const cleanEst = (dadosNuvem[ESTOQUE_STORAGE_KEY] as ItemEstoque[]).filter(it => {
+                const d = (it.descricao || "").trim().toLowerCase();
+                if (JUNK_EST_LIST.includes(d)) return false;
+                if (it.id?.startsWith("est-auto-") && it.saldoAtual === 0 && d.length < 4) return false;
+                return true;
+              });
+              setEstoque(cleanEst);
               try {
                 window.localStorage.setItem(
                   ESTOQUE_STORAGE_KEY,
-                  JSON.stringify(dadosNuvem[ESTOQUE_STORAGE_KEY])
+                  JSON.stringify(cleanEst)
                 );
               } catch {}
             }
@@ -2347,14 +2383,19 @@ export default function HomePage() {
           salvarChaveSupabase(ORDENS_STORAGE_KEY, ordens);
         }
       }
-      if (
-        Array.isArray(dados[SOLICITACOES_STORAGE_KEY]) &&
-        dados[SOLICITACOES_STORAGE_KEY].length > 0
-      ) {
-        setSolicitacoes(dados[SOLICITACOES_STORAGE_KEY]);
+      if (Array.isArray(dados[SOLICITACOES_STORAGE_KEY])) {
+        const FAKE_SC_LIST = ["sc-1", "sc-2", "sc-3", "SC-2026-0135", "SC-2026-0138", "SC-2026-0142"];
+        const cleanSc = (dados[SOLICITACOES_STORAGE_KEY] as SolicitacaoCompra[])
+          .filter(s => !FAKE_SC_LIST.includes(s.id) && !FAKE_SC_LIST.includes(s.codigo) && s.solicitante !== "Eng. Marcos Viana" && s.solicitante !== "Enga. Camila Dorneles")
+          .map((s) => ({
+            ...s,
+            itens: Array.isArray(s.itens) ? s.itens : [],
+            propostas: Array.isArray(s.propostas) ? s.propostas : [],
+          }));
+        setSolicitacoes(cleanSc);
         window.localStorage.setItem(
           SOLICITACOES_STORAGE_KEY,
-          JSON.stringify(dados[SOLICITACOES_STORAGE_KEY])
+          JSON.stringify(cleanSc)
         );
       }
       if (dados[ITENS_PLANILHA_STORAGE_KEY]) {
@@ -2364,11 +2405,18 @@ export default function HomePage() {
           JSON.stringify(dados[ITENS_PLANILHA_STORAGE_KEY])
         );
       }
-      if (dados[ESTOQUE_STORAGE_KEY]) {
-        setEstoque(dados[ESTOQUE_STORAGE_KEY]);
+      if (Array.isArray(dados[ESTOQUE_STORAGE_KEY])) {
+        const JUNK_EST_LIST = ["jo", "joe", "joel", "joelh", "joelho", "joelho t"];
+        const cleanEst = (dados[ESTOQUE_STORAGE_KEY] as ItemEstoque[]).filter(it => {
+          const d = (it.descricao || "").trim().toLowerCase();
+          if (JUNK_EST_LIST.includes(d)) return false;
+          if (it.id?.startsWith("est-auto-") && it.saldoAtual === 0 && d.length < 4) return false;
+          return true;
+        });
+        setEstoque(cleanEst);
         window.localStorage.setItem(
           ESTOQUE_STORAGE_KEY,
-          JSON.stringify(dados[ESTOQUE_STORAGE_KEY])
+          JSON.stringify(cleanEst)
         );
       }
       if (dados[PROCESSOS_COTACOES_STORAGE_KEY]) {
@@ -6090,12 +6138,138 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   };
 
   const handleCriarPedidoCanteiro = (novaSc: SolicitacaoCompra) => {
-    setSolicitacoes((prev) => [novaSc, ...prev]);
+    const novasSc = [novaSc, ...solicitacoes];
+    setSolicitacoes(novasSc);
+    try {
+      window.localStorage.setItem(
+        SOLICITACOES_STORAGE_KEY,
+        JSON.stringify(novasSc)
+      );
+    } catch {}
+    salvarChaveSupabase(SOLICITACOES_STORAGE_KEY, novasSc).catch(() => {});
     setSelectedScId(novaSc.id);
     setObraActiveTab("MeusPedidos");
     dispararAviso(
       `Pedido ${novaSc.codigo} enviado com sucesso para o Setor de Compras!`
     );
+  };
+
+  const handleSalvarEdicaoSc = (scAtualizada: SolicitacaoCompra) => {
+    const novasSc = solicitacoes.map((s) =>
+      s.id === scAtualizada.id ? scAtualizada : s
+    );
+    setSolicitacoes(novasSc);
+    try {
+      window.localStorage.setItem(
+        SOLICITACOES_STORAGE_KEY,
+        JSON.stringify(novasSc)
+      );
+    } catch {}
+    salvarChaveSupabase(SOLICITACOES_STORAGE_KEY, novasSc).catch(() => {});
+    setScEmEdicao(null);
+    dispararAviso(
+      `Solicitação de Compra ${scAtualizada.codigo} atualizada com sucesso!`
+    );
+  };
+
+  const handleExcluirSc = (scId: string, scCodigo: string) => {
+    if (
+      !window.confirm(
+        `Tem certeza que deseja EXCLUIR a Solicitação de Compra ${scCodigo}?\n\nEsta ação removerá a requisição definitivamente.`
+      )
+    ) {
+      return;
+    }
+    const novasSc = solicitacoes.filter((s) => s.id !== scId);
+    setSolicitacoes(novasSc);
+    try {
+      window.localStorage.setItem(
+        SOLICITACOES_STORAGE_KEY,
+        JSON.stringify(novasSc)
+      );
+    } catch {}
+    salvarChaveSupabase(SOLICITACOES_STORAGE_KEY, novasSc).catch(() => {});
+    if (scMensagensModal?.id === scId) {
+      setScMensagensModal(null);
+    }
+    if (scEmEdicao?.id === scId) {
+      setScEmEdicao(null);
+    }
+    dispararAviso(`Solicitação de Compra ${scCodigo} excluída com sucesso.`);
+  };
+
+  const handleLimparTodasSolicitacoes = () => {
+    if (
+      !window.confirm(
+        "Deseja realmente EXCLUIR TODAS as solicitações de compra pendentes?\n\nEsta ação limpará completamente a lista de requisições."
+      )
+    ) {
+      return;
+    }
+    setSolicitacoes([]);
+    try {
+      window.localStorage.setItem(SOLICITACOES_STORAGE_KEY, "[]");
+    } catch {}
+    salvarChaveSupabase(SOLICITACOES_STORAGE_KEY, []).catch(() => {});
+    dispararAviso("Todas as solicitações de compra foram removidas.");
+  };
+
+  const handleSalvarEdicaoEstoque = (itemAtualizado: ItemEstoque) => {
+    const novoEstoque = estoque.map((it) =>
+      it.id === itemAtualizado.id ? itemAtualizado : it
+    );
+    setEstoque(novoEstoque);
+    try {
+      window.localStorage.setItem(
+        ESTOQUE_STORAGE_KEY,
+        JSON.stringify(novoEstoque)
+      );
+    } catch {}
+    salvarChaveSupabase(ESTOQUE_STORAGE_KEY, novoEstoque).catch(() => {});
+    setItemEditarEstoqueModal(null);
+    dispararAviso(`Item "${itemAtualizado.descricao}" atualizado com sucesso!`);
+  };
+
+  const handleExcluirItemEstoque = (itemId: string, itemDescricao: string) => {
+    if (
+      !window.confirm(
+        `Deseja realmente EXCLUIR o insumo "${itemDescricao}" do almoxarifado/estoque?`
+      )
+    ) {
+      return;
+    }
+    const novoEstoque = estoque.filter((it) => it.id !== itemId);
+    setEstoque(novoEstoque);
+    try {
+      window.localStorage.setItem(
+        ESTOQUE_STORAGE_KEY,
+        JSON.stringify(novoEstoque)
+      );
+    } catch {}
+    salvarChaveSupabase(ESTOQUE_STORAGE_KEY, novoEstoque).catch(() => {});
+    if (itemAjustarEstoqueModal?.id === itemId) {
+      setItemAjustarEstoqueModal(null);
+    }
+    if (itemEditarEstoqueModal?.id === itemId) {
+      setItemEditarEstoqueModal(null);
+    }
+    dispararAviso(`Item "${itemDescricao}" excluído do almoxarifado.`);
+  };
+
+  const handleLimparTodoEstoque = () => {
+    if (
+      !window.confirm(
+        "Deseja realmente LIMPAR TODOS os insumos do almoxarifado e estoque?\n\nEsta ação removerá todos os itens cadastrados ou criados por engano."
+      )
+    ) {
+      return;
+    }
+    setEstoque([]);
+    try {
+      window.localStorage.setItem(ESTOQUE_STORAGE_KEY, "[]");
+    } catch {}
+    salvarChaveSupabase(ESTOQUE_STORAGE_KEY, []).catch(() => {});
+    dispararAviso("Almoxarifado e estoque limpos com sucesso.");
   };
 
   const handleConfirmarRecebimentoObra = (
@@ -7527,12 +7701,25 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                       insumos e abra diretamente no Mapa de Cotações
                     </p>
                   </div>
-                  <button
-                    onClick={() => setShowNovaScModal(true)}
-                    className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
-                  >
-                    + Nova Solicitação
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {solicitacoes.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleLimparTodasSolicitacoes}
+                        className="px-3 py-2 rounded-lg bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 text-xs font-semibold transition flex items-center gap-1 shadow-xs"
+                        title="Limpar todas as solicitações de compra pendentes"
+                      >
+                        <span>🗑️</span>
+                        <span>Limpar Solicitações</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowNovaScModal(true)}
+                      className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+                    >
+                      + Nova Solicitação
+                    </button>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -7703,6 +7890,22 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                       {sc.mensagens.length}
                                     </span>
                                   )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setScEmEdicao(sc)}
+                                  className="px-2.5 py-1.5 rounded-md bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-semibold flex items-center gap-1 transition shadow-xs"
+                                  title="Editar solicitação de compra"
+                                >
+                                  <span>✏️</span> Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleExcluirSc(sc.id, sc.codigo)}
+                                  className="px-2 py-1.5 rounded-md bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 text-xs font-semibold flex items-center gap-1 transition"
+                                  title="Excluir solicitação de compra definitivamente"
+                                >
+                                  <span>🗑️</span> Excluir
                                 </button>
                                 <button
                                   onClick={() => {
@@ -11249,6 +11452,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {estoque.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleLimparTodoEstoque}
+                        className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 text-xs font-semibold flex items-center gap-1.5 transition shadow-xs"
+                        title="Limpar todos os itens gerados ou cadastrados incorretamente no almoxarifado"
+                      >
+                        <span>🗑️</span>
+                        <span>Limpar Almoxarifado</span>
+                      </button>
+                    )}
                     <span className="text-xs text-slate-500">Filtrando por:</span>
                     <span className="text-xs font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
                       {obraFiltro === "ALL" ? "Todos os Canteiros" : obras.find(o => o.id === obraFiltro)?.nome || "Almoxarifado Central"}
@@ -11406,11 +11620,27 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                     <div className="flex items-center justify-end gap-1.5">
                                       <button
                                         type="button"
+                                        onClick={() => setItemEditarEstoqueModal(item)}
+                                        className="px-2 py-1 rounded-md bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold transition flex items-center gap-1 shadow-xs"
+                                        title="Editar nome, SKU, unidade e categoria do insumo"
+                                      >
+                                        <span>✏️</span> Editar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleExcluirItemEstoque(item.id, item.descricao)}
+                                        className="px-2 py-1 rounded-md bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 text-xs font-bold transition flex items-center gap-1"
+                                        title="Excluir insumo definitivamente do almoxarifado"
+                                      >
+                                        <span>🗑️</span> Excluir
+                                      </button>
+                                      <button
+                                        type="button"
                                         onClick={() => setItemAjustarEstoqueModal(item)}
                                         className="px-2.5 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition flex items-center gap-1 shadow-xs"
                                         title="Contagem física ou ajuste manual de saldo em estoque"
                                       >
-                                        <span>✏️</span> Ajustar Saldo
+                                        <span>📦</span> Ajustar Saldo
                                       </button>
                                       <button
                                         type="button"
@@ -13874,6 +14104,28 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           onClose={() => setOrdemEditarModal(null)}
           onSalvar={handleSalvarEdicaoOrdem}
           onExcluir={handleExcluirOrdem}
+        />
+      )}
+
+      {/* MODAL EDITAR SOLICITAÇÃO DE COMPRA */}
+      {scEmEdicao && (
+        <ModalEditarSolicitacao
+          sc={scEmEdicao}
+          obras={obras}
+          onClose={() => setScEmEdicao(null)}
+          onSalvar={handleSalvarEdicaoSc}
+          onExcluir={handleExcluirSc}
+        />
+      )}
+
+      {/* MODAL EDITAR ITEM DO ALMOXARIFADO / ESTOQUE */}
+      {itemEditarEstoqueModal && (
+        <ModalEditarItemEstoque
+          item={itemEditarEstoqueModal}
+          obras={obras}
+          onClose={() => setItemEditarEstoqueModal(null)}
+          onSalvar={handleSalvarEdicaoEstoque}
+          onExcluir={handleExcluirItemEstoque}
         />
       )}
 
@@ -18044,6 +18296,522 @@ function ModalEditarOrdemCompra({
             >
               <span>🗑️</span>
               <span>Excluir Ordem de Compra</span>
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition flex items-center gap-1.5 shadow-xs"
+              >
+                <span>💾</span>
+                <span>Salvar Alterações</span>
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
+/* ========================================================================= */
+/* MODAL EDITAR SOLICITAÇÃO DE COMPRA (CANTEIRO)                             */
+/* ========================================================================= */
+
+function ModalEditarSolicitacao({
+  sc,
+  obras,
+  onClose,
+  onSalvar,
+  onExcluir,
+}: {
+  sc: SolicitacaoCompra;
+  obras: Obra[];
+  onClose: () => void;
+  onSalvar: (scAtualizada: SolicitacaoCompra) => void;
+  onExcluir: (scId: string, scCodigo: string) => void;
+}) {
+  const [codigo, setCodigo] = useState(sc.codigo || "");
+  const [obraId, setObraId] = useState(sc.obraId || (obras[0]?.id || ""));
+  const [categoria, setCategoria] = useState(sc.categoria || CATEGORIAS_CONSTRUCAO[0]);
+  const [solicitante, setSolicitante] = useState(sc.solicitante || "");
+  const [urgencia, setUrgencia] = useState(sc.urgencia || "Normal");
+  const [dataNecessaria, setDataNecessaria] = useState(sc.dataNecessaria || "");
+  const [status, setStatus] = useState(sc.status || "Enviado / Aguardando Compras");
+  const [itens, setItens] = useState(
+    sc.itens && sc.itens.length > 0
+      ? sc.itens.map((it) => ({ ...it }))
+      : [
+          {
+            id: `it-${Date.now()}`,
+            codigo: "INS-01",
+            descricao: "",
+            unidade: "un",
+            quantidade: 1,
+            orcamentoUnitario: 0,
+          },
+        ]
+  );
+
+  const handleItemChange = (index: number, field: string, value: any) => {
+    setItens((prev) =>
+      prev.map((it, i) => (i === index ? { ...it, [field]: value } : it))
+    );
+  };
+
+  const handleRemoverItem = (index: number) => {
+    setItens((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
+  };
+
+  const handleAdicionarItem = () => {
+    setItens((prev) => [
+      ...prev,
+      {
+        id: `it-${Date.now()}-${prev.length}`,
+        codigo: `INS-${String(prev.length + 1).padStart(2, "0")}`,
+        descricao: "",
+        unidade: "un",
+        quantidade: 1,
+        orcamentoUnitario: 0,
+      },
+    ]);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const scAtualizada: SolicitacaoCompra = {
+      ...sc,
+      codigo: codigo.trim(),
+      obraId,
+      categoria,
+      solicitante: solicitante.trim(),
+      urgencia: urgencia as any,
+      dataNecessaria: dataNecessaria.trim(),
+      status: status as any,
+      itens: itens.map((it) => ({
+        ...it,
+        quantidade: Number(it.quantidade) || 1,
+        orcamentoUnitario: Number(it.orcamentoUnitario) || 0,
+      })),
+    };
+    onSalvar(scAtualizada);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full border border-slate-200 overflow-hidden my-6">
+        <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">✏️</span>
+            <div>
+              <h3 className="font-bold text-sm">Editar Solicitação de Compra — {codigo}</h3>
+              <p className="text-xs text-slate-400">Atualize dados do canteiro, insumos solicitados ou status</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-white text-lg font-bold p-1 transition"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs max-h-[80vh] overflow-y-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Código da Solicitação *</label>
+              <input
+                required
+                type="text"
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Empreendimento / Obra</label>
+              <select
+                value={obraId}
+                onChange={(e) => setObraId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
+              >
+                {obras.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Status da Solicitação</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as any)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
+              >
+                <option value="Enviado / Aguardando Compras">Enviado / Aguardando Compras</option>
+                <option value="Em Cotação">Em Cotação</option>
+                <option value="Comprada">Comprada</option>
+                <option value="Entregue na Obra">Entregue na Obra</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Solicitante (Engenheiro / Mestre) *</label>
+              <input
+                required
+                type="text"
+                value={solicitante}
+                onChange={(e) => setSolicitante(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Categoria de Insumo</label>
+              <select
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+              >
+                {CATEGORIAS_CONSTRUCAO.map((cat, i) => (
+                  <option key={i} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Urgência</label>
+              <select
+                value={urgencia}
+                onChange={(e) => setUrgencia(e.target.value as any)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
+              >
+                <option value="Normal">Normal</option>
+                <option value="Alta">Alta</option>
+                <option value="Crítica - Obra Parada">Crítica - Obra Parada</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Lista de Insumos da Solicitação */}
+          <div className="space-y-2 pt-2 border-t border-slate-200">
+            <div className="flex items-center justify-between">
+              <label className="font-bold text-slate-800 text-xs">Itens / Insumos Solicitados</label>
+              <button
+                type="button"
+                onClick={handleAdicionarItem}
+                className="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-semibold flex items-center gap-1"
+              >
+                + Adicionar Insumo
+              </button>
+            </div>
+
+            <div className="border border-slate-300 rounded-lg overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-100 border-b border-slate-300 text-slate-700">
+                  <tr>
+                    <th className="p-2 text-left">Descrição do Insumo</th>
+                    <th className="p-2 text-center w-20">Unidade</th>
+                    <th className="p-2 text-right w-24">Quantidade</th>
+                    <th className="p-2 text-right w-28">Orçamento Unit. (R$)</th>
+                    <th className="p-2 text-center w-12">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {itens.map((it, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="p-1.5">
+                        <input
+                          type="text"
+                          value={it.descricao}
+                          onChange={(e) => handleItemChange(idx, "descricao", e.target.value)}
+                          placeholder="Ex: Cimento CP-II 50kg"
+                          className="w-full bg-transparent px-2 py-1 text-slate-900 font-medium focus:bg-white border border-transparent focus:border-slate-300 rounded"
+                        />
+                      </td>
+                      <td className="p-1.5 text-center">
+                        <input
+                          type="text"
+                          value={it.unidade}
+                          onChange={(e) => handleItemChange(idx, "unidade", e.target.value)}
+                          className="w-full bg-transparent px-1 py-1 text-center uppercase text-slate-800 focus:bg-white border border-transparent focus:border-slate-300 rounded"
+                        />
+                      </td>
+                      <td className="p-1.5">
+                        <input
+                          type="number"
+                          step="any"
+                          value={it.quantidade}
+                          onChange={(e) => handleItemChange(idx, "quantidade", e.target.value)}
+                          className="w-full bg-transparent px-2 py-1 text-right font-mono text-slate-900 focus:bg-white border border-transparent focus:border-slate-300 rounded"
+                        />
+                      </td>
+                      <td className="p-1.5">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={it.orcamentoUnitario}
+                          onChange={(e) => handleItemChange(idx, "orcamentoUnitario", e.target.value)}
+                          className="w-full bg-transparent px-2 py-1 text-right font-mono text-slate-900 focus:bg-white border border-transparent focus:border-slate-300 rounded"
+                        />
+                      </td>
+                      <td className="p-1.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoverItem(idx)}
+                          disabled={itens.length <= 1}
+                          className="text-slate-400 hover:text-red-600 disabled:opacity-30 p-1"
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => onExcluir(sc.id, sc.codigo)}
+              className="px-3 py-2 rounded-lg bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 font-bold transition flex items-center gap-1.5"
+            >
+              <span>🗑️</span>
+              <span>Excluir Solicitação</span>
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition flex items-center gap-1.5 shadow-xs"
+              >
+                <span>💾</span>
+                <span>Salvar Alterações</span>
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* MODAL EDITAR INSUMO NO ALMOXARIFADO / ESTOQUE                             */
+/* ========================================================================= */
+
+function ModalEditarItemEstoque({
+  item,
+  obras,
+  onClose,
+  onSalvar,
+  onExcluir,
+}: {
+  item: ItemEstoque;
+  obras: Obra[];
+  onClose: () => void;
+  onSalvar: (itemAtualizado: ItemEstoque) => void;
+  onExcluir: (itemId: string, itemDescricao: string) => void;
+}) {
+  const [codigo, setCodigo] = useState(item.codigo || "");
+  const [descricao, setDescricao] = useState(item.descricao || "");
+  const [categoria, setCategoria] = useState(item.categoria || CATEGORIAS_CONSTRUCAO[0]);
+  const [unidade, setUnidade] = useState(item.unidade || "un");
+  const [obraId, setObraId] = useState(item.obraId || (obras[0]?.id || "central"));
+  const [saldoAtual, setSaldoAtual] = useState<number>(item.saldoAtual || 0);
+  const [estoqueMinimo, setEstoqueMinimo] = useState<number>(item.estoqueMinimo || 0);
+  const [pontoReposicao, setPontoReposicao] = useState<number>(item.pontoReposicao || 0);
+  const [custoMedio, setCustoMedio] = useState<number>(item.custoMedio || 0);
+  const [localizacaoFisica, setLocalizacaoFisica] = useState(
+    item.localizacaoFisica || "Almoxarifado Principal"
+  );
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!descricao.trim()) return;
+
+    const obraSel = obras.find((o) => o.id === obraId);
+    const itemAtualizado: ItemEstoque = {
+      ...item,
+      codigo: codigo.trim().toUpperCase() || item.codigo,
+      descricao: descricao.trim(),
+      categoria,
+      unidade: unidade.trim().toLowerCase(),
+      obraId,
+      obraNome: obraSel?.nome || "Almoxarifado Central",
+      saldoAtual: Number(saldoAtual) || 0,
+      estoqueMinimo: Number(estoqueMinimo) || 0,
+      pontoReposicao: Number(pontoReposicao) || 0,
+      custoMedio: Number(custoMedio) || 0,
+      localizacaoFisica: localizacaoFisica.trim(),
+      ultimaMovimentacao: new Date().toLocaleDateString("pt-BR"),
+    };
+
+    onSalvar(itemAtualizado);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden my-6">
+        <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">✏️</span>
+            <div>
+              <h3 className="font-bold text-sm">Editar Insumo — {descricao || codigo}</h3>
+              <p className="text-xs text-slate-400">Altere o nome completo, SKU, unidade e parâmetros de estoque</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-white text-lg font-bold p-1 transition"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Descrição Completa do Insumo *
+            </label>
+            <input
+              required
+              type="text"
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+              placeholder="Ex: Joelho 90° Soldável PVC 25mm Tigre"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-slate-900 font-semibold focus:outline-none focus:border-slate-900"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Código / SKU</label>
+              <input
+                required
+                type="text"
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono uppercase text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Unidade de Medida</label>
+              <input
+                required
+                type="text"
+                value={unidade}
+                onChange={(e) => setUnidade(e.target.value)}
+                placeholder="Ex: un, m, kg, barra, m2"
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900 uppercase"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Categoria</label>
+              <select
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+              >
+                {CATEGORIAS_CONSTRUCAO.map((c, i) => (
+                  <option key={i} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Obra / Canteiro</label>
+              <select
+                value={obraId}
+                onChange={(e) => setObraId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+              >
+                <option value="central">Almoxarifado Central (Geral)</option>
+                {obras.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Saldo Atual</label>
+              <input
+                type="number"
+                step="any"
+                value={saldoAtual}
+                onChange={(e) => setSaldoAtual(parseFloat(e.target.value) || 0)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Estoque Mínimo</label>
+              <input
+                type="number"
+                step="any"
+                value={estoqueMinimo}
+                onChange={(e) => setEstoqueMinimo(parseFloat(e.target.value) || 0)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Custo Médio (R$)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={custoMedio}
+                onChange={(e) => setCustoMedio(parseFloat(e.target.value) || 0)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Localização Física / Prateleira</label>
+            <input
+              type="text"
+              value={localizacaoFisica}
+              onChange={(e) => setLocalizacaoFisica(e.target.value)}
+              placeholder="Ex: Prateleira B3, Gaiola Central, Canteiro Obra"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+            />
+          </div>
+
+          <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => onExcluir(item.id, item.descricao)}
+              className="px-3.5 py-2 rounded-lg bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 font-bold transition flex items-center gap-1.5"
+            >
+              <span>🗑️</span>
+              <span>Excluir Insumo</span>
             </button>
             <div className="flex items-center gap-2">
               <button
