@@ -8627,35 +8627,35 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                   <button
                     type="button"
                     onClick={() => setModoCotacoes("comparativo_rapido")}
-                    className={px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
                       modoCotacoes === "comparativo_rapido"
                         ? "bg-slate-900 text-white shadow-xs"
                         : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                    }}
+                    }`}
                   >
-                    <span>âš–ï¸</span> Comparativo de 3 OrÃ§amentos (RÃ¡pido)
+                    <span>⚖️</span> Comparativo de 3 Orçamentos (Rápido)
                   </button>
                   <button
                     type="button"
                     onClick={() => setModoCotacoes("painel_cotacoes")}
-                    className={px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
                       modoCotacoes === "painel_cotacoes"
                         ? "bg-slate-900 text-white shadow-xs"
                         : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                    }}
+                    }`}
                   >
-                    <span>ðŸ“‚</span> Central de CotaÃ§Ãµes Salvas ({processosCotacoes.length})
+                    <span>📂</span> Central de Cotações Salvas ({processosCotacoes.length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setModoCotacoes("solicitacoes_obra")}
-                    className={px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
                       modoCotacoes === "solicitacoes_obra"
                         ? "bg-slate-900 text-white shadow-xs"
                         : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                    }}
+                    }`}
                   >
-                    <span>ðŸ“‹</span> CotaÃ§Ãµes Vinculadas a Obras ({solicitacoes.length})
+                    <span>📋</span> Cotações Vinculadas a Obras ({solicitacoes.length})
                   </button>
                 </div>
 
