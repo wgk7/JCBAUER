@@ -1655,6 +1655,7 @@ export default function HomePage() {
     } finally {
       setStorageCarregado(true);
     }
+  }, []);
   // Sincronização e verificação inicial com a nuvem Supabase
   useEffect(() => {
     let ativo = true;
@@ -1951,7 +1952,6 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
     }
   };
 
-  }, []);
 
   // Salvar automaticamente sessão do usuário logado e dados no localStorage
   useEffect(() => {
