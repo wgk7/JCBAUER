@@ -120,6 +120,7 @@ const FORNECEDORES_STORAGE_KEY = "jc_bauer_fornecedores_v3";
 const ITENS_PLANILHA_STORAGE_KEY = "jc_bauer_itens_planilha_v3";
 const DUPLICIDADES_STORAGE_KEY = "jc_bauer_duplicidades_v3";
 const COMPARATIVO_STORAGE_KEY = "jc_bauer_comparativo_3orc_v4";
+const PROCESSOS_COTACOES_STORAGE_KEY = "jc_bauer_processos_cotacoes_v1";
 
 interface DiarioObraRegistro {
   id: string;
@@ -355,6 +356,38 @@ interface FornecedorCotadoRapido {
   freteValor: number;
   descontoValor?: number;
 }
+
+const PROCESSOS_COTACOES_STORAGE_KEY = "jc_bauer_processos_cotacoes_v1";
+
+export interface ProcessoCotacao {
+  id: string;
+  codigo: string; // Ex: COT-2026-001
+  titulo: string;
+  obraId: string;
+  obraNome: string;
+  categoria: string;
+  status:
+    | "Aguardando Fornecedores"
+    | "Em Análise"
+    | "Rascunho"
+    | "Concluída"
+    | "Cancelada";
+  dataCriacao: string;
+  dataAtualizacao: string;
+  fornecedores: [
+    FornecedorCotadoRapido,
+    FornecedorCotadoRapido,
+    FornecedorCotadoRapido
+  ];
+  itens: ItemComparativoRapido[];
+  savingGerado?: number;
+  menorValor?: number;
+  melhorFornecedorNome?: string;
+  observacoes?: string;
+  ordemCompraEmitidaId?: string;
+  numeroOcEmitida?: string;
+}
+
 
 interface ColaboradorMapeado {
   id: string;
@@ -1868,39 +1901,89 @@ export default function HomePage() {
       window.localStorage.removeItem("jc_bauer_comparativo_3orc_v2");
       window.localStorage.removeItem("jc_bauer_comparativo_3orc_v3");
 
-      const savedComp = window.localStorage.getItem(COMPARATIVO_STORAGE_KEY);
-      if (savedComp) {
+      // Carrega processos de cotações múltiplas salvas
+      let listaProcessos: ProcessoCotacao[] = [];
+      const savedProcessos = window.localStorage.getItem(
+        PROCESSOS_COTACOES_STORAGE_KEY
+      );
+      if (savedProcessos) {
         try {
-          const parsedComp = JSON.parse(savedComp);
-          if (parsedComp) {
-            if (parsedComp.titulo) setComparativoTitulo(parsedComp.titulo);
-            if (parsedComp.obraId) setComparativoObraId(parsedComp.obraId);
-            if (parsedComp.categoria && !parsedComp.categoria.includes("Estrutura (AÃ§o & Concreto)")) {
-              setComparativoCategoria(parsedComp.categoria);
-            }
-            if (Array.isArray(parsedComp.fornecedores) && parsedComp.fornecedores.length === 3) {
-              const isDemoForn = parsedComp.fornecedores[0]?.nome === "Fornecedor 1" && parsedComp.fornecedores[1]?.nome === "Fornecedor 2";
-              if (!isDemoForn) {
-                setComparativoFornecedores(parsedComp.fornecedores);
-              }
-            }
-            if (Array.isArray(parsedComp.itens) && parsedComp.itens.length > 0) {
-              const cleanItens = parsedComp.itens.filter(
-                (it: ItemComparativoRapido) =>
-                  it &&
-                  it.id !== "comp-item-1" &&
-                  it.id !== "comp-item-2" &&
-                  it.id !== "comp-item-3" &&
-                  !it.nome?.includes("Cimento CP-II") &&
-                  !it.nome?.includes("CA-50") &&
-                  !it.nome?.includes("Areia M")
-              );
-              setComparativoItens(cleanItens);
-            }
-          }
-        } catch {
-          // ignore
-        }
+          listaProcessos = JSON.parse(savedProcessos) || [];
+        } catch {}
+      }
+
+      // Se ainda não houver processos salvos, migra o comparativo existente ou cria o primeiro
+      if (!Array.isArray(listaProcessos) || listaProcessos.length === 0) {
+        const anoAtual = new Date().getFullYear();
+        const fornMigrados: [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido] =
+          Array.isArray(parsedComp?.fornecedores) &&
+          parsedComp.fornecedores.length === 3
+            ? parsedComp.fornecedores
+            : [
+                {
+                  nome: "",
+                  vendedor: "",
+                  telefone: "",
+                  prazo: "",
+                  condicao: "",
+                  freteTipo: "CIF",
+                  freteValor: 0,
+                  descontoValor: 0,
+                },
+                {
+                  nome: "",
+                  vendedor: "",
+                  telefone: "",
+                  prazo: "",
+                  condicao: "",
+                  freteTipo: "CIF",
+                  freteValor: 0,
+                  descontoValor: 0,
+                },
+                {
+                  nome: "",
+                  vendedor: "",
+                  telefone: "",
+                  prazo: "",
+                  condicao: "",
+                  freteTipo: "CIF",
+                  freteValor: 0,
+                  descontoValor: 0,
+                },
+              ];
+        const itensMigrados: ItemComparativoRapido[] = Array.isArray(
+          parsedComp?.itens
+        )
+          ? parsedComp.itens
+          : [];
+
+        const primeiraCotacao: ProcessoCotacao = {
+          id: `cot-${Date.now()}`,
+          codigo: `COT-${anoAtual}-001`,
+          titulo: parsedComp?.titulo || "Cotação de Insumos #001",
+          obraId: parsedComp?.obraId || "",
+          obraNome: "Todas as Obras / Canteiro Central",
+          categoria: parsedComp?.categoria || "Revestimentos, Louças & Metais",
+          status: "Aguardando Fornecedores",
+          dataCriacao: new Date().toLocaleDateString("pt-BR"),
+          dataAtualizacao: new Date().toLocaleDateString("pt-BR"),
+          fornecedores: fornMigrados,
+          itens: itensMigrados,
+        };
+        listaProcessos = [primeiraCotacao];
+      }
+
+      setProcessosCotacoes(listaProcessos);
+      const ativa = listaProcessos[0];
+      if (ativa) {
+        setCotacaoAtivaId(ativa.id);
+        setComparativoTitulo(ativa.titulo);
+        setComparativoObraId(ativa.obraId || "");
+        setComparativoCategoria(
+          ativa.categoria || "Revestimentos, Louças & Metais"
+        );
+        setComparativoFornecedores(ativa.fornecedores);
+        setComparativoItens(ativa.itens);
       }
       const savedSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
       if (savedSession) {
@@ -2046,6 +2129,7 @@ export default function HomePage() {
       await salvarChaveSupabase(ITENS_PLANILHA_STORAGE_KEY, itensPlanilha);
       if (comparativoSalvo) {
         await salvarChaveSupabase(COMPARATIVO_STORAGE_KEY, comparativoSalvo);
+      await salvarChaveSupabase(PROCESSOS_COTACOES_STORAGE_KEY, processosCotacoes);
       }
       await sincronizarFornecedoresRelacional(fornecedores);
 
@@ -2376,8 +2460,10 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
     }
   }, [duplicidades, storageCarregado]);
 
+  // Sincroniza e salva cotaÃ§Ãµes continuamente em tempo real
   useEffect(() => {
     if (!storageCarregado) return;
+
     try {
       const dadosSalvar = {
         titulo: comparativoTitulo,
@@ -2390,15 +2476,101 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
         COMPARATIVO_STORAGE_KEY,
         JSON.stringify(dadosSalvar)
       );
-    } catch {
-      // ignore
-    }
+    } catch {}
+
+    if (!cotacaoAtivaId) return;
+
+    setProcessosCotacoes((prev) => {
+      const idx = prev.findIndex((p) => p.id === cotacaoAtivaId);
+      if (idx === -1) return prev;
+
+      const atual = prev[idx];
+      const obraSel = obras.find((o) => o.id === comparativoObraId);
+
+      const t1 = Math.max(
+        0,
+        comparativoItens.reduce(
+          (acc, it) => acc + (it.quantidade || 0) * (it.preco1 || 0),
+          0
+        ) +
+          (comparativoFornecedores[0]?.freteValor || 0) -
+          (comparativoFornecedores[0]?.descontoValor || 0)
+      );
+      const t2 = Math.max(
+        0,
+        comparativoItens.reduce(
+          (acc, it) => acc + (it.quantidade || 0) * (it.preco2 || 0),
+          0
+        ) +
+          (comparativoFornecedores[1]?.freteValor || 0) -
+          (comparativoFornecedores[1]?.descontoValor || 0)
+      );
+      const t3 = Math.max(
+        0,
+        comparativoItens.reduce(
+          (acc, it) => acc + (it.quantidade || 0) * (it.preco3 || 0),
+          0
+        ) +
+          (comparativoFornecedores[2]?.freteValor || 0) -
+          (comparativoFornecedores[2]?.descontoValor || 0)
+      );
+
+      const validos = [
+        { nome: comparativoFornecedores[0]?.nome, total: t1 },
+        { nome: comparativoFornecedores[1]?.nome, total: t2 },
+        { nome: comparativoFornecedores[2]?.nome, total: t3 },
+      ].filter((f) => f.total > 0 && f.nome && f.nome.trim() !== "");
+
+      let menorVal = 0;
+      let melhorNome = "";
+      if (validos.length > 0) {
+        validos.sort((a, b) => a.total - b.total);
+        menorVal = validos[0].total;
+        melhorNome = validos[0].nome;
+      }
+
+      const atualizado: ProcessoCotacao = {
+        ...atual,
+        titulo: comparativoTitulo || atual.titulo,
+        obraId: comparativoObraId,
+        obraNome: obraSel?.nome || "Todas as Obras / Canteiro Central",
+        categoria: comparativoCategoria || atual.categoria,
+        fornecedores: comparativoFornecedores,
+        itens: comparativoItens,
+        menorValor: menorVal,
+        melhorFornecedorNome: melhorNome,
+        savingGerado: resumoComparativo?.savingGlobal || 0,
+        dataAtualizacao:
+          new Date().toLocaleDateString("pt-BR") +
+          " " +
+          new Date().toLocaleTimeString("pt-BR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+      };
+
+      const novaLista = [...prev];
+      novaLista[idx] = atualizado;
+
+      try {
+        window.localStorage.setItem(
+          PROCESSOS_COTACOES_STORAGE_KEY,
+          JSON.stringify(novaLista)
+        );
+        salvarChaveSupabase(PROCESSOS_COTACOES_STORAGE_KEY, novaLista).catch(
+          () => {}
+        );
+      } catch {}
+
+      return novaLista;
+    });
   }, [
     comparativoTitulo,
     comparativoObraId,
     comparativoCategoria,
     comparativoFornecedores,
     comparativoItens,
+    cotacaoAtivaId,
     storageCarregado,
   ]);
 
@@ -4682,7 +4854,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
     if (total <= 0) {
       dispararAviso(
-        "Insira preços válidos para este fornecedor antes de emitir a Ordem de Compra."
+        "Insira preÃ§os vÃ¡lidos para este fornecedor antes de emitir a Ordem de Compra."
       );
       return;
     }
@@ -4694,24 +4866,24 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
     const proximaSeq = ordens.length + 1;
     const anoAtual = new Date().getFullYear();
-    const numeroOcFormatado = `OC-${anoAtual}-${String(proximaSeq).padStart(
+    const numeroOcFormatado = OC-${anoAtual}-${String(proximaSeq).padStart(
       3,
       "0"
-    )}`;
+    )};
 
     const novaOc: OrdemCompra = {
-      id: `oc-comp-${Date.now()}`,
+      id: oc-comp-${Date.now()},
       numeroOc: numeroOcFormatado,
-      scId: `sc-comp-${Date.now()}`,
-      scCodigo: `COMP-3ORC`,
+      scId: sc-comp-${Date.now()},
+      scCodigo: COMP-3ORC,
       obraId: obraSel?.id || "obra-1",
       obraNome: obraSel?.nome || "Empreendimento JC BAUER",
       obraEndereco: obraSel?.endereco || "Canteiro Central de Obras",
       obraEngenheiro: obraSel?.engenheiro || "Engenharia JC BAUER",
       categoria: comparativoCategoria || "Geral / Suprimentos",
-      fornecedorNome: forn.nome || `Fornecedor ${fornIndex + 1}`,
+      fornecedorNome: forn.nome || Fornecedor ${fornIndex + 1},
       fornecedorRazao:
-        fornCrm?.razaoSocial || forn.nome || `Fornecedor ${fornIndex + 1}`,
+        fornCrm?.razaoSocial || forn.nome || Fornecedor ${fornIndex + 1},
       fornecedorCnpj: fornCrm?.cnpj || "",
       vendedorNome: forn.vendedor || "",
       whatsapp: forn.telefone || "",
@@ -4734,8 +4906,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             ? it.preco2
             : it.preco3;
         return {
-          codigo: `MAT-${idx + 1}`,
-          descricao: it.nome || `Insumo #${idx + 1}`,
+          codigo: MAT-${idx + 1},
+          descricao: it.nome || Insumo #${idx + 1},
           unidade: it.unidade || "un",
           quantidade: it.quantidade || 1,
           precoUnitario: unit,
@@ -4745,26 +4917,379 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     };
 
     setOrdens((prev) => [novaOc, ...prev]);
+
+    // Marca a cotaÃ§Ã£o ativa como ConcluÃ­da no histÃ³rico mantendo todas as propostas intactas
+    if (cotacaoAtivaId) {
+      setProcessosCotacoes((prev) => {
+        const list = prev.map((p) =>
+          p.id === cotacaoAtivaId
+            ? {
+                ...p,
+                status: "ConcluÃ­da" as const,
+                ordemCompraEmitidaId: novaOc.id,
+                numeroOcEmitida: novaOc.numeroOc,
+                menorValor: total,
+                melhorFornecedorNome: forn.nome,
+                dataAtualizacao:
+                  new Date().toLocaleDateString("pt-BR") +
+                  " " +
+                  new Date().toLocaleTimeString("pt-BR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }),
+              }
+            : p
+        );
+        try {
+          window.localStorage.setItem(
+            PROCESSOS_COTACOES_STORAGE_KEY,
+            JSON.stringify(list)
+          );
+          salvarChaveSupabase(PROCESSOS_COTACOES_STORAGE_KEY, list).catch(
+            () => {}
+          );
+        } catch {}
+        return list;
+      });
+    }
+
     dispararAviso(
-      `Ordem de Compra ${novaOc.numeroOc} emitida com sucesso para "${forn.nome}"!`
+      Ordem de Compra ${novaOc.numeroOc} emitida com sucesso para ""! O mapa comparativo foi salvo no histÃ³rico com todas as propostas.
     );
     setActiveTab("Ordens");
     setOrdemVisualizarModal(novaOc);
   };
 
   const handleLimparComparativo = () => {
-    if (window.confirm("Deseja zerar todos os itens e preÃ§os da cotaÃ§Ã£o para iniciar limpo?")) {
-      setComparativoItens([]);
-      setComparativoTitulo("");
-      setComparativoFornecedores([
-        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
-        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
-        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
-      ]);
-      try { window.localStorage.removeItem(COMPARATIVO_STORAGE_KEY); } catch {}
-      dispararAviso("Quadro comparativo zerado com sucesso! Nenhum item pendente.");
+    if (
+      window.confirm(
+        "Deseja iniciar uma NOVA COTAÃ‡ÃƒO em branco (mantendo a atual salva no histÃ³rico)?\n\n- Clique em [OK] para abrir uma Nova CotaÃ§Ã£o sem perder a atual.\n- Clique em [Cancelar] se desejava manter a cotaÃ§Ã£o na tela."
+      )
+    ) {
+      handleCriarNovaCotacao();
     }
   };
+
+  /* ----------------------------------------------------------------------- */
+  /* GESTÃO DE MÚLTIPLAS COTAÇÕES SIMULTÂNEAS (PROCESSOS EM ANDAMENTO)      */
+  /* ----------------------------------------------------------------------- */
+  const handleCriarNovaCotacao = () => {
+    const anoAtual = new Date().getFullYear();
+    const proximoSeq = processosCotacoes.length + 1;
+    const codigo = `COT-${anoAtual}-${String(proximoSeq).padStart(3, "0")}`;
+
+    const nova: ProcessoCotacao = {
+      id: `cot-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      codigo,
+      titulo: `Cotação de Insumos #${String(proximoSeq).padStart(3, "0")}`,
+      obraId: comparativoObraId || (obras[0]?.id ?? ""),
+      obraNome:
+        obras.find((o) => o.id === comparativoObraId)?.nome ||
+        "Todas as Obras / Canteiro Central",
+      categoria: comparativoCategoria || "Geral / Suprimentos",
+      status: "Aguardando Fornecedores",
+      dataCriacao: new Date().toLocaleDateString("pt-BR"),
+      dataAtualizacao:
+        new Date().toLocaleDateString("pt-BR") +
+        " " +
+        new Date().toLocaleTimeString("pt-BR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      fornecedores: [
+        {
+          nome: "",
+          vendedor: "",
+          telefone: "",
+          prazo: "",
+          condicao: "",
+          freteTipo: "CIF",
+          freteValor: 0,
+          descontoValor: 0,
+        },
+        {
+          nome: "",
+          vendedor: "",
+          telefone: "",
+          prazo: "",
+          condicao: "",
+          freteTipo: "CIF",
+          freteValor: 0,
+          descontoValor: 0,
+        },
+        {
+          nome: "",
+          vendedor: "",
+          telefone: "",
+          prazo: "",
+          condicao: "",
+          freteTipo: "CIF",
+          freteValor: 0,
+          descontoValor: 0,
+        },
+      ],
+      itens: [],
+    };
+
+    setProcessosCotacoes((prev) => {
+      const list = [nova, ...prev];
+      try {
+        window.localStorage.setItem(
+          PROCESSOS_COTACOES_STORAGE_KEY,
+          JSON.stringify(list)
+        );
+        salvarChaveSupabase(PROCESSOS_COTACOES_STORAGE_KEY, list).catch(
+          () => {}
+        );
+      } catch {}
+      return list;
+    });
+
+    // Carrega a nova cotação limpa no quadro ativo
+    setCotacaoAtivaId(nova.id);
+    setComparativoTitulo(nova.titulo);
+    setComparativoObraId(nova.obraId);
+    setComparativoCategoria(nova.categoria);
+    setComparativoFornecedores(nova.fornecedores);
+    setComparativoItens(nova.itens);
+    setModoCotacoes("comparativo_rapido");
+
+    dispararAviso(
+      `Nova cotação ${nova.codigo} aberta com sucesso! As demais cotações permanecem salvas.`
+    );
+  };
+
+  const handleTrocarCotacaoAtiva = (targetId: string) => {
+    const alvo = processosCotacoes.find((p) => p.id === targetId);
+    if (!alvo) return;
+
+    setCotacaoAtivaId(alvo.id);
+    setComparativoTitulo(alvo.titulo || "");
+    setComparativoObraId(alvo.obraId || "");
+    setComparativoCategoria(alvo.categoria || "Geral / Suprimentos");
+    setComparativoFornecedores(
+      alvo.fornecedores || [
+        {
+          nome: "",
+          vendedor: "",
+          telefone: "",
+          prazo: "",
+          condicao: "",
+          freteTipo: "CIF",
+          freteValor: 0,
+          descontoValor: 0,
+        },
+        {
+          nome: "",
+          vendedor: "",
+          telefone: "",
+          prazo: "",
+          condicao: "",
+          freteTipo: "CIF",
+          freteValor: 0,
+          descontoValor: 0,
+        },
+        {
+          nome: "",
+          vendedor: "",
+          telefone: "",
+          prazo: "",
+          condicao: "",
+          freteTipo: "CIF",
+          freteValor: 0,
+          descontoValor: 0,
+        },
+      ]
+    );
+    setComparativoItens(alvo.itens || []);
+
+    if (modoCotacoes !== "comparativo_rapido") {
+      setModoCotacoes("comparativo_rapido");
+    }
+
+    dispararAviso(
+      `Cotação ${alvo.codigo} ("${alvo.titulo}") carregada no comparativo!`
+    );
+  };
+
+  const handleDuplicarCotacao = (idParaDuplicar: string) => {
+    const origem = processosCotacoes.find((p) => p.id === idParaDuplicar);
+    if (!origem) return;
+
+    const anoAtual = new Date().getFullYear();
+    const proximoSeq = processosCotacoes.length + 1;
+    const codigo = `COT-${anoAtual}-${String(proximoSeq).padStart(3, "0")}`;
+
+    const copia: ProcessoCotacao = {
+      id: `cot-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      codigo,
+      titulo: `${origem.titulo} (Cópia)`,
+      obraId: origem.obraId,
+      obraNome: origem.obraNome,
+      categoria: origem.categoria,
+      status: "Rascunho",
+      dataCriacao: new Date().toLocaleDateString("pt-BR"),
+      dataAtualizacao: new Date().toLocaleDateString("pt-BR"),
+      fornecedores: [
+        {
+          nome: "",
+          vendedor: "",
+          telefone: "",
+          prazo: "",
+          condicao: "",
+          freteTipo: "CIF",
+          freteValor: 0,
+          descontoValor: 0,
+        },
+        {
+          nome: "",
+          vendedor: "",
+          telefone: "",
+          prazo: "",
+          condicao: "",
+          freteTipo: "CIF",
+          freteValor: 0,
+          descontoValor: 0,
+        },
+        {
+          nome: "",
+          vendedor: "",
+          telefone: "",
+          prazo: "",
+          condicao: "",
+          freteTipo: "CIF",
+          freteValor: 0,
+          descontoValor: 0,
+        },
+      ],
+      // Copia a lista de itens preservando quantidades e unidades, zerando preços cotados para nova negociação
+      itens: (origem.itens || []).map((it, idx) => ({
+        id: `item-dup-${Date.now()}-${idx}`,
+        nome: it.nome,
+        quantidade: it.quantidade,
+        unidade: it.unidade,
+        preco1: 0,
+        preco2: 0,
+        preco3: 0,
+      })),
+    };
+
+    setProcessosCotacoes((prev) => {
+      const list = [copia, ...prev];
+      try {
+        window.localStorage.setItem(
+          PROCESSOS_COTACOES_STORAGE_KEY,
+          JSON.stringify(list)
+        );
+        salvarChaveSupabase(PROCESSOS_COTACOES_STORAGE_KEY, list).catch(
+          () => {}
+        );
+      } catch {}
+      return list;
+    });
+
+    setCotacaoAtivaId(copia.id);
+    setComparativoTitulo(copia.titulo);
+    setComparativoObraId(copia.obraId);
+    setComparativoCategoria(copia.categoria);
+    setComparativoFornecedores(copia.fornecedores);
+    setComparativoItens(copia.itens);
+    setModoCotacoes("comparativo_rapido");
+
+    dispararAviso(
+      `Cotação duplicada como ${copia.codigo}! Itens preservados e preços zerados para nova rodada de fornecedores.`
+    );
+  };
+
+  const handleMudarStatusCotacao = (
+    id: string,
+    novoStatus: ProcessoCotacao["status"]
+  ) => {
+    setProcessosCotacoes((prev) => {
+      const list = prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              status: novoStatus,
+              dataAtualizacao:
+                new Date().toLocaleDateString("pt-BR") +
+                " " +
+                new Date().toLocaleTimeString("pt-BR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+            }
+          : p
+      );
+      try {
+        window.localStorage.setItem(
+          PROCESSOS_COTACOES_STORAGE_KEY,
+          JSON.stringify(list)
+        );
+        salvarChaveSupabase(PROCESSOS_COTACOES_STORAGE_KEY, list).catch(
+          () => {}
+        );
+      } catch {}
+      return list;
+    });
+    dispararAviso(`Status da cotação atualizado para "${novoStatus}"!`);
+  };
+
+  const handleExcluirCotacao = (id: string) => {
+    if (processosCotacoes.length <= 1) {
+      dispararAviso(
+        "Você precisa manter ao menos um processo de cotação ativo no sistema."
+      );
+      return;
+    }
+    const alvo = processosCotacoes.find((p) => p.id === id);
+    if (
+      !window.confirm(
+        `Tem certeza que deseja excluir a cotação ${alvo?.codigo || ""} ("${
+          alvo?.titulo || ""
+        }")?\nEsta ação não poderá ser desfeita.`
+      )
+    ) {
+      return;
+    }
+
+    const restate = processosCotacoes.filter((p) => p.id !== id);
+    setProcessosCotacoes(restate);
+    try {
+      window.localStorage.setItem(
+        PROCESSOS_COTACOES_STORAGE_KEY,
+        JSON.stringify(restate)
+      );
+      salvarChaveSupabase(PROCESSOS_COTACOES_STORAGE_KEY, restate).catch(
+        () => {}
+      );
+    } catch {}
+
+    if (cotacaoAtivaId === id && restate.length > 0) {
+      handleTrocarCotacaoAtiva(restate[0].id);
+    }
+
+    dispararAviso("Cotação excluída com sucesso.");
+  };
+
+  const handleSalvarCotacaoManual = () => {
+    try {
+      window.localStorage.setItem(
+        PROCESSOS_COTACOES_STORAGE_KEY,
+        JSON.stringify(processosCotacoes)
+      );
+      salvarChaveSupabase(
+        PROCESSOS_COTACOES_STORAGE_KEY,
+        processosCotacoes
+      ).catch(() => {});
+      dispararAviso(
+        "Cotação salva com sucesso no banco de dados e sincronizada na nuvem!"
+      );
+    } catch {
+      dispararAviso("Erro ao salvar cotação.");
+    }
+  };
+
 
   const handleUploadItensComparativo = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -4937,13 +5462,62 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     XLSX.writeFile(wb, fileName);
     dispararAviso("Planilha do comparativo exportada com sucesso!");
   };
-  const handleGerarComparativoRapidoPDF = () => {
-    if (comparativoItens.length === 0) {
+  const handleGerarComparativoRapidoPDF = (processoParam?: ProcessoCotacao) => {
+    const itensAlvo = processoParam ? (processoParam.itens || []) : comparativoItens;
+    const tituloAlvo = processoParam ? (processoParam.titulo || "Cotação de Suprimentos") : (comparativoTitulo || "Cotação de Suprimentos");
+    const obraIdAlvo = processoParam ? processoParam.obraId : comparativoObraId;
+    const categoriaAlvo = processoParam ? processoParam.categoria : comparativoCategoria;
+    const fornecedoresAlvo: [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido] = processoParam ? processoParam.fornecedores : comparativoFornecedores;
+
+    if (!itensAlvo || itensAlvo.length === 0) {
       dispararAviso("Adicione ao menos um insumo na cotação para gerar a impressão ou PDF.");
       return;
     }
-    const obraSel = obras.find((o) => o.id === comparativoObraId) || obras[0];
+
+    const obraSel = obras.find((o) => o.id === obraIdAlvo) || obras[0];
     const dataHoje = new Date().toLocaleDateString("pt-BR");
+
+    const subtotal1 = itensAlvo.reduce((acc, it) => acc + (it.quantidade || 0) * (it.preco1 || 0), 0);
+    const subtotal2 = itensAlvo.reduce((acc, it) => acc + (it.quantidade || 0) * (it.preco2 || 0), 0);
+    const subtotal3 = itensAlvo.reduce((acc, it) => acc + (it.quantidade || 0) * (it.preco3 || 0), 0);
+
+    const total1 = Math.max(0, subtotal1 + (fornecedoresAlvo[0]?.freteValor || 0) - (fornecedoresAlvo[0]?.descontoValor || 0));
+    const total2 = Math.max(0, subtotal2 + (fornecedoresAlvo[1]?.freteValor || 0) - (fornecedoresAlvo[1]?.descontoValor || 0));
+    const total3 = Math.max(0, subtotal3 + (fornecedoresAlvo[2]?.freteValor || 0) - (fornecedoresAlvo[2]?.descontoValor || 0));
+
+    const validos = [
+      { nome: fornecedoresAlvo[0]?.nome || "Fornecedor 1", total: total1, index: 0 },
+      { nome: fornecedoresAlvo[1]?.nome || "Fornecedor 2", total: total2, index: 1 },
+      { nome: fornecedoresAlvo[2]?.nome || "Fornecedor 3", total: total3, index: 2 },
+    ].filter((f) => f.total > 0 && f.nome && f.nome.trim() !== "");
+
+    let vencedorGeral: { nome: string; total: number; index: number } | null = null;
+    let savingGlobal = 0;
+    if (validos.length > 0) {
+      validos.sort((a, b) => a.total - b.total);
+      vencedorGeral = validos[0];
+      const maiorVal = validos[validos.length - 1].total;
+      savingGlobal = Math.max(0, maiorVal - vencedorGeral.total);
+    }
+
+    const itensCalculados = itensAlvo.map((it) => {
+      const q = it.quantidade || 0;
+      const t1 = q * (it.preco1 || 0);
+      const t2 = q * (it.preco2 || 0);
+      const t3 = q * (it.preco3 || 0);
+      const precValidos = [it.preco1, it.preco2, it.preco3].filter((p) => Number(p) > 0);
+      const menorPreco = precValidos.length > 0 ? Math.min(...precValidos) : 0;
+      return {
+        ...it,
+        tot1: t1,
+        tot2: t2,
+        tot3: t3,
+        vencedor1: Number(it.preco1) > 0 && it.preco1 === menorPreco,
+        vencedor2: Number(it.preco2) > 0 && it.preco2 === menorPreco,
+        vencedor3: Number(it.preco3) > 0 && it.preco3 === menorPreco,
+      };
+    });
+
     const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -5004,20 +5578,20 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     <div class="meta">
       <strong>Data de Emissão:</strong> ${dataHoje}<br>
       <strong>Empreendimento:</strong> ${obraSel?.nome || "Todas as Obras"}<br>
-      <strong>Categoria:</strong> ${comparativoCategoria}<br>
+      <strong>Categoria:</strong> ${categoriaAlvo}<br>
       ${settings.companyCnpj ? `<strong>CNPJ:</strong> ${settings.companyCnpj}` : ""}
     </div>
   </div>
   <div class="info-bar">
-    <div class="info-item">Objeto da Cotação:<strong>${comparativoTitulo || "Cotação de Suprimentos"}</strong></div>
+    <div class="info-item">Objeto da Cotação:<strong>${tituloAlvo}</strong></div>
     <div class="info-item">Comprador Responsável:<strong>${settings.userName}</strong></div>
-    <div class="info-item">Vencedor Recomendado:<strong>${resumoComparativo.vencedorGeral?.nome || "A definir"}</strong></div>
-    <div class="info-item">Saving Apurado:<strong>${formatBRL(resumoComparativo.savingGlobal)}</strong></div>
+    <div class="info-item">Vencedor Recomendado:<strong>${vencedorGeral?.nome || "A definir"}</strong></div>
+    <div class="info-item">Saving Apurado:<strong>${formatBRL(savingGlobal)}</strong></div>
   </div>
   <div class="kpi-row">
-    ${comparativoFornecedores.map((f, i) => {
-        const tot = i === 0 ? resumoComparativo.total1 : i === 1 ? resumoComparativo.total2 : resumoComparativo.total3;
-        const isVencedor = resumoComparativo.vencedorGeral?.index === i;
+    ${fornecedoresAlvo.map((f, i) => {
+        const tot = i === 0 ? total1 : i === 1 ? total2 : total3;
+        const isVencedor = vencedorGeral?.index === i;
         return `
         <div class="kpi-card ${isVencedor ? 'vencedor' : ''}">
           <div class="kpi-title">${isVencedor ? "🏆 1º Lugar (Mais em Conta)" : `Orçamento ${i + 1}`}</div>
@@ -5035,13 +5609,13 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       <tr>
         <th style="width: 30%;">Insumo / Material</th>
         <th class="text-center" style="width: 12%;">Qtd & Unid</th>
-        <th class="text-right" style="width: 19%;">${comparativoFornecedores?.[0]?.nome || "Fornecedor 1"}</th>
-        <th class="text-right" style="width: 19%;">${comparativoFornecedores?.[1]?.nome || "Fornecedor 2"}</th>
-        <th class="text-right" style="width: 19%;">${comparativoFornecedores?.[2]?.nome || "Fornecedor 3"}</th>
+        <th class="text-right" style="width: 19%;">${fornecedoresAlvo?.[0]?.nome || "Fornecedor 1"}</th>
+        <th class="text-right" style="width: 19%;">${fornecedoresAlvo?.[1]?.nome || "Fornecedor 2"}</th>
+        <th class="text-right" style="width: 19%;">${fornecedoresAlvo?.[2]?.nome || "Fornecedor 3"}</th>
       </tr>
     </thead>
     <tbody>
-      ${resumoComparativo.itensCalculados.map((it) => `
+      ${itensCalculados.map((it) => `
         <tr>
           <td><strong>${it.nome}</strong></td>
           <td class="text-center">${it.quantidade} ${it.unidade}</td>
@@ -5060,27 +5634,27 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     <tfoot>
       <tr style="background: #f8fafc; font-weight: 700;">
         <td colspan="2">Subtotal dos Materiais</td>
-        <td class="text-right">${formatBRL(resumoComparativo.subtotal1)}</td>
-        <td class="text-right">${formatBRL(resumoComparativo.subtotal2)}</td>
-        <td class="text-right">${formatBRL(resumoComparativo.subtotal3)}</td>
+        <td class="text-right">${formatBRL(subtotal1)}</td>
+        <td class="text-right">${formatBRL(subtotal2)}</td>
+        <td class="text-right">${formatBRL(subtotal3)}</td>
       </tr>
       <tr style="background: #f8fafc;">
         <td colspan="2">Desconto Comercial (R$)</td>
-        <td class="text-right" style="color: #16a34a;">-${formatBRL(comparativoFornecedores?.[0]?.descontoValor || 0)}</td>
-        <td class="text-right" style="color: #16a34a;">-${formatBRL(comparativoFornecedores?.[1]?.descontoValor || 0)}</td>
-        <td class="text-right" style="color: #16a34a;">-${formatBRL(comparativoFornecedores?.[2]?.descontoValor || 0)}</td>
+        <td class="text-right" style="color: #16a34a;">-${formatBRL(fornecedoresAlvo?.[0]?.descontoValor || 0)}</td>
+        <td class="text-right" style="color: #16a34a;">-${formatBRL(fornecedoresAlvo?.[1]?.descontoValor || 0)}</td>
+        <td class="text-right" style="color: #16a34a;">-${formatBRL(fornecedoresAlvo?.[2]?.descontoValor || 0)}</td>
       </tr>
       <tr style="background: #f8fafc;">
         <td colspan="2">Frete (CIF / FOB)</td>
-        <td class="text-right">${comparativoFornecedores?.[0]?.freteTipo || "CIF"} (${formatBRL(comparativoFornecedores?.[0]?.freteValor || 0)})</td>
-        <td class="text-right">${comparativoFornecedores?.[1]?.freteTipo || "CIF"} (${formatBRL(comparativoFornecedores?.[1]?.freteValor || 0)})</td>
-        <td class="text-right">${comparativoFornecedores?.[2]?.freteTipo || "CIF"} (${formatBRL(comparativoFornecedores?.[2]?.freteValor || 0)})</td>
+        <td class="text-right">${fornecedoresAlvo?.[0]?.freteTipo || "CIF"} (${formatBRL(fornecedoresAlvo?.[0]?.freteValor || 0)})</td>
+        <td class="text-right">${fornecedoresAlvo?.[1]?.freteTipo || "CIF"} (${formatBRL(fornecedoresAlvo?.[1]?.freteValor || 0)})</td>
+        <td class="text-right">${fornecedoresAlvo?.[2]?.freteTipo || "CIF"} (${formatBRL(fornecedoresAlvo?.[2]?.freteValor || 0)})</td>
       </tr>
       <tr style="background: #0f172a; color: #ffffff; font-weight: 800; font-size: 11px;">
         <td colspan="2" style="border-color: #0f172a;">VALOR TOTAL FINAL (COM FRETE E DESCONTO)</td>
-        <td class="text-right" style="border-color: #0f172a;">${formatBRL(resumoComparativo.total1)}</td>
-        <td class="text-right" style="border-color: #0f172a;">${formatBRL(resumoComparativo.total2)}</td>
-        <td class="text-right" style="border-color: #0f172a;">${formatBRL(resumoComparativo.total3)}</td>
+        <td class="text-right" style="border-color: #0f172a;">${formatBRL(total1)}</td>
+        <td class="text-right" style="border-color: #0f172a;">${formatBRL(total2)}</td>
+        <td class="text-right" style="border-color: #0f172a;">${formatBRL(total3)}</td>
       </tr>
     </tfoot>
   </table>
@@ -5098,18 +5672,6 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       Aprovação Financeira
     </div>
   </div>
-  <script>
-    window.onload = function() {
-      setTimeout(function() {
-        try {
-          window.focus();
-          window.print();
-        } catch (err) {
-          console.warn("Impressão automática bloqueada pelo navegador:", err);
-        }
-      }, 350);
-    };
-  </script>
 </body>
 </html>`;
     imprimirDocumentoHtml(html);
@@ -8065,24 +8627,35 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                   <button
                     type="button"
                     onClick={() => setModoCotacoes("comparativo_rapido")}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+                    className={px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
                       modoCotacoes === "comparativo_rapido"
                         ? "bg-slate-900 text-white shadow-xs"
                         : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                    }`}
+                    }}
                   >
-                    <span>⚖️</span> Comparativo de 3 Orçamentos (Rápido)
+                    <span>âš–ï¸</span> Comparativo de 3 OrÃ§amentos (RÃ¡pido)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModoCotacoes("painel_cotacoes")}
+                    className={px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+                      modoCotacoes === "painel_cotacoes"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    }}
+                  >
+                    <span>ðŸ“‚</span> Central de CotaÃ§Ãµes Salvas ({processosCotacoes.length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setModoCotacoes("solicitacoes_obra")}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+                    className={px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
                       modoCotacoes === "solicitacoes_obra"
                         ? "bg-slate-900 text-white shadow-xs"
                         : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                    }`}
+                    }}
                   >
-                    <span>📋</span> Cotações Vinculadas a Obras ({solicitacoes.length})
+                    <span>ðŸ“‹</span> CotaÃ§Ãµes Vinculadas a Obras ({solicitacoes.length})
                   </button>
                 </div>
 
@@ -8137,6 +8710,105 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               {/* MODO 1: COMPARATIVO RÁPIDO DE 3 ORÇAMENTOS (SEM BUROCRACIA) */}
               {modoCotacoes === "comparativo_rapido" && (
                 <div className="space-y-6">
+                  {/* Barra Superior de Gestão Multi-Cotações em Aberto */}
+                  <div className="bg-slate-900 border border-slate-800 text-white rounded-xl p-3.5 shadow-md flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+                      <div className="flex items-center gap-2">
+                        <span className="text-amber-400 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                          <span>⚖️</span> Cotação Ativa:
+                        </span>
+                        <select
+                          value={cotacaoAtivaId}
+                          onChange={(e) => handleTrocarCotacaoAtiva(e.target.value)}
+                          className="bg-slate-800 border border-slate-700 hover:border-slate-600 text-white text-xs font-bold rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-amber-400 outline-none max-w-xs md:max-w-md truncate"
+                        >
+                          {processosCotacoes.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.codigo} • {c.titulo || "Sem Título"} ({c.status})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Seletor de Status Direto */}
+                      <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700">
+                        <span className="text-[11px] font-medium text-slate-400">Status:</span>
+                        <select
+                          value={
+                            processosCotacoes.find((p) => p.id === cotacaoAtivaId)?.status ||
+                            "Aguardando Fornecedores"
+                          }
+                          onChange={(e) =>
+                            handleMudarStatusCotacao(cotacaoAtivaId, e.target.value as any)
+                          }
+                          className="bg-transparent text-xs font-bold outline-none cursor-pointer text-amber-300"
+                        >
+                          <option
+                            value="Aguardando Fornecedores"
+                            className="bg-slate-900 text-amber-300"
+                          >
+                            🟡 Aguardando Fornecedores
+                          </option>
+                          <option value="Em Análise" className="bg-slate-900 text-sky-300">
+                            🔵 Em Análise
+                          </option>
+                          <option value="Rascunho" className="bg-slate-900 text-slate-300">
+                            ⚪ Rascunho
+                          </option>
+                          <option value="Concluída" className="bg-slate-900 text-emerald-300">
+                            🟢 Concluída / OC Gerada
+                          </option>
+                          <option value="Cancelada" className="bg-slate-900 text-rose-300">
+                            🔴 Cancelada
+                          </option>
+                        </select>
+                      </div>
+
+                      <span className="text-[11px] text-slate-400 hidden xl:inline">
+                        ({processosCotacoes.length} cotaç
+                        {processosCotacoes.length === 1 ? "ão" : "ões"} salva
+                        {processosCotacoes.length === 1 ? "" : "s"} simultaneamente)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCriarNovaCotacao}
+                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+                        title="Criar uma nova cotação em branco sem fechar as outras"
+                      >
+                        <span>➕</span> Nova Cotação
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDuplicarCotacao(cotacaoAtivaId)}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Duplicar a lista de insumos desta cotação para uma nova rodada"
+                      >
+                        <span>📋</span> Duplicar Lista
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSalvarCotacaoManual}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Salvar alterações agora"
+                      >
+                        <span>💾</span> Salvar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setModoCotacoes("painel_cotacoes")}
+                        className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+                        title="Abrir o painel com todas as cotações em andamento"
+                      >
+                        <span>📂</span> Ver Painel de Cotações ({processosCotacoes.length})
+                      </button>
+                    </div>
+                  </div>
                   {/* Barra de Metadados da Cotação (Título, Obra, Categoria) */}
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -8967,6 +9639,380 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                   </div>
                 </div>
               )}
+              {/* MODO 3: PAINEL / CENTRAL DE COTAÇÕES SALVAS */}
+              {modoCotacoes === "painel_cotacoes" && (() => {
+                const totalCotacoes = processosCotacoes.length;
+                const aguardandoCount = processosCotacoes.filter(
+                  (c) => c.status === "Aguardando Fornecedores"
+                ).length;
+                const emAnaliseCount = processosCotacoes.filter(
+                  (c) => c.status === "Em Análise"
+                ).length;
+                const concluidasCount = processosCotacoes.filter(
+                  (c) => c.status === "Concluída"
+                ).length;
+
+                const cotacoesFiltradas = processosCotacoes.filter((c) => {
+                  if (filtroStatusCotacoes !== "TODAS" && c.status !== filtroStatusCotacoes) {
+                    return false;
+                  }
+                  if (buscaProcessosCotacoes.trim()) {
+                    const q = buscaProcessosCotacoes.toLowerCase();
+                    const matchCodigo = c.codigo.toLowerCase().includes(q);
+                    const matchTitulo = (c.titulo || "").toLowerCase().includes(q);
+                    const matchObra = (c.obraNome || "").toLowerCase().includes(q);
+                    const matchForn = (c.fornecedores || []).some(
+                      (f) =>
+                        f.nome?.toLowerCase().includes(q) ||
+                        f.vendedor?.toLowerCase().includes(q)
+                    );
+                    const matchItens = (c.itens || []).some((it) =>
+                      it.nome?.toLowerCase().includes(q)
+                    );
+                    return matchCodigo || matchTitulo || matchObra || matchForn || matchItens;
+                  }
+                  return true;
+                });
+
+                return (
+                  <div className="space-y-6">
+                    {/* Banner e Cards de Métricas de Cotações Concorrentes */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs">
+                        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          Total de Processos
+                        </div>
+                        <div className="text-2xl font-black text-slate-900 mt-1">
+                          {totalCotacoes}
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-1">
+                          Mapas comparativos registrados
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-xl border border-amber-200 p-4 shadow-xs bg-gradient-to-br from-amber-50/50 to-white">
+                        <div className="text-xs font-semibold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <span>🟡</span> Aguardando Resposta
+                        </div>
+                        <div className="text-2xl font-black text-amber-900 mt-1">
+                          {aguardandoCount}
+                        </div>
+                        <div className="text-[11px] text-amber-700 mt-1">
+                          Aguardando propostas de fornecedores
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-xl border border-sky-200 p-4 shadow-xs bg-gradient-to-br from-sky-50/50 to-white">
+                        <div className="text-xs font-semibold text-sky-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <span>🔵</span> Em Equalização
+                        </div>
+                        <div className="text-2xl font-black text-sky-900 mt-1">
+                          {emAnaliseCount}
+                        </div>
+                        <div className="text-[11px] text-sky-700 mt-1">
+                          Negociação de descontos e fretes
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-xl border border-emerald-200 p-4 shadow-xs bg-gradient-to-br from-emerald-50/50 to-white">
+                        <div className="text-xs font-semibold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <span>🟢</span> Concluídas / OC
+                        </div>
+                        <div className="text-2xl font-black text-emerald-900 mt-1">
+                          {concluidasCount}
+                        </div>
+                        <div className="text-[11px] text-emerald-700 mt-1">
+                          Ordens emitidas com saving apurado
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Barra de Busca + Filtro por Status + Botão Nova Cotação */}
+                    <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
+                        <div className="relative flex-1 min-w-[240px] max-w-md">
+                          <input
+                            type="text"
+                            value={buscaProcessosCotacoes}
+                            onChange={(e) => setBuscaProcessosCotacoes(e.target.value)}
+                            placeholder="Buscar cotação por código, título, fornecedor ou material..."
+                            className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-3 pr-8 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-900"
+                          />
+                          {buscaProcessosCotacoes && (
+                            <button
+                              type="button"
+                              onClick={() => setBuscaProcessosCotacoes("")}
+                              className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 text-xs"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+                          {[
+                            { id: "TODAS", label: `Todas (${totalCotacoes})` },
+                            {
+                              id: "Aguardando Fornecedores",
+                              label: `🟡 Aguardando (${aguardandoCount})`,
+                            },
+                            {
+                              id: "Em Análise",
+                              label: `🔵 Em Análise (${emAnaliseCount})`,
+                            },
+                            {
+                              id: "Concluída",
+                              label: `🟢 Concluídas (${concluidasCount})`,
+                            },
+                            {
+                              id: "Rascunho",
+                              label: `⚪ Rascunhos (${
+                                processosCotacoes.filter((c) => c.status === "Rascunho")
+                                  .length
+                              })`,
+                            },
+                          ].map((filtro) => (
+                            <button
+                              key={filtro.id}
+                              type="button"
+                              onClick={() => setFiltroStatusCotacoes(filtro.id)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+                                filtroStatusCotacoes === filtro.id
+                                  ? "bg-slate-900 text-white"
+                                  : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                              }`}
+                            >
+                              {filtro.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleCriarNovaCotacao}
+                          className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+                        >
+                          <span>➕</span> Nova Cotação
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Tabela de Processos de Cotação */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead className="bg-slate-100 text-slate-700 border-b border-slate-200">
+                            <tr>
+                              <th className="py-3 px-4 font-bold">Código</th>
+                              <th className="py-3 px-4 font-bold">Objeto / Cotação</th>
+                              <th className="py-3 px-4 font-bold">Obra & Categoria</th>
+                              <th className="py-3 px-4 font-bold">Fornecedores Cotados</th>
+                              <th className="py-3 px-4 font-bold text-center">Itens</th>
+                              <th className="py-3 px-4 font-bold">Menor Proposta / Vencedor</th>
+                              <th className="py-3 px-4 font-bold">Status</th>
+                              <th className="py-3 px-4 font-bold">Atualização</th>
+                              <th className="py-3 px-4 font-bold text-right">Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {cotacoesFiltradas.length === 0 ? (
+                              <tr>
+                                <td colSpan={9} className="py-12 text-center text-slate-500">
+                                  <div className="text-3xl mb-2">📂</div>
+                                  <p className="font-semibold text-slate-700">
+                                    Nenhuma cotação encontrada
+                                  </p>
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    {buscaProcessosCotacoes
+                                      ? "Tente ajustar o termo de pesquisa ou o filtro de status."
+                                      : "Clique em '+ Nova Cotação' para iniciar o seu primeiro comparativo."}
+                                  </p>
+                                </td>
+                              </tr>
+                            ) : (
+                              cotacoesFiltradas.map((c) => {
+                                const isAtiva = c.id === cotacaoAtivaId;
+                                const totalItens = (c.itens || []).length;
+                                const fornsPreenchidos = (c.fornecedores || []).filter(
+                                  (f) => f && f.nome && f.nome.trim() !== ""
+                                );
+
+                                return (
+                                  <tr
+                                    key={c.id}
+                                    className={`hover:bg-slate-50/80 transition ${
+                                      isAtiva ? "bg-amber-50/30" : ""
+                                    }`}
+                                  >
+                                    <td className="py-3.5 px-4 font-bold text-slate-900 whitespace-nowrap">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-mono text-xs">{c.codigo}</span>
+                                        {isAtiva && (
+                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-400 text-slate-950 uppercase">
+                                            Ativa
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+
+                                    <td className="py-3.5 px-4">
+                                      <div className="font-bold text-slate-900 max-w-xs truncate">
+                                        {c.titulo || "Sem Título"}
+                                      </div>
+                                      {c.numeroOcEmitida && (
+                                        <div className="text-[10px] text-emerald-700 font-semibold mt-0.5">
+                                          Vinculada à {c.numeroOcEmitida}
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    <td className="py-3.5 px-4 text-slate-600">
+                                      <div className="font-medium text-slate-800">
+                                        {c.obraNome || "Canteiro Central"}
+                                      </div>
+                                      <div className="text-[10px] text-slate-500">
+                                        {c.categoria || "Geral"}
+                                      </div>
+                                    </td>
+
+                                    <td className="py-3.5 px-4">
+                                      {fornsPreenchidos.length === 0 ? (
+                                        <span className="text-[11px] text-slate-400 italic">
+                                          Nenhum vinculado
+                                        </span>
+                                      ) : (
+                                        <div className="flex flex-wrap gap-1 max-w-xs">
+                                          {fornsPreenchidos.map((f, fi) => (
+                                            <span
+                                              key={fi}
+                                              className="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 rounded text-[10px] font-medium truncate max-w-[120px]"
+                                              title={f.nome}
+                                            >
+                                              {f.nome}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    <td className="py-3.5 px-4 text-center">
+                                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
+                                        {totalItens} {totalItens === 1 ? "insumo" : "insumos"}
+                                      </span>
+                                    </td>
+
+                                    <td className="py-3.5 px-4">
+                                      {Number(c.menorValor) > 0 ? (
+                                        <div>
+                                          <div className="font-black text-emerald-700 tabular-nums">
+                                            {formatBRL(c.menorValor || 0)}
+                                          </div>
+                                          {c.melhorFornecedorNome && (
+                                            <div className="text-[10px] text-slate-500 truncate max-w-[120px]">
+                                              1º lugar: {c.melhorFornecedorNome}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-[11px] text-slate-400">
+                                          Em cotação...
+                                        </span>
+                                      )}
+                                    </td>
+
+                                    <td className="py-3.5 px-4 whitespace-nowrap">
+                                      <select
+                                        value={c.status}
+                                        onChange={(e) =>
+                                          handleMudarStatusCotacao(
+                                            c.id,
+                                            e.target.value as any
+                                          )
+                                        }
+                                        className={`text-[11px] font-bold px-2 py-1 rounded-md border outline-none cursor-pointer ${
+                                          c.status === "Aguardando Fornecedores"
+                                            ? "bg-amber-50 text-amber-800 border-amber-300"
+                                            : c.status === "Em Análise"
+                                            ? "bg-sky-50 text-sky-800 border-sky-300"
+                                            : c.status === "Concluída"
+                                            ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                            : c.status === "Cancelada"
+                                            ? "bg-rose-50 text-rose-800 border-rose-300"
+                                            : "bg-slate-100 text-slate-700 border-slate-300"
+                                        }`}
+                                      >
+                                        <option value="Aguardando Fornecedores">
+                                          🟡 Aguardando
+                                        </option>
+                                        <option value="Em Análise">🔵 Em Análise</option>
+                                        <option value="Rascunho">⚪ Rascunho</option>
+                                        <option value="Concluída">🟢 Concluída</option>
+                                        <option value="Cancelada">🔴 Cancelada</option>
+                                      </select>
+                                    </td>
+
+                                    <td className="py-3.5 px-4 text-[11px] text-slate-500 whitespace-nowrap">
+                                      {c.dataAtualizacao || c.dataCriacao}
+                                    </td>
+
+                                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                      <div className="flex items-center justify-end gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleTrocarCotacaoAtiva(c.id)}
+                                          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                                            isAtiva
+                                              ? "bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xs"
+                                              : "bg-slate-900 hover:bg-slate-800 text-white"
+                                          }`}
+                                          title="Abrir no Mapa Comparativo para continuar cotando"
+                                        >
+                                          <span>⚡</span> {isAtiva ? "Editando" : "Abrir"}
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleGerarComparativoRapidoPDF(c)}
+                                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                                          title="Imprimir ou gerar PDF deste mapa"
+                                        >
+                                          📄
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDuplicarCotacao(c.id)}
+                                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                                          title="Duplicar insumos para uma nova cotação"
+                                        >
+                                          📋
+                                        </button>
+
+                                        {processosCotacoes.length > 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleExcluirCotacao(c.id)}
+                                            className="p-1.5 rounded-lg hover:bg-rose-100 text-rose-600 transition"
+                                            title="Excluir cotação"
+                                          >
+                                            🗑️
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* MODO 2: COTAÇÕES VINCULADAS A REQUISIÇÕES DE OBRA (SC) */}
               {modoCotacoes === "solicitacoes_obra" && (
