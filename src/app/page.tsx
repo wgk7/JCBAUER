@@ -121,6 +121,7 @@ const ITENS_PLANILHA_STORAGE_KEY = "jc_bauer_itens_planilha_v3";
 const DUPLICIDADES_STORAGE_KEY = "jc_bauer_duplicidades_v3";
 const COMPARATIVO_STORAGE_KEY = "jc_bauer_comparativo_3orc_v4";
 const PROCESSOS_COTACOES_STORAGE_KEY = "jc_bauer_processos_cotacoes_v1";
+const ESTOQUE_ALMOXARIFADO_STORAGE_KEY = "jc_bauer_estoque_almoxarifado_v1";
 
 interface DiarioObraRegistro {
   id: string;
@@ -1067,18 +1068,18 @@ function calcularClassificacaoAbc(
 ): Map<string, { classe: ClasseAbc; totalGeral: number; percentual: number }> {
   const mapa = new Map<string, number>();
 
-  ordens.forEach((o) => {
-    o.itens.forEach((it) => {
-      const desc = it.descricao.trim();
-      mapa.set(desc, (mapa.get(desc) || 0) + it.subtotal);
+  (ordens || []).forEach((o) => {
+    (o?.itens || []).forEach((it) => {
+      const desc = it?.descricao ? it.descricao.trim() : "";
+      if (desc) mapa.set(desc, (mapa.get(desc) || 0) + (it.subtotal || 0));
     });
   });
 
-  solicitacoes.forEach((s) => {
-    s.itens.forEach((it) => {
-      const desc = it.descricao.trim();
-      const val = it.quantidade * it.orcamentoUnitario;
-      mapa.set(desc, (mapa.get(desc) || 0) + val);
+  (solicitacoes || []).forEach((s) => {
+    (s?.itens || []).forEach((it) => {
+      const desc = it?.descricao ? it.descricao.trim() : "";
+      const val = (it?.quantidade || 0) * (it?.orcamentoUnitario || 0);
+      if (desc) mapa.set(desc, (mapa.get(desc) || 0) + val);
     });
   });
 
@@ -1116,8 +1117,9 @@ function buscarHistoricoInsumo(
   const descLimpa = descricaoItem.toLowerCase().trim();
   const comprasMatching: { preco: number; data: string; forn: string }[] = [];
 
-  ordens.forEach((oc) => {
-    oc.itens.forEach((it) => {
+  (ordens || []).forEach((oc) => {
+    (oc?.itens || []).forEach((it) => {
+      if (!it?.descricao) return;
       if (
         it.descricao.toLowerCase().includes(descLimpa) ||
         descLimpa.includes(it.descricao.toLowerCase())
