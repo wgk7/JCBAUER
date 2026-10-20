@@ -1240,6 +1240,8 @@ export default function HomePage() {
   const [filtroCatFornecedor, setFiltroCatFornecedor] = useState<string>("ALL");
   const [fornecedorFichaModal, setFornecedorFichaModal] =
     useState<FornecedorCadastro | null>(null);
+  const [fornecedorEditando, setFornecedorEditando] =
+    useState<FornecedorCadastro | null>(null);
   const [ordemVisualizarModal, setOrdemVisualizarModal] =
     useState<OrdemCompra | null>(null);
   const [filtroObraContratos, setFiltroObraContratos] =
@@ -3169,6 +3171,42 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   };
 
   // Upload real de planilha (.xlsx, .xls, .csv) sem limitação de linhas com mapeamento inteligente
+  const handleSalvarFornecedorEditado = (atualizado: FornecedorCadastro) => {
+    setFornecedores((prev) => {
+      const novos = prev.map((f) => (f.id === atualizado.id ? atualizado : f));
+      try {
+        window.localStorage.setItem(
+          FORNECEDORES_STORAGE_KEY,
+          JSON.stringify(novos)
+        );
+      } catch {}
+      return novos;
+    });
+    setFornecedorEditando(null);
+    if (fornecedorFichaModal?.id === atualizado.id) {
+      setFornecedorFichaModal(atualizado);
+    }
+    dispararAviso(`Cadastro de "${atualizado.empresa}" atualizado com sucesso!`);
+  };
+
+  const handleExcluirFornecedor = (id: string) => {
+    setFornecedores((prev) => {
+      const novos = prev.filter((f) => f.id !== id);
+      try {
+        window.localStorage.setItem(
+          FORNECEDORES_STORAGE_KEY,
+          JSON.stringify(novos)
+        );
+      } catch {}
+      return novos;
+    });
+    setFornecedorEditando(null);
+    if (fornecedorFichaModal?.id === id) {
+      setFornecedorFichaModal(null);
+    }
+    dispararAviso("Fornecedor removido com sucesso.");
+  };
+
   const handleUploadPlanilha = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const file = files[0];
@@ -8601,12 +8639,23 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             </div>
                           </td>
                           <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            <button
-                              onClick={() => setFornecedorFichaModal(f)}
-                              className="px-3 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-900 text-xs font-semibold transition"
-                            >
-                              Ver Ficha
-                            </button>
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setFornecedorEditando(f)}
+                                className="px-2.5 py-1.5 rounded-md bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs font-semibold transition flex items-center gap-1 shadow-xs"
+                                title="Editar dados e contatos deste fornecedor"
+                              >
+                                <span>✏️</span> Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setFornecedorFichaModal(f)}
+                                className="px-2.5 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-900 text-xs font-semibold transition"
+                              >
+                                Ver Ficha
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -11154,24 +11203,53 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               </p>
             </div>
 
-            <div className="flex justify-end gap-3 pt-2">
-              <a
-                href={`https://wa.me/${fornecedorFichaModal.whatsapp}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
-              >
-                Chamar Vendedor no WhatsApp
-              </a>
+            <div className="flex justify-between items-center gap-3 pt-3 border-t border-slate-200">
               <button
-                onClick={() => setFornecedorFichaModal(null)}
-                className="px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold"
+                type="button"
+                onClick={() => {
+                  const f = fornecedorFichaModal;
+                  setFornecedorFichaModal(null);
+                  setFornecedorEditando(f);
+                }}
+                className="px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-xs"
               >
-                Concluído
+                <span>✏️</span> Editar Dados
               </button>
+              <div className="flex items-center gap-2">
+                {fornecedorFichaModal.whatsapp && !fornecedorFichaModal.whatsapp.includes("1199000") && (
+                  <a
+                    href={`https://wa.me/${fornecedorFichaModal.whatsapp}?text=${encodeURIComponent(
+                      `Olá ${fornecedorFichaModal.vendedor || "Amigo"}, tudo bem? Aqui é ${settings.userName} (${settings.companyName}). Gostaria de solicitar uma cotação.`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
+                  >
+                    WhatsApp
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setFornecedorFichaModal(null)}
+                  className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold"
+                >
+                  Fechar
+                </button>
+              </div>
             </div>
           </div>
         </div>
+      )}
+      {/* ================================================================= */}
+      {/* MODAL 4: EDITAR DADOS DO FORNECEDOR                               */}
+      {/* ================================================================= */}
+      {fornecedorEditando && (
+        <ModalEditarFornecedor
+          fornecedor={fornecedorEditando}
+          onClose={() => setFornecedorEditando(null)}
+          onSalvar={handleSalvarFornecedorEditado}
+          onExcluir={handleExcluirFornecedor}
+        />
       )}
 
       {/* ================================================================= */}
@@ -11716,6 +11794,286 @@ function ModalNovaSolicitacao({
           >
             Cadastrar e Abrir Mapa de Cotações
           </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ModalEditarFornecedor({
+  fornecedor,
+  onClose,
+  onSalvar,
+  onExcluir,
+}: {
+  fornecedor: FornecedorCadastro;
+  onClose: () => void;
+  onSalvar: (atualizado: FornecedorCadastro) => void;
+  onExcluir: (id: string) => void;
+}) {
+  const [empresa, setEmpresa] = useState(fornecedor.empresa || "");
+  const [razaoSocial, setRazaoSocial] = useState(fornecedor.razaoSocial || "");
+  const [cnpj, setCnpj] = useState(fornecedor.cnpj || "");
+  const [cidade, setCidade] = useState(fornecedor.cidade || "");
+  const [categoriaPrincipal, setCategoriaPrincipal] = useState<string>(
+    fornecedor.categoriaPrincipal || CATEGORIAS_CONSTRUCAO[0]
+  );
+  const [vendedor, setVendedor] = useState(fornecedor.vendedor || "");
+  const [telefone, setTelefone] = useState(fornecedor.telefone || "");
+  const [whatsapp, setWhatsapp] = useState(fornecedor.whatsapp || "");
+  const [email, setEmail] = useState(fornecedor.email || "");
+  const [chavePix, setChavePix] = useState(fornecedor.chavePix || "");
+  const [condicaoPadrao, setCondicaoPadrao] = useState(
+    fornecedor.condicaoPadrao || ""
+  );
+  const [observacoes, setObservacoes] = useState(fornecedor.observacoes || "");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!empresa.trim()) return;
+
+    let waDigitos = whatsapp.replace(/\D/g, "");
+    if (!waDigitos && telefone) {
+      waDigitos = telefone.replace(/\D/g, "");
+    }
+    if (
+      waDigitos &&
+      !waDigitos.startsWith("55") &&
+      (waDigitos.length === 10 || waDigitos.length === 11)
+    ) {
+      waDigitos = `55${waDigitos}`;
+    }
+
+    onSalvar({
+      ...fornecedor,
+      empresa: empresa.trim(),
+      razaoSocial: razaoSocial.trim() || empresa.trim(),
+      cnpj: cnpj.trim(),
+      cidade: cidade.trim(),
+      categoriaPrincipal,
+      especialidades: [categoriaPrincipal],
+      vendedor: vendedor.trim(),
+      telefone: telefone.trim(),
+      whatsapp: waDigitos,
+      email: email.trim(),
+      chavePix: chavePix.trim(),
+      condicaoPadrao: condicaoPadrao.trim(),
+      observacoes: observacoes.trim(),
+    });
+  };
+
+  const handleRemover = () => {
+    if (
+      window.confirm(
+        `Tem certeza que deseja excluir permanentemente o cadastro de "${fornecedor.empresa}"?`
+      )
+    ) {
+      onExcluir(fornecedor.id);
+    }
+  };
+
+  return (
+    <div className="no-print fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-2xl border border-slate-200 max-w-2xl w-full p-5 sm:p-6 shadow-2xl space-y-4 text-xs sm:text-sm my-6"
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div>
+            <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
+              Gerenciamento de Parceiros
+            </span>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900">
+              Editar Cadastro do Fornecedor
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900 px-2 py-1 rounded-md hover:bg-slate-100 transition"
+          >
+            ✕ Fechar
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Nome Fantasia / Empresa *
+            </label>
+            <input
+              required
+              value={empresa}
+              onChange={(e) => setEmpresa(e.target.value)}
+              placeholder="Ex: Catarinense Esquadrias"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:bg-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Razão Social
+            </label>
+            <input
+              value={razaoSocial}
+              onChange={(e) => setRazaoSocial(e.target.value)}
+              placeholder="Razão Social completa"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:bg-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              CNPJ
+            </label>
+            <input
+              value={cnpj}
+              onChange={(e) => setCnpj(e.target.value)}
+              placeholder="00.000.000/0001-00"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 tabular-nums text-slate-900 focus:bg-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Cidade / UF
+            </label>
+            <input
+              value={cidade}
+              onChange={(e) => setCidade(e.target.value)}
+              placeholder="Ex: Itapema - SC / Balneário Camboriú"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:bg-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Categoria Principal
+            </label>
+            <select
+              value={categoriaPrincipal}
+              onChange={(e) => setCategoriaPrincipal(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:bg-white"
+            >
+              {CATEGORIAS_CONSTRUCAO.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Nome do Vendedor / Contato
+            </label>
+            <input
+              value={vendedor}
+              onChange={(e) => setVendedor(e.target.value)}
+              placeholder="Ex: Júnior / Jaqueline / Ricardo"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:bg-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Telefone
+            </label>
+            <input
+              value={telefone}
+              onChange={(e) => setTelefone(e.target.value)}
+              placeholder="(47) 99915-9239"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:bg-white tabular-nums"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              WhatsApp
+            </label>
+            <input
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(e.target.value)}
+              placeholder="Ex: 5547999159239 ou (47) 99915-9239"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:bg-white tabular-nums"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              E-mail Comercial
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="comercial@fornecedor.com.br"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:bg-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Chave PIX / Faturamento
+            </label>
+            <input
+              value={chavePix}
+              onChange={(e) => setChavePix(e.target.value)}
+              placeholder="Chave PIX / CNPJ para pagamento"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:bg-white"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Condições Padrão de Pagamento
+            </label>
+            <input
+              value={condicaoPadrao}
+              onChange={(e) => setCondicaoPadrao(e.target.value)}
+              placeholder="Ex: 28 dias boleto / À vista / 30/60 ddl"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:bg-white"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Observações / Itens que Fornece
+            </label>
+            <textarea
+              rows={2}
+              value={observacoes}
+              onChange={(e) => setObservacoes(e.target.value)}
+              placeholder="Ex: Tintas, texturas e abrasivos / Ferragens / Entrega rápida no canteiro"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:bg-white"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={handleRemover}
+            className="px-3.5 py-2 rounded-lg bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 text-xs font-semibold flex items-center gap-1.5 transition"
+          >
+            <span>🗑️</span> Excluir Fornecedor
+          </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+            >
+              <span>💾</span> Salvar Alterações
+            </button>
+          </div>
         </div>
       </form>
     </div>
