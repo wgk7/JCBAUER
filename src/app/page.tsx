@@ -1406,7 +1406,7 @@ function calcularSaldoOrcamentario(
   const bmsPagos = contratosCat.reduce(
     (acc, c) =>
       acc +
-      c.medicoes
+      (c?.medicoes || [])
         .filter((m) => m.status === "Pago")
         .reduce((bAcc, bm) => bAcc + bm.valorLiquido, 0),
     0
@@ -1459,8 +1459,8 @@ function gerarNotificacoesDoSistema(
     });
 
   // 2. Medições Pendentes de Aprovação
-  contratos.forEach((c) => {
-    c.medicoes
+  (contratos || []).forEach((c) => {
+    (c?.medicoes || [])
       .filter((m) => m.status === "Pendente Aprovação")
       .forEach((m) => {
         lista.push({
@@ -1577,7 +1577,7 @@ function agruparCargasLogistica(
         obraId: o.obraId,
         obraNome: o.obraNome,
         fornecedorNome: o.fornecedorNome,
-        insumoDescricao: o.itens[0]?.descricao || o.categoria,
+        insumoDescricao: (o?.itens || [])[0]?.descricao || o.categoria,
         horarioJanela: janelas[cIdx % janelas.length],
         tipoVeiculo: veiculos[(dIdx + cIdx) % veiculos.length],
         tipoFrete: o.tipoFrete,
@@ -2222,7 +2222,12 @@ export default function HomePage() {
         try {
           const parsedSc = JSON.parse(savedSc) as SolicitacaoCompra[];
           if (Array.isArray(parsedSc) && parsedSc.length > 0) {
-            setSolicitacoes(parsedSc);
+            const sanitizedSc = parsedSc.map((s) => ({
+              ...s,
+              itens: Array.isArray(s.itens) ? s.itens : [],
+              propostas: Array.isArray(s.propostas) ? s.propostas : [],
+            }));
+            setSolicitacoes(sanitizedSc);
           } else {
             setSolicitacoes(SOLICITACOES_INICIAIS);
             window.localStorage.setItem(SOLICITACOES_STORAGE_KEY, JSON.stringify(SOLICITACOES_INICIAIS));
@@ -2545,7 +2550,12 @@ export default function HomePage() {
               Array.isArray(dadosNuvem[SOLICITACOES_STORAGE_KEY]) &&
               dadosNuvem[SOLICITACOES_STORAGE_KEY].length > 0
             ) {
-              setSolicitacoes(dadosNuvem[SOLICITACOES_STORAGE_KEY]);
+              const nuvemSc = (dadosNuvem[SOLICITACOES_STORAGE_KEY] as SolicitacaoCompra[]).map((s) => ({
+                ...s,
+                itens: Array.isArray(s.itens) ? s.itens : [],
+                propostas: Array.isArray(s.propostas) ? s.propostas : [],
+              }));
+              setSolicitacoes(nuvemSc);
               try {
                 window.localStorage.setItem(
                   SOLICITACOES_STORAGE_KEY,
@@ -3419,8 +3429,8 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
   // Cálculo do Orçamento de Referência da SC ativa
   const orcamentoScAtiva = useMemo(() => {
     if (!scAtiva) return 0;
-    return scAtiva.itens.reduce(
-      (acc, it) => acc + it.quantidade * it.orcamentoUnitario,
+    return (scAtiva.itens || []).reduce(
+      (acc, it) => acc + (it?.quantidade || 0) * (it?.orcamentoUnitario || 0),
       0
     );
   }, [scAtiva]);
@@ -3433,12 +3443,12 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
     > = {};
     if (!scAtiva) return mapa;
 
-    scAtiva.propostas.forEach((prop) => {
-      const subtotalItens = scAtiva.itens.reduce((acc, item) => {
-        const unit = prop.precosUnitarios[item.id] ?? 0;
-        return acc + item.quantidade * unit;
+    (scAtiva.propostas || []).forEach((prop) => {
+      const subtotalItens = (scAtiva.itens || []).reduce((acc, item) => {
+        const unit = prop?.precosUnitarios?.[item.id] ?? 0;
+        return acc + (item.quantidade || 0) * unit;
       }, 0);
-      const totalGeral = subtotalItens + (prop.freteValor || 0);
+      const totalGeral = subtotalItens + (prop?.freteValor || 0);
       mapa[prop.id] = {
         subtotalItens,
         frete: prop.freteValor || 0,
@@ -3450,7 +3460,7 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
 
   // Identificação automática do Fornecedor Vencedor (Menor Preço Global)
   const resumoCotacaoAtiva = useMemo(() => {
-    if (!scAtiva || scAtiva.propostas.length === 0) {
+    if (!scAtiva || !scAtiva.propostas || scAtiva.propostas.length === 0) {
       return {
         vencedorId: "",
         vencedorNome: "Em apuração",
@@ -3460,12 +3470,12 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
       };
     }
 
-    let vencedorId = scAtiva.propostas[0].id;
-    let vencedorNome = scAtiva.propostas[0].fornecedorNome;
+    let vencedorId = scAtiva.propostas[0]?.id || "";
+    let vencedorNome = scAtiva.propostas[0]?.fornecedorNome || "";
     let menorTotal = totaisPorProposta[vencedorId]?.totalGeral ?? Infinity;
     let maiorTotal = 0;
 
-    scAtiva.propostas.forEach((p) => {
+    (scAtiva.propostas || []).forEach((p) => {
       const tot = totaisPorProposta[p.id]?.totalGeral ?? 0;
       if (tot > 0 && tot < menorTotal) {
         menorTotal = tot;
@@ -6627,10 +6637,11 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       }
     >();
 
-    solicitacoes.forEach((sc) => {
+    (solicitacoes || []).forEach((sc) => {
       const nomeObra =
         obras.find((o) => o.id === sc.obraId)?.nome || sc.obraId;
-      sc.itens.forEach((it) => {
+      (sc?.itens || []).forEach((it) => {
+        if (!it?.descricao) return;
         const chave = it.descricao.trim().toLowerCase();
         const atual = mapa.get(chave);
         if (atual) {
@@ -12157,7 +12168,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                       contratos.reduce(
                         (acc, c) =>
                           acc +
-                          c.medicoes.reduce(
+                          (c?.medicoes || []).reduce(
                             (bmAcc, bm) => bmAcc + bm.valorBruto,
                             0
                           ),
@@ -12179,7 +12190,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                       contratos.reduce(
                         (acc, c) =>
                           acc +
-                          c.medicoes.reduce(
+                          (c?.medicoes || []).reduce(
                             (bmAcc, bm) => bmAcc + bm.valorRetencao,
                             0
                           ),
