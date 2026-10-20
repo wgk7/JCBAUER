@@ -1457,10 +1457,18 @@ export default function HomePage() {
   const comparativoFileInputRef = useRef<HTMLInputElement | null>(null);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Estados do Comparativo de Preços (3 Orçamentos)
+  // Estados do Comparativo de Preços (3 Orçamentos) e Gestão Multi-Cotações
   const [modoCotacoes, setModoCotacoes] = useState<
-    "comparativo_rapido" | "solicitacoes_obra"
+    "comparativo_rapido" | "solicitacoes_obra" | "painel_cotacoes"
   >("comparativo_rapido");
+  const [processosCotacoes, setProcessosCotacoes] = useState<ProcessoCotacao[]>(
+    []
+  );
+  const [cotacaoAtivaId, setCotacaoAtivaId] = useState<string>("");
+  const [filtroStatusCotacoes, setFiltroStatusCotacoes] =
+    useState<string>("TODAS");
+  const [buscaProcessosCotacoes, setBuscaProcessosCotacoes] =
+    useState<string>("");
   const [comparativoTitulo, setComparativoTitulo] = useState<string>("");
   const [comparativoObraId, setComparativoObraId] = useState<string>("");
   const [comparativoCategoria, setComparativoCategoria] = useState<string>("");
