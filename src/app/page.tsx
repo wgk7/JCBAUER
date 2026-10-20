@@ -2617,15 +2617,69 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
   /* Abre janela limpa A4 com barra sticky e aciona `window.print()` direto  */
   /* ----------------------------------------------------------------------- */
 
+  /* ----------------------------------------------------------------------- */
+  /* DISPARADOR UNIVERSAL DE IMPRESSÃO / PDF (À PROVA DE POPUP BLOCKERS)     */
+  /* ----------------------------------------------------------------------- */
+  const imprimirDocumentoHtml = (htmlContent: string) => {
+    let win: Window | null = null;
+    try {
+      win = window.open(
+        "",
+        "_blank",
+        "width=1000,height=800,menubar=no,toolbar=no,location=no,status=no"
+      );
+    } catch {
+      win = null;
+    }
+
+    if (win && win.document) {
+      try {
+        win.document.open();
+        win.document.write(htmlContent);
+        win.document.close();
+        win.focus();
+        return;
+      } catch (err) {
+        console.warn("Falha ao escrever em nova aba, usando iframe direto:", err);
+      }
+    }
+
+    // Fallback à prova de falhas: Iframe invisível para navegadores que bloqueiam pop-ups
+    try {
+      let iframe = document.getElementById("jc-print-iframe") as HTMLIFrameElement;
+      if (!iframe) {
+        iframe = document.createElement("iframe");
+        iframe.id = "jc-print-iframe";
+        iframe.style.position = "fixed";
+        iframe.style.right = "0";
+        iframe.style.bottom = "0";
+        iframe.style.width = "0";
+        iframe.style.height = "0";
+        iframe.style.border = "0";
+        iframe.style.visibility = "hidden";
+        document.body.appendChild(iframe);
+      }
+
+      const doc = iframe.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(htmlContent);
+        doc.close();
+        setTimeout(() => {
+          try {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          } catch (e) {
+            console.error("Erro na impressão do iframe:", e);
+          }
+        }, 450);
+      }
+    } catch (e) {
+      console.error("Erro no fallback de impressão:", e);
+    }
+  };
   const handleGeneratePDF = () => {
     if (!scAtiva) return;
-    const win = window.open("", "_blank", "width=900,height=700");
-    if (!win) {
-      dispararAviso(
-        "Permita pop-ups no navegador para abrir a janela de impressão do PDF."
-      );
-      return;
-    }
 
     const dataHoje = new Date().toLocaleDateString("pt-BR");
     const percentualSaving =
@@ -2841,22 +2895,13 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
 </body>
 </html>`;
 
-    win.document.open();
-    win.document.write(htmlContent);
-    win.document.close();
+    imprimirDocumentoHtml(htmlContent);
   };
 
   /* ----------------------------------------------------------------------- */
   /* 2. IMPRESSÃO DA ORDEM DE COMPRA (OC) OFICIAL TIMBRADA                   */
   /* ----------------------------------------------------------------------- */
   const handleGerarOrdemCompraPDF = (oc: OrdemCompra) => {
-    const win = window.open("", "_blank", "width=920,height=750");
-    if (!win) {
-      dispararAviso(
-        "Permita pop-ups no navegador para abrir a janela de impressão da Ordem de Compra."
-      );
-      return;
-    }
 
     const alcadaInfo = obterAlcadaAprovacao(oc.valorTotal);
 
@@ -3112,9 +3157,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 </body>
 </html>`;
 
-    win.document.open();
-    win.document.write(htmlContent);
-    win.document.close();
+    imprimirDocumentoHtml(htmlContent);
   };
 
   /* ----------------------------------------------------------------------- */
@@ -4541,15 +4584,101 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     }
   };
 
+  const handleExportarComparativoRapidoExcel = () => {
+    if (comparativoItens.length === 0) {
+      dispararAviso("Adicione ao menos um insumo na cotação para exportar a planilha.");
+      return;
+    }
+    const forn0 = comparativoFornecedores[0]?.nome || "Fornecedor 1";
+    const forn1 = comparativoFornecedores[1]?.nome || "Fornecedor 2";
+    const forn2 = comparativoFornecedores[2]?.nome || "Fornecedor 3";
+
+    const dadosPlanilha = resumoComparativo.itensCalculados.map((it, idx) => ({
+      Item: idx + 1,
+      Insumo: it.nome,
+      Quantidade: it.quantidade,
+      Unidade: it.unidade,
+      [`Preço Unit. (${forn0})`]: it.preco1,
+      [`Total (${forn0})`]: it.tot1,
+      [`Preço Unit. (${forn1})`]: it.preco2,
+      [`Total (${forn1})`]: it.tot2,
+      [`Preço Unit. (${forn2})`]: it.preco3,
+      [`Total (${forn2})`]: it.tot3,
+      "Menor Preço": it.menorPreco,
+      "Saving (R$)": it.savingItem,
+    }));
+
+    dadosPlanilha.push({
+      Item: "",
+      Insumo: "SUBTOTAL MATERIAIS",
+      Quantidade: "",
+      Unidade: "",
+      [`Preço Unit. (${forn0})`]: "",
+      [`Total (${forn0})`]: resumoComparativo.subtotal1,
+      [`Preço Unit. (${forn1})`]: "",
+      [`Total (${forn1})`]: resumoComparativo.subtotal2,
+      [`Preço Unit. (${forn2})`]: "",
+      [`Total (${forn2})`]: resumoComparativo.subtotal3,
+      "Menor Preço": "",
+      "Saving (R$)": "",
+    } as any);
+
+    dadosPlanilha.push({
+      Item: "",
+      Insumo: "DESCONTO COMERCIAL (R$)",
+      Quantidade: "",
+      Unidade: "",
+      [`Preço Unit. (${forn0})`]: "",
+      [`Total (${forn0})`]: -resumoComparativo.desc1,
+      [`Preço Unit. (${forn1})`]: "",
+      [`Total (${forn1})`]: -resumoComparativo.desc2,
+      [`Preço Unit. (${forn2})`]: "",
+      [`Total (${forn2})`]: -resumoComparativo.desc3,
+      "Menor Preço": "",
+      "Saving (R$)": "",
+    } as any);
+
+    dadosPlanilha.push({
+      Item: "",
+      Insumo: "FRETE",
+      Quantidade: "",
+      Unidade: "",
+      [`Preço Unit. (${forn0})`]: "",
+      [`Total (${forn0})`]: resumoComparativo.frete1,
+      [`Preço Unit. (${forn1})`]: "",
+      [`Total (${forn1})`]: resumoComparativo.frete2,
+      [`Preço Unit. (${forn2})`]: "",
+      [`Total (${forn2})`]: resumoComparativo.frete3,
+      "Menor Preço": "",
+      "Saving (R$)": "",
+    } as any);
+
+    dadosPlanilha.push({
+      Item: "",
+      Insumo: "VALOR TOTAL FINAL",
+      Quantidade: "",
+      Unidade: "",
+      [`Preço Unit. (${forn0})`]: "",
+      [`Total (${forn0})`]: resumoComparativo.total1,
+      [`Preço Unit. (${forn1})`]: "",
+      [`Total (${forn1})`]: resumoComparativo.total2,
+      [`Preço Unit. (${forn2})`]: "",
+      [`Total (${forn2})`]: resumoComparativo.total3,
+      "Menor Preço": "",
+      "Saving (R$)": resumoComparativo.savingGlobal,
+    } as any);
+
+    const ws = XLSX.utils.json_to_sheet(dadosPlanilha);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Comparativo 3 Orçamentos");
+    const dataIso = new Date().toISOString().slice(0, 10);
+    const fileName = `JC_BAUER_Comparativo_3_Orcamentos_${dataIso}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    dispararAviso("Planilha do comparativo exportada com sucesso!");
+  };
   const handleGerarComparativoRapidoPDF = () => {
     if (comparativoItens.length === 0) {
       dispararAviso("Adicione ao menos um insumo na cotação para gerar a impressão ou PDF.");
-      return;
-    }
-    const win = window.open("", "_blank");
-    if (!win) {
-      setShowModalComparativoPdf(true);
-      dispararAviso("Visualização aberta no sistema. Caso prefira em nova aba, habilite pop-ups.");
       return;
     }
     const obraSel = obras.find((o) => o.id === comparativoObraId) || obras[0];
@@ -4709,24 +4838,20 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     </div>
   </div>
   <script>
-    function dispararImpressao() {
-      try { window.focus(); window.print(); } catch (err) { console.error(err); }
-    }
-    if (document.readyState === "complete" || document.readyState === "interactive") {
-      setTimeout(dispararImpressao, 400);
-    } else {
-      window.addEventListener("DOMContentLoaded", function() { setTimeout(dispararImpressao, 400); });
-      window.addEventListener("load", function() { setTimeout(dispararImpressao, 400); });
-      setTimeout(dispararImpressao, 850);
-    }
+    window.onload = function() {
+      setTimeout(function() {
+        try {
+          window.focus();
+          window.print();
+        } catch (err) {
+          console.warn("Impressão automática bloqueada pelo navegador:", err);
+        }
+      }, 350);
+    };
   </script>
 </body>
 </html>`;
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { try { win.focus(); win.print(); } catch (e) {} }, 450);
+    imprimirDocumentoHtml(html);
   };
 
   /* ----------------------------------------------------------------------- */
@@ -5443,21 +5568,34 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         return (
           <div className="flex items-center gap-2">
             <button
-              onClick={() =>
-                exportarCotacaoExcel(
-                  scAtiva,
-                  obraScAtiva.nome
-                )
-              }
+              type="button"
+              onClick={() => {
+                if (modoCotacoes === "comparativo_rapido") {
+                  handleExportarComparativoRapidoExcel();
+                } else if (scAtiva) {
+                  exportarCotacaoExcel(scAtiva, obraScAtiva.nome);
+                } else {
+                  dispararAviso("Nenhuma cotação ativa para exportar.");
+                }
+              }}
               className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold transition whitespace-nowrap"
             >
               Exportar Excel (.xlsx)
             </button>
             <button
-              onClick={handleGeneratePDF}
-              className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold transition whitespace-nowrap"
+              type="button"
+              onClick={() => {
+                if (modoCotacoes === "comparativo_rapido") {
+                  handleGerarComparativoRapidoPDF();
+                } else if (scAtiva) {
+                  handleGeneratePDF();
+                } else {
+                  dispararAviso("Selecione ou adicione itens à cotação para gerar o PDF.");
+                }
+              }}
+              className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold transition whitespace-nowrap shadow-xs flex items-center gap-1.5"
             >
-              Gerar PDF
+              <span>📄</span> Gerar PDF
             </button>
           </div>
         );
@@ -17447,7 +17585,7 @@ function ModalVisualizarComparativoPdf({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={onAbrirNovaAba}
               className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
             >
               <span>🖨️</span> Imprimir / Salvar PDF
