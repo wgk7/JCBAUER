@@ -1471,7 +1471,12 @@ export default function HomePage() {
         try {
           const parsedItens = JSON.parse(savedItens) as ItemPlanilhaImportada[];
           if (Array.isArray(parsedItens) && parsedItens.length > 0) {
-            setItensPlanilha(parsedItens);
+            const sanitizedItens = parsedItens.map((it) =>
+              it.precoUnitario === 100 && it.quantidade === 1 && it.id?.startsWith("imp-upload-")
+                ? { ...it, precoUnitario: 0 }
+                : it
+            );
+            setItensPlanilha(sanitizedItens);
           }
         } catch {
           // ignore
@@ -3444,38 +3449,34 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           ? ufRaw && !cidadeRaw.includes(ufRaw)
             ? `${cidadeRaw} - ${ufRaw}`
             : cidadeRaw
-          : "São Paulo / SP";
+          : "";
 
         const categoriaFinal = categoriaRaw
           ? inferirCategoria(categoriaRaw)
           : inferirCategoria(`${empresaFinal} ${insumoRaw}`);
 
-        const vendedorFinal = vendedorRaw || "Comercial / Vendas";
-        const telefoneFinal = telefoneRaw || whatsRaw || "(11) 3200-0000";
-        const whatsFinal = whatsRaw || telefoneRaw || "(11) 99000-0000";
-        const emailFinal =
-          emailRaw ||
-          `contato@${
-            normalizar(empresaFinal)
-              .replace(/[^a-z0-9]/g, "")
-              .slice(0, 15) || "fornecedor"
-          }.com.br`;
-        const pixFinal = pixRaw || cnpjFinal;
-        const condicaoFinal = condicaoRaw || "28 dias (Faturamento Direto)";
+        const vendedorFinal = vendedorRaw || "";
+        const telefoneFinal = telefoneRaw || whatsRaw || "";
+        const whatsFinal = whatsRaw || telefoneRaw || "";
+        const emailFinal = emailRaw || "";
+        const pixFinal = pixRaw || cnpjFinal || "";
+        const condicaoFinal = condicaoRaw || "";
 
         const insumoFinal =
           insumoRaw || `Fornecimento e Insumos (${categoriaFinal})`;
 
-        const qtdNumero =
-          Number(String(qtdRaw || "1").replace(",", ".")) || 1;
-        const precoNumero =
-          Number(
-            String(precoRaw || "0")
-              .replace("R$", "")
-              .replace(/\./g, "")
-              .replace(",", ".")
-              .trim()
-          ) || 0;
+        const qtdNumero = qtdRaw
+          ? Number(String(qtdRaw).replace(",", ".")) || 1
+          : 1;
+        const precoNumero = precoRaw
+          ? Number(
+              String(precoRaw)
+                .replace("R$", "")
+                .replace(/\./g, "")
+                .replace(",", ".")
+                .trim()
+            ) || 0
+          : 0;
 
         novosItens.push({
           id: `imp-upload-${Date.now()}-${idx}`,
@@ -3486,7 +3487,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           categoria: categoriaFinal,
           quantidade: qtdNumero,
           unidade: unidadeRaw || "un",
-          precoUnitario: precoNumero > 0 ? precoNumero : 100,
+          precoUnitario: precoNumero,
           status: "Pendente",
         });
 
@@ -3843,9 +3844,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     valor: string | number
   ) => {
     setComparativoFornecedores((prev) => {
-      const f0 = prev?.[0] || { nome: "Fornecedor 1", vendedor: "", telefone: "", prazo: "3 a 5 dias", condicao: "28 dias (Faturado)", freteTipo: "CIF" as const, freteValor: 0 };
-      const f1 = prev?.[1] || { nome: "Fornecedor 2", vendedor: "", telefone: "", prazo: "5 a 7 dias", condicao: "30 dias", freteTipo: "CIF" as const, freteValor: 0 };
-      const f2 = prev?.[2] || { nome: "Fornecedor 3", vendedor: "", telefone: "", prazo: "Pronta Entrega", condicao: "21 dias", freteTipo: "FOB" as const, freteValor: 0 };
+      const f0 = prev?.[0] || { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0 };
+      const f1 = prev?.[1] || { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0 };
+      const f2 = prev?.[2] || { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0 };
       const copia: [
         FornecedorCotadoRapido,
         FornecedorCotadoRapido,
@@ -3927,13 +3928,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       fornecedorRazao:
         fornCrm?.razaoSocial || forn.nome || `Fornecedor ${fornIndex + 1}`,
       fornecedorCnpj: fornCrm?.cnpj || "",
-      vendedorNome: forn.vendedor || "Comercial / Vendas",
-      whatsapp: forn.telefone || "(11) 99000-0000",
-      chavePix:
-        fornCrm?.chavePix || fornCrm?.cnpj || "financeiro@jc-bauer.com.br",
+      vendedorNome: forn.vendedor || "",
+      whatsapp: forn.telefone || "",
+      chavePix: fornCrm?.chavePix || fornCrm?.cnpj || "",
       dataEmissao: new Date().toLocaleDateString("pt-BR"),
-      dataPrevistaEntrega: forn.prazo || "5 dias úteis",
-      prazoPagamento: forn.condicao || "28 dias (Faturamento Direto)",
+      dataPrevistaEntrega: forn.prazo || "A Combinar",
+      prazoPagamento: forn.condicao || "A Combinar",
       tipoFrete: forn.freteTipo,
       freteValor: forn.freteValor,
       valorTotal: total,
@@ -10393,7 +10393,13 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                               {item.quantidade} {item.unidade}
                             </td>
                             <td className="py-3 px-4 text-right font-semibold text-slate-900 whitespace-nowrap tabular-nums">
-                              {formatBRL(item.precoUnitario)}
+                              {item.precoUnitario > 0 ? (
+                                formatBRL(item.precoUnitario)
+                              ) : (
+                                <span className="text-slate-400 font-normal italic">
+                                  — (Sem valor)
+                                </span>
+                              )}
                             </td>
                             <td className="py-3 px-4 text-center">
                               <span
