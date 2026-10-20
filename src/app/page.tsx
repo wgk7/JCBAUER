@@ -1160,6 +1160,145 @@ function agruparCargasLogistica(
 /* COMPONENTE PRINCIPAL DA APLICAÇÃO (`page.tsx`)                            */
 /* ========================================================================= */
 
+/* ----------------------------------------------------------------------- */
+/* GERADOR INTELIGENTE DE SKU PARA INSUMOS E ALMOXARIFADO                  */
+/* ----------------------------------------------------------------------- */
+function gerarSkuInsumo(
+  nome: string,
+  categoria: string,
+  estoqueExistente: ItemEstoque[]
+): string {
+  const n = (nome || "").toLowerCase().trim();
+  const c = (categoria || "").toLowerCase().trim();
+
+  let prefixo = "MAT";
+
+  if (
+    n.includes("pvc") ||
+    n.includes("tubo") ||
+    n.includes("joelho") ||
+    n.includes("curva") ||
+    n.includes("luva") ||
+    n.includes("te ") ||
+    n.includes("te.") ||
+    n.includes("té ") ||
+    n.includes("té.") ||
+    n.includes("válvula") ||
+    n.includes("valvula") ||
+    n.includes("registro") ||
+    n.includes("soldável") ||
+    n.includes("sold") ||
+    n.includes("esgoto") ||
+    n.includes("hidr") ||
+    c.includes("hidr")
+  ) {
+    prefixo = "PVC";
+  } else if (
+    n.includes("cimento") ||
+    n.includes("argamassa") ||
+    n.includes("cal ") ||
+    n.includes("rejunte") ||
+    c.includes("cimento")
+  ) {
+    prefixo = "CIM";
+  } else if (
+    n.includes("aço") ||
+    n.includes("aco") ||
+    n.includes("ca-50") ||
+    n.includes("ca-60") ||
+    n.includes("vergalh") ||
+    n.includes("arame") ||
+    n.includes("tela soldada") ||
+    c.includes("aço") ||
+    c.includes("estrutura")
+  ) {
+    prefixo = "ACO";
+  } else if (
+    n.includes("adesivo") ||
+    n.includes("cola") ||
+    n.includes("silicone") ||
+    n.includes("fita") ||
+    n.includes("vedante")
+  ) {
+    prefixo = "ADE";
+  } else if (
+    n.includes("tinta") ||
+    n.includes("selador") ||
+    n.includes("verniz") ||
+    n.includes("massa corrida") ||
+    n.includes("primer") ||
+    c.includes("pintura")
+  ) {
+    prefixo = "PNT";
+  } else if (
+    n.includes("cabo") ||
+    n.includes("fio ") ||
+    n.includes("disjuntor") ||
+    n.includes("eletroduto") ||
+    n.includes("tomada") ||
+    n.includes("interruptor") ||
+    c.includes("elétr")
+  ) {
+    prefixo = "ELE";
+  } else if (
+    n.includes("areia") ||
+    n.includes("brita") ||
+    n.includes("pedra") ||
+    n.includes("seixo") ||
+    n.includes("saibro")
+  ) {
+    prefixo = "AGR";
+  } else if (
+    n.includes("tijolo") ||
+    n.includes("bloco") ||
+    n.includes("canaleta") ||
+    c.includes("alvenaria")
+  ) {
+    prefixo = "ALV";
+  } else if (
+    n.includes("madeira") ||
+    n.includes("tábua") ||
+    n.includes("tabua") ||
+    n.includes("sarrafo") ||
+    n.includes("compensado") ||
+    n.includes("pontalete")
+  ) {
+    prefixo = "MAD";
+  } else if (
+    n.includes("prego") ||
+    n.includes("parafuso") ||
+    n.includes("bucha") ||
+    n.includes("barra roscada")
+  ) {
+    prefixo = "FIX";
+  } else if (
+    n.includes("epi") ||
+    n.includes("capacete") ||
+    n.includes("bota") ||
+    n.includes("óculos") ||
+    n.includes("luva de vaqueta")
+  ) {
+    prefixo = "EPI";
+  }
+
+  let maxSeq = 0;
+  const skuRegex = new RegExp(`^SKU-${prefixo}-(\\d+)$`, "i");
+
+  (estoqueExistente || []).forEach((it) => {
+    if (it.codigo) {
+      const match = it.codigo.match(skuRegex);
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxSeq) {
+          maxSeq = num;
+        }
+      }
+    }
+  });
+
+  const proximo = maxSeq + 1;
+  return `SKU-${prefixo}-${String(proximo).padStart(3, "0")}`;
+}
 export default function HomePage() {
   // Autenticação e Controle de Acesso (RBAC)
   const [usuarios, setUsuarios] = useState<UsuarioSistema[]>(USUARIOS_INICIAIS);
@@ -1330,6 +1469,127 @@ export default function HomePage() {
   const [comparativoItens, setComparativoItens] = useState<
     ItemComparativoRapido[]
   >([]);
+  const [itemAjustarEstoqueModal, setItemAjustarEstoqueModal] =
+    useState<ItemEstoque | null>(null);
+
+  /* ----------------------------------------------------------------------- */
+  /* SINCRONIZAÇÃO AUTOMÁTICA DE INSUMOS DO COMPARATIVO COM O ALMOXARIFADO    */
+  /* ----------------------------------------------------------------------- */
+  const sincronizarInsumosAoEstoque = (
+    itensParaSincronizar: ItemComparativoRapido[]
+  ) => {
+    if (!itensParaSincronizar || itensParaSincronizar.length === 0) return;
+
+    setEstoque((prevEstoque) => {
+      let modificado = false;
+      const novoEstoque = [...prevEstoque];
+
+      itensParaSincronizar.forEach((it) => {
+        const nomeLimpo = (it.nome || "").trim();
+        if (!nomeLimpo || nomeLimpo.length < 2) return;
+
+        // Deduplicação estrita: verifica se já existe (ignorando maiúsculas e espaços)
+        const jaExiste = novoEstoque.some(
+          (est) =>
+            est.descricao.trim().toLowerCase() === nomeLimpo.toLowerCase()
+        );
+
+        if (!jaExiste) {
+          const sku = gerarSkuInsumo(
+            nomeLimpo,
+            comparativoCategoria || "",
+            novoEstoque
+          );
+          const obraSel =
+            obras.find((o) => o.id === comparativoObraId) || obras[0];
+
+          // Determina o menor preço cotado caso preenchido
+          const precosValidos = [it.preco1, it.preco2, it.preco3].filter(
+            (p) => Number(p) > 0
+          );
+          const menorPrecoCotado =
+            precosValidos.length > 0 ? Math.min(...precosValidos) : 0;
+
+          const novoItem: ItemEstoque = {
+            id: `est-auto-${Date.now()}-${Math.random()
+              .toString(36)
+              .substring(2, 6)}`,
+            obraId: comparativoObraId || "central",
+            obraNome: obraSel?.nome || "Almoxarifado Central",
+            codigo: sku,
+            descricao: nomeLimpo,
+            categoria: comparativoCategoria || "Geral / Suprimentos",
+            unidade: it.unidade || "un",
+            saldoAtual: 0, // Saldo inicial 0 para posterior inventário/contagem manual
+            estoqueMinimo: 0,
+            pontoReposicao: 0,
+            custoMedio: menorPrecoCotado,
+            localizacaoFisica: "Almoxarifado Principal",
+            ultimaMovimentacao: new Date().toLocaleDateString("pt-BR"),
+            fornecedorHabitual:
+              comparativoFornecedores?.[0]?.nome || undefined,
+          };
+
+          novoEstoque.push(novoItem);
+          modificado = true;
+        }
+      });
+
+      return modificado ? novoEstoque : prevEstoque;
+    });
+  };
+
+  // Sincroniza continuamente insumos do comparativo para o estoque
+  useEffect(() => {
+    if (storageCarregado && comparativoItens && comparativoItens.length > 0) {
+      sincronizarInsumosAoEstoque(comparativoItens);
+    }
+  }, [comparativoItens, storageCarregado]);
+
+  const handleSalvarAjusteRapidoSaldo = (
+    itemId: string,
+    novoSaldo: number,
+    novoMinimo: number,
+    novoCusto: number,
+    localizacao: string,
+    motivo: string
+  ) => {
+    setEstoque((prev) =>
+      prev.map((it) => {
+        if (it.id !== itemId) return it;
+        return {
+          ...it,
+          saldoAtual: novoSaldo,
+          estoqueMinimo: novoMinimo,
+          custoMedio: novoCusto > 0 ? novoCusto : it.custoMedio,
+          localizacaoFisica: localizacao || it.localizacaoFisica,
+          ultimaMovimentacao: new Date().toLocaleDateString("pt-BR"),
+        };
+      })
+    );
+
+    const itAchado = estoque.find((it) => it.id === itemId);
+    if (itAchado) {
+      const novaMov: MovimentacaoEstoque = {
+        id: `mov-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        itemId,
+        codigoInsumo: itAchado.codigo,
+        descricaoInsumo: itAchado.descricao,
+        unidade: itAchado.unidade,
+        tipo: "AJUSTE_INVENTARIO",
+        quantidade: novoSaldo,
+        saldoAnterior: itAchado.saldoAtual,
+        saldoPosterior: novoSaldo,
+        dataHora: new Date().toLocaleString("pt-BR"),
+        responsavel: usuarioLogado?.nome || settings.userName || "Almoxarife",
+        motivoEtapa: motivo || "Ajuste manual de inventário",
+      };
+      setMovimentacoesEstoque((prev) => [novaMov, ...prev]);
+    }
+
+    setItemAjustarEstoqueModal(null);
+    dispararAviso("Saldo do insumo atualizado com sucesso no Almoxarifado!");
+  };
   const [showModalComparativoPdf, setShowModalComparativoPdf] = useState<boolean>(false);
 
   // Modais de Ação e Governança
@@ -4572,6 +4832,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
       if (novos.length > 0) {
         setComparativoItens(novos);
+        sincronizarInsumosAoEstoque(novos);
         dispararAviso(
           `Planilha "${file.name}" importada com sucesso: ${novos.length} itens carregados para equalização!`
         );
@@ -5165,7 +5426,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       estoque.filter(
         (item) =>
           (obraFiltro === "ALL" || item.obraId === obraFiltro) &&
-          item.saldoAtual <= item.estoqueMinimo
+          item.estoqueMinimo > 0 && item.saldoAtual <= item.estoqueMinimo
       ),
     [estoque, obraFiltro]
   );
@@ -8281,10 +8542,15 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                   <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-sm font-bold text-slate-900">
-                          Planilha de Equalização Item a Item (
-                          {comparativoItens.length} insumos)
-                        </h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-sm font-bold text-slate-900">
+                            Planilha de Equalização Item a Item (
+                            {comparativoItens.length} insumos)
+                          </h3>
+                          <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 shadow-2xs">
+                            <span>📦</span> Insumos catalogados no Almoxarifado com SKU
+                          </span>
+                        </div>
                         <p className="text-xs text-slate-500 mt-0.5">
                           Insira os preços unitários de cada fornecedor. O sistema destaca em verde o item mais em conta em tempo real.
                         </p>
@@ -8385,12 +8651,31 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                         }`}
                                         className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 focus:bg-white rounded px-1.5 py-1 text-xs font-bold text-slate-900 transition"
                                       />
-                                      {it.pctSaving > 0 && (
-                                        <div className="text-[10px] text-emerald-700 font-semibold px-1.5 mt-0.5">
-                                          Variação de até{" "}
-                                          {it.pctSaving.toFixed(0)}% entre orçamentos
-                                        </div>
-                                      )}
+                                      {(() => {
+                                        const estMatch = estoque.find(
+                                          (e) =>
+                                            e.descricao.trim().toLowerCase() ===
+                                            (it.nome || "").trim().toLowerCase()
+                                        );
+                                        return (
+                                          <div className="flex flex-wrap items-center gap-1.5 px-1.5 mt-0.5">
+                                            {it.pctSaving > 0 && (
+                                              <span className="text-[10px] text-emerald-700 font-semibold">
+                                                Variação de até{" "}
+                                                {it.pctSaving.toFixed(0)}%
+                                              </span>
+                                            )}
+                                            {estMatch && (
+                                              <span
+                                                className="text-[9px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-300 px-1.5 py-0.2 rounded"
+                                                title="Código SKU catalogado no Almoxarifado"
+                                              >
+                                                SKU: {estMatch.codigo}
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
                                     </td>
 
                                     {/* Coluna 2: Quantidade & Unidade */}
@@ -9731,7 +10016,11 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                     {formatBRL(item.saldoAtual * item.custoMedio)}
                                   </td>
                                   <td className="py-3 px-4 text-center whitespace-nowrap">
-                                    {critico ? (
+                                    {item.saldoAtual === 0 && item.estoqueMinimo === 0 ? (
+                                      <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 inline-block">
+                                        📦 Catalogado (Saldo 0)
+                                      </span>
+                                    ) : critico ? (
                                       <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200 inline-block">
                                         🚨 Crítico
                                       </span>
@@ -9748,14 +10037,24 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                   <td className="py-3 px-4 text-right whitespace-nowrap">
                                     <div className="flex items-center justify-end gap-1.5">
                                       <button
+                                        type="button"
+                                        onClick={() => setItemAjustarEstoqueModal(item)}
+                                        className="px-2.5 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition flex items-center gap-1 shadow-xs"
+                                        title="Contagem física ou ajuste manual de saldo em estoque"
+                                      >
+                                        <span>✏️</span> Ajustar Saldo
+                                      </button>
+                                      <button
+                                        type="button"
                                         onClick={() => setKardexModalItem(item)}
                                         className="px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
                                         title="Ver histórico completo de movimentações físicas e custo médio (Kardex)"
                                       >
                                         📋 Kardex
                                       </button>
-                                      {item.saldoAtual <= item.pontoReposicao && (
+                                      {item.saldoAtual <= item.pontoReposicao && item.pontoReposicao > 0 && (
                                         <button
+                                          type="button"
                                           onClick={() => handleGerarSolicitacaoReposicao(item)}
                                           className="px-2.5 py-1 rounded-md bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold transition flex items-center gap-1 shadow-xs"
                                           title="Gerar automaticamente Solicitação de Compra para reposição de estoque"
@@ -12238,6 +12537,14 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         />
       )}
 
+      {/* MODAL: AJUSTE RÁPIDO DE SALDO / CONTAGEM FÍSICA NO ALMOXARIFADO */}
+      {itemAjustarEstoqueModal && (
+        <ModalAjusteRapidoSaldo
+          item={itemAjustarEstoqueModal}
+          onClose={() => setItemAjustarEstoqueModal(null)}
+          onSalvar={handleSalvarAjusteRapidoSaldo}
+        />
+      )}
       {/* MODAL 1: REGISTRAR NOVA MOVIMENTAÇÃO DE ESTOQUE */}
       {showNovaMovimentacaoModal && (
         <ModalMovimentacaoEstoque
@@ -17205,6 +17512,182 @@ function ModalProgramarPuxada({
   );
 }
 
+/* ----------------------------------------------------------------------- */
+/* MODAL DE AJUSTE RÁPIDO DE SALDO FÍSICO NO ALMOXARIFADO                  */
+/* ----------------------------------------------------------------------- */
+function ModalAjusteRapidoSaldo({
+  item,
+  onClose,
+  onSalvar,
+}: {
+  item: ItemEstoque;
+  onClose: () => void;
+  onSalvar: (
+    itemId: string,
+    novoSaldo: number,
+    novoMinimo: number,
+    novoCusto: number,
+    localizacao: string,
+    motivo: string
+  ) => void;
+}) {
+  const [saldo, setSaldo] = useState<number>(item.saldoAtual);
+  const [minimo, setMinimo] = useState<number>(item.estoqueMinimo || 0);
+  const [custo, setCusto] = useState<number>(item.custoMedio || 0);
+  const [local, setLocal] = useState<string>(
+    item.localizacaoFisica || "Almoxarifado Principal"
+  );
+  const [motivo, setMotivo] = useState<string>(
+    "Contagem física / inventário no canteiro"
+  );
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSalvar(
+      item.id,
+      Number(saldo) || 0,
+      Number(minimo) || 0,
+      Number(custo) || 0,
+      local,
+      motivo
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
+        <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold flex items-center gap-1.5">
+              <span>📦</span> Ajustar Saldo no Almoxarifado
+            </h3>
+            <p className="text-[11px] text-slate-300 mt-0.5">
+              Contagem física e parametrização do insumo
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-white text-lg font-bold"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+            <span className="font-mono text-emerald-800 text-[11px] font-bold block">
+              {item.codigo}
+            </span>
+            <span className="font-extrabold text-slate-900 text-sm block mt-0.5">
+              {item.descricao}
+            </span>
+            <span className="text-[11px] text-slate-500 block mt-0.5">
+              Canteiro: <strong>{item.obraNome}</strong> • Unidade:{" "}
+              <strong>{item.unidade}</strong>
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Saldo Físico Atual *
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  required
+                  value={saldo}
+                  onChange={(e) => setSaldo(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                <span className="absolute right-3 top-2.5 text-xs text-slate-400">
+                  {item.unidade}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Estoque Mínimo
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={minimo}
+                onChange={(e) => setMinimo(parseFloat(e.target.value) || 0)}
+                placeholder="Ex: 10"
+                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Custo Médio Unitário (R$)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={custo}
+                onChange={(e) => setCusto(parseFloat(e.target.value) || 0)}
+                placeholder="0,00"
+                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Localização Física
+              </label>
+              <input
+                type="text"
+                value={local}
+                onChange={(e) => setLocal(e.target.value)}
+                placeholder="Ex: Prateleira B2"
+                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-800 mb-1">
+              Observação / Motivo do Ajuste
+            </label>
+            <input
+              type="text"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Ex: Contagem física inicial no canteiro"
+              className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+            >
+              <span>💾</span> Salvar Saldo no Almoxarifado
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 function ModalFichaKardex({
   item,
   movimentacoes,
