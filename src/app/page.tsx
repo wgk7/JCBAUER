@@ -357,7 +357,6 @@ interface FornecedorCotadoRapido {
   descontoValor?: number;
 }
 
-const PROCESSOS_COTACOES_STORAGE_KEY = "jc_bauer_processos_cotacoes_v1";
 
 export interface ProcessoCotacao {
   id: string;
