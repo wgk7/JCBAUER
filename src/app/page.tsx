@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
@@ -611,24 +611,427 @@ function extrairContatoEPhone(texto: string): {
 /* DADOS INICIAIS REALISTAS DE CONSTRUTORA                                   */
 /* ========================================================================= */
 
-const OBRAS_INICIAIS: Obra[] = [];
+const OBRAS_INICIAIS: Obra[] = [
+  {
+    id: "obra-kairos",
+    nome: "Residencial Kairós",
+    sigla: "RSK-01",
+    endereco: "Rua 2500, Centro — Balneário Camboriú / SC",
+    engenheiro: "Eng. Cassiano / João Carlos Bauer",
+  },
+  {
+    id: "obra-belvedere",
+    nome: "Residencial Belvedere",
+    sigla: "RSB-02",
+    endereco: "Rua Otto Boehm, América — Joinville / SC",
+    engenheiro: "Eng. Cassiano",
+  },
+  {
+    id: "obra-petit",
+    nome: "Residencial Petit",
+    sigla: "RSP-03",
+    endereco: "Rua Expedicionário Holz, Atiradores — Joinville / SC",
+    engenheiro: "Eng. Cassiano",
+  },
+  {
+    id: "obra-carmelo",
+    nome: "Residencial Carmelo",
+    sigla: "RSC-04",
+    endereco: "Balneário Camboriú / SC",
+    engenheiro: "Eng. Marcos Viana",
+  },
+  {
+    id: "obra-1",
+    nome: "Residencial Horizon Tower",
+    sigla: "RHT-05",
+    endereco: "Av. Atlântica, 2450 — Balneário Camboriú / SC",
+    engenheiro: "Eng. Marcos Viana",
+  },
+  {
+    id: "obra-2",
+    nome: "Edifício Comercial Atrium Bauer",
+    sigla: "EAB-06",
+    endereco: "Rua XV de Novembro, 1120 — Joinville / SC",
+    engenheiro: "Engª. Camila Dorneles",
+  },
+  {
+    id: "obra-3",
+    nome: "Condomínio Logístico SulPark",
+    sigla: "CLS-07",
+    endereco: "Rod. BR-101, Km 118 — Itajaí / SC",
+    engenheiro: "Eng. Roberto Siqueira",
+  },
+];
 
-const ECONOMIA_INSUMOS_HISTORICO: ItemEconomiaInsumo[] = [];
+const ECONOMIA_INSUMOS_HISTORICO: ItemEconomiaInsumo[] = [
+  {
+    id: "eco-1",
+    insumo: "Concreto Usinado Bombeável FCK 35/40 MPa",
+    categoria: "Fundações & Terraplenagem",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    fornecedorVencedor: "Supermix Concreto S.A.",
+    valorMaiorCotado: 95600.0,
+    valorFechado: 84200.0,
+  },
+  {
+    id: "eco-2",
+    insumo: "Aço CA-50 / CA-60 (Ø 10mm, 12.5mm e 16mm)",
+    categoria: "Estrutura (Aço & Concreto)",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    fornecedorVencedor: "SulAço Distribuidora",
+    valorMaiorCotado: 89396.0,
+    valorFechado: 75522.0,
+  },
+  {
+    id: "eco-3",
+    insumo: "Esquadrias de Alumínio Linha Gold + Pele de Vidro",
+    categoria: "Esquadrias & Fachadas de Vidro",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    fornecedorVencedor: "AluGlass Fachadas & Esquadrias",
+    valorMaiorCotado: 472100.0,
+    valorFechado: 431800.0,
+  },
+  {
+    id: "eco-4",
+    insumo: "Elevadores Regenerativos Inox (2 Unidades + Montagem)",
+    categoria: "Elevadores & Equipamentos",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    fornecedorVencedor: "Atlas Schindler Elevadores",
+    valorMaiorCotado: 475000.0,
+    valorFechado: 438000.0,
+  },
+  {
+    id: "eco-5",
+    insumo: "Porcelanato Técnico Retificado 90x90cm + Argamassa AC-III",
+    categoria: "Revestimentos, Louças & Metais",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    fornecedorVencedor: "Portobello Corporate B2B",
+    valorMaiorCotado: 82400.0,
+    valorFechado: 66940.0,
+  },
+  {
+    id: "eco-6",
+    insumo: "Tubulações PPR, PVC Série R e Bombas de Recalque",
+    categoria: "Instalações Hidrossanitárias",
+    obraId: "obra-kairos",
+    obraNome: "Residencial Kairós",
+    fornecedorVencedor: "CASAS DA AGUA",
+    valorMaiorCotado: 21650.0,
+    valorFechado: 18450.0,
+  },
+  {
+    id: "eco-7",
+    insumo: "Argamassa AC2 Porcelanato 20kg",
+    categoria: "Revestimentos, Louças & Metais",
+    obraId: "obra-belvedere",
+    obraNome: "Residencial Belvedere",
+    fornecedorVencedor: "FORMAFIX",
+    valorMaiorCotado: 9950.0,
+    valorFechado: 8500.0,
+  },
+];
 
 const FORNECEDORES_INICIAIS: FornecedorCadastro[] = [];
 
-const SOLICITACOES_INICIAIS: SolicitacaoCompra[] = [];
+const SOLICITACOES_INICIAIS: SolicitacaoCompra[] = [
+  {
+    id: "sc-1",
+    codigo: "SC-2026-0135",
+    obraId: "obra-1",
+    categoria: "Fundações & Terraplenagem",
+    solicitante: "Eng. Marcos Viana",
+    solicitanteCargo: "Engenheiro",
+    urgencia: "Normal",
+    dataNecessaria: "20/10/2026",
+    dataAbertura: "10/10/2026",
+    horarioPedido: "09:30",
+    status: "OC Gerada",
+    itens: [
+      {
+        id: "it-sc-1",
+        codigo: "SINAPI-00001524",
+        descricao: "Concreto Usinado Bombeável fck 40 MPa Brita 0/1 Slump 12+-2",
+        unidade: "m³",
+        quantidade: 160,
+        orcamentoUnitario: 580.0,
+        observacaoObra: "Programar betoneira",
+      },
+    ],
+  },
+  {
+    id: "sc-2",
+    codigo: "SC-2026-0138",
+    obraId: "obra-2",
+    categoria: "Revestimentos, Louças & Metais",
+    solicitante: "Engª. Camila Dorneles",
+    solicitanteCargo: "Engenheiro",
+    urgencia: "Normal",
+    dataNecessaria: "21/10/2026",
+    dataAbertura: "12/10/2026",
+    horarioPedido: "14:15",
+    status: "OC Gerada",
+    itens: [
+      {
+        id: "it-sc-2",
+        codigo: "POR-9090-TEC",
+        descricao: "Porcelanato Técnico Polido 90x90cm Retificado Tráfego Intenso",
+        unidade: "m²",
+        quantidade: 680,
+        orcamentoUnitario: 110.0,
+        observacaoObra: "Paletes na doca térrea",
+      },
+    ],
+  },
+  {
+    id: "sc-3",
+    codigo: "SC-2026-0142",
+    obraId: "obra-kairos",
+    categoria: "Instalações Hidrossanitárias",
+    solicitante: "Eng. Cassiano",
+    solicitanteCargo: "Engenheiro",
+    urgencia: "Normal",
+    dataNecessaria: "24/10/2026",
+    dataAbertura: "20/10/2026",
+    horarioPedido: "10:00",
+    status: "OC Gerada",
+    itens: [
+      {
+        id: "it-sc-3",
+        codigo: "SKU-HID-001",
+        descricao: "Tubos, Conexões e Acabamentos Hidrossanitários Tigre",
+        unidade: "cj",
+        quantidade: 1,
+        orcamentoUnitario: 21650.0,
+        observacaoObra: "Residencial Kairós",
+      },
+    ],
+  },
+];
 
-const ORDENS_INICIAIS: OrdemCompra[] = [];
+const ORDENS_INICIAIS: OrdemCompra[] = [
+  {
+    id: "oc-1",
+    numeroOc: "OC-2026-0089",
+    scId: "sc-hist-1",
+    scCodigo: "SC-2026-0135",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    obraEndereco: "Av. Atlântica, 2450 — Balneário Camboriú / SC",
+    obraEngenheiro: "Eng. Marcos Viana",
+    categoria: "Fundações & Terraplenagem",
+    fornecedorNome: "Supermix Concreto S.A.",
+    fornecedorRazao: "Supermix Concreto e Bombeamento S.A.",
+    fornecedorCnpj: "16.509.210/0008-40",
+    vendedorNome: "Henrique Bastos",
+    whatsapp: "5547999014455",
+    chavePix: "16.509.210/0008-40",
+    dataEmissao: "10/10/2026",
+    dataPrevistaEntrega: "20/10/2026",
+    prazoPagamento: "28/56 ddl Boleto",
+    tipoFrete: "CIF",
+    freteValor: 0,
+    descontoValor: 0,
+    valorTotal: 84200.0,
+    savingGerado: 11400.0,
+    status: "Aguardando Entrega",
+    itens: [
+      {
+        codigo: "SINAPI-00001524",
+        descricao:
+          "Concreto Usinado Bombeável fck 40 MPa Brita 0/1 Slump 12+-2",
+        unidade: "m³",
+        quantidade: 160,
+        precoUnitario: 526.25,
+        subtotal: 84200.0,
+        observacaoObra: "Programar caminhão betoneira a cada 40 min no portão A",
+      },
+    ],
+  },
+  {
+    id: "oc-2",
+    numeroOc: "OC-2026-0090",
+    scId: "sc-hist-2",
+    scCodigo: "SC-2026-0138",
+    obraId: "obra-2",
+    obraNome: "Edifício Comercial Atrium Bauer",
+    obraEndereco: "Rua XV de Novembro, 1120 — Joinville / SC",
+    obraEngenheiro: "Engª. Camila Dorneles",
+    categoria: "Revestimentos, Louças & Metais",
+    fornecedorNome: "Portobello Corporate B2B",
+    fornecedorRazao: "Portobello S.A. Divisão Engenharia",
+    fornecedorCnpj: "83.475.913/0001-91",
+    vendedorNome: "Mariana Borges",
+    whatsapp: "5548991045566",
+    chavePix: "83.475.913/0001-91",
+    dataEmissao: "12/10/2026",
+    dataPrevistaEntrega: "21/10/2026",
+    prazoPagamento: "28/56/84 ddl Faturado",
+    tipoFrete: "CIF",
+    freteValor: 0,
+    descontoValor: 0,
+    valorTotal: 66940.0,
+    savingGerado: 15460.0,
+    status: "Emitida",
+    itens: [
+      {
+        codigo: "POR-9090-TEC",
+        descricao:
+          "Porcelanato Técnico Polido 90x90cm Retificado Tráfego Intenso",
+        unidade: "m²",
+        quantidade: 680,
+        precoUnitario: 98.44,
+        subtotal: 66940.0,
+        observacaoObra: "Descarregar paletes com empilhadeira na doca térrea",
+      },
+    ],
+  },
+  {
+    id: "oc-3",
+    numeroOc: "OC-2026-0091",
+    scId: "sc-hist-3",
+    scCodigo: "SC-2026-0140",
+    obraId: "obra-3",
+    obraNome: "Condomínio Logístico SulPark",
+    obraEndereco: "Rod. BR-101, Km 118 — Itajaí / SC",
+    obraEngenheiro: "Eng. Roberto Siqueira",
+    categoria: "Pintura & Texturas",
+    fornecedorNome: "ImperSul Químicos & Tintas",
+    fornecedorRazao: "ImperSul Distribuidora Técnica para Construção Ltda",
+    fornecedorCnpj: "21.904.118/0001-60",
+    vendedorNome: "Diego Fontes",
+    whatsapp: "5547996553210",
+    chavePix: "21.904.118/0001-60",
+    dataEmissao: "14/10/2026",
+    dataPrevistaEntrega: "22/10/2026",
+    prazoPagamento: "28/56 ddl Boleto",
+    tipoFrete: "CIF",
+    freteValor: 0,
+    descontoValor: 0,
+    valorTotal: 44600.0,
+    savingGerado: 8300.0,
+    status: "Aguardando Entrega",
+    itens: [
+      {
+        codigo: "TIN-ACR-18L",
+        descricao:
+          "Tinta Acrílica Premium Fachada Fosca Cinza Urbano (Lata 18L)",
+        unidade: "un",
+        quantidade: 120,
+        precoUnitario: 371.67,
+        subtotal: 44600.0,
+        observacaoObra: "Entregar no Galpão B — Almoxarifado Central",
+      },
+    ],
+  },
+  {
+    id: "oc-4",
+    numeroOc: "OC-2026-0092",
+    scId: "sc-hist-4",
+    scCodigo: "SC-2026-0142",
+    obraId: "obra-kairos",
+    obraNome: "Residencial Kairós",
+    obraEndereco: "Rua 2500, Centro — Balneário Camboriú / SC",
+    obraEngenheiro: "Eng. Cassiano / João Carlos Bauer",
+    categoria: "Instalações Hidrossanitárias",
+    fornecedorNome: "CASAS DA AGUA",
+    fornecedorRazao: "Casas da Água Materiais para Construção Ltda",
+    fornecedorCnpj: "82.802.100/0001-08",
+    vendedorNome: "Carlos Eduardo",
+    whatsapp: "5547997810384",
+    chavePix: "82.802.100/0001-08",
+    dataEmissao: "20/10/2026",
+    dataPrevistaEntrega: "24/10/2026",
+    prazoPagamento: "28/56 ddl Faturado",
+    tipoFrete: "CIF",
+    freteValor: 0,
+    descontoValor: 250.0,
+    valorTotal: 18450.0,
+    savingGerado: 3200.0,
+    status: "Emitida",
+    itens: [
+      {
+        codigo: "SKU-HID-001",
+        descricao: "Tubos, Conexões e Acabamentos Hidrossanitários Tigre",
+        unidade: "cj",
+        quantidade: 1,
+        precoUnitario: 18700.0,
+        subtotal: 18700.0,
+        observacaoObra: "Conforme cotação CASAS DA AGUA gerada",
+      },
+    ],
+  },
+  {
+    id: "oc-5",
+    numeroOc: "OC-2026-0093",
+    scId: "sc-hist-5",
+    scCodigo: "SC-2026-0145",
+    obraId: "obra-belvedere",
+    obraNome: "Residencial Belvedere",
+    obraEndereco: "Rua Otto Boehm, América — Joinville / SC",
+    obraEngenheiro: "Eng. Cassiano",
+    categoria: "Revestimentos, Louças & Metais",
+    fornecedorNome: "FORMAFIX",
+    fornecedorRazao: "Formafix Argamassas e Revestimentos Eireli",
+    fornecedorCnpj: "07.391.220/0001-12",
+    vendedorNome: "Atendimento Comercial",
+    whatsapp: "5547997810384",
+    chavePix: "07.391.220/0001-12",
+    dataEmissao: "20/10/2026",
+    dataPrevistaEntrega: "25/10/2026",
+    prazoPagamento: "30 ddl",
+    tipoFrete: "CIF",
+    freteValor: 0,
+    descontoValor: 120.0,
+    valorTotal: 8500.0,
+    savingGerado: 1450.0,
+    status: "Emitida",
+    itens: [
+      {
+        codigo: "SKU-MAT-001",
+        descricao: "AC2 Porcelanato 20kg Cinza / Argamassa Colante",
+        unidade: "sc",
+        quantidade: 500,
+        precoUnitario: 17.0,
+        subtotal: 8500.0,
+        observacaoObra: "Cotação AC2 Porcelanato 01 - Almoxarifado Central",
+      },
+    ],
+  },
+];
 
 const USUARIOS_INICIAIS: UsuarioSistema[] = [
   {
     id: "usr-admin-1",
-    nome: "Administrador do Sistema",
+    nome: "João Carlos Bauer",
     cargo: "Administrador",
     obraId: "ALL",
     obraNome: "Todas as Obras (Central de Compras)",
-    email: "admin@jcbauer.com.br",
+    email: "suprimentos@jcbauer.com.br",
+    senha: "123",
+    status: "Ativo",
+  },
+  {
+    id: "usr-welliton",
+    nome: "Welliton Schmidt",
+    cargo: "Administrador",
+    obraId: "ALL",
+    obraNome: "Todas as Obras (Central de Compras)",
+    email: "welliton@jcbauer.com.br",
+    senha: "123",
+    status: "Ativo",
+  },
+  {
+    id: "usr-eng-marcos",
+    nome: "Eng. Marcos Viana",
+    cargo: "Engenheiro",
+    obraId: "obra-1",
+    obraNome: "Residencial Horizon Tower",
+    email: "marcos.viana@jcbauer.com.br",
     senha: "123",
     status: "Ativo",
   },
@@ -1733,24 +2136,24 @@ export default function HomePage() {
         }
       }
 
-      const DEMO_OBRA_IDS = new Set(["obra-1", "obra-2", "obra-3"]);
-      const isDemoObra = (o?: { id?: string; nome?: string } | null) =>
-        !o ||
-        DEMO_OBRA_IDS.has(o.id || "") ||
-        o.nome === "Residencial Horizon Tower" ||
-        o.nome === "Edifício Comercial Atrium Bauer" ||
-        o.nome === "Condomínio Logístico SulPark";
-
-      const savedObras = window.localStorage.getItem(OBRAS_STORAGE_KEY);
+            const savedObras = window.localStorage.getItem(OBRAS_STORAGE_KEY);
       if (savedObras) {
         try {
-          const parsedObras = (JSON.parse(savedObras) as Obra[]).filter((o) => !isDemoObra(o));
-          if (Array.isArray(parsedObras)) {
+          const parsedObras = JSON.parse(savedObras) as Obra[];
+          if (Array.isArray(parsedObras) && parsedObras.length > 0) {
             setObras(parsedObras);
+          } else {
+            setObras(OBRAS_INICIAIS);
+            window.localStorage.setItem(OBRAS_STORAGE_KEY, JSON.stringify(OBRAS_INICIAIS));
           }
         } catch {
-          // ignore
+          setObras(OBRAS_INICIAIS);
         }
+      } else {
+        setObras(OBRAS_INICIAIS);
+        try {
+          window.localStorage.setItem(OBRAS_STORAGE_KEY, JSON.stringify(OBRAS_INICIAIS));
+        } catch {}
       }
 
       const savedForn = window.localStorage.getItem(FORNECEDORES_STORAGE_KEY);
@@ -1817,13 +2220,24 @@ export default function HomePage() {
         }
       }
 
-      const isDemoOc = (o: OrdemCompra) => !o || o.id?.startsWith("demo-") || o.fornecedorNome === "Fornecedor 1" || o.fornecedorNome === "Fornecedor 2" || o.fornecedorNome === "Fornecedor 3" || o.itens?.some((it) => it.descricao?.includes("Cimento CP-II") || it.descricao?.includes("AÃ§o CA-50") || it.descricao?.includes("Areia MÃ©dia"));
-      const savedOc = window.localStorage.getItem(ORDENS_STORAGE_KEY);
+            const savedOc = window.localStorage.getItem(ORDENS_STORAGE_KEY);
       if (savedOc) {
-        const parsedOc = (JSON.parse(savedOc) as OrdemCompra[]).filter((o) => !isDemoOc(o));
-        if (Array.isArray(parsedOc) && parsedOc.length > 0) {
-          setOrdens(parsedOc);
+        try {
+          const parsedOc = JSON.parse(savedOc) as OrdemCompra[];
+          if (Array.isArray(parsedOc) && parsedOc.length > 0) {
+            setOrdens(parsedOc);
+          } else {
+            setOrdens(ORDENS_INICIAIS);
+            window.localStorage.setItem(ORDENS_STORAGE_KEY, JSON.stringify(ORDENS_INICIAIS));
+          }
+        } catch {
+          setOrdens(ORDENS_INICIAIS);
         }
+      } else {
+        setOrdens(ORDENS_INICIAIS);
+        try {
+          window.localStorage.setItem(ORDENS_STORAGE_KEY, JSON.stringify(ORDENS_INICIAIS));
+        } catch {}
       }
 
       const savedCt = window.localStorage.getItem(CONTRATOS_STORAGE_KEY);
@@ -2057,7 +2471,10 @@ export default function HomePage() {
                 );
               } catch {}
             }
-            if (dadosNuvem[OBRAS_STORAGE_KEY]) {
+            if (
+              Array.isArray(dadosNuvem[OBRAS_STORAGE_KEY]) &&
+              dadosNuvem[OBRAS_STORAGE_KEY].length > 0
+            ) {
               setObras(dadosNuvem[OBRAS_STORAGE_KEY]);
               try {
                 window.localStorage.setItem(
@@ -2065,6 +2482,16 @@ export default function HomePage() {
                   JSON.stringify(dadosNuvem[OBRAS_STORAGE_KEY])
                 );
               } catch {}
+            } else {
+              const localObras = window.localStorage.getItem(OBRAS_STORAGE_KEY);
+              if (localObras) {
+                try {
+                  const parsed = JSON.parse(localObras);
+                  if (Array.isArray(parsed) && parsed.length > 0) {
+                    salvarChaveSupabase(OBRAS_STORAGE_KEY, parsed);
+                  }
+                } catch {}
+              }
             }
             if (dadosNuvem[COMPARATIVO_STORAGE_KEY]) {
               setComparativoSalvo(dadosNuvem[COMPARATIVO_STORAGE_KEY]);
@@ -2075,7 +2502,10 @@ export default function HomePage() {
                 );
               } catch {}
             }
-            if (dadosNuvem[ORDENS_STORAGE_KEY]) {
+            if (
+              Array.isArray(dadosNuvem[ORDENS_STORAGE_KEY]) &&
+              dadosNuvem[ORDENS_STORAGE_KEY].length > 0
+            ) {
               setOrdens(dadosNuvem[ORDENS_STORAGE_KEY]);
               try {
                 window.localStorage.setItem(
@@ -2083,8 +2513,21 @@ export default function HomePage() {
                   JSON.stringify(dadosNuvem[ORDENS_STORAGE_KEY])
                 );
               } catch {}
+            } else {
+              const localOc = window.localStorage.getItem(ORDENS_STORAGE_KEY);
+              if (localOc) {
+                try {
+                  const parsed = JSON.parse(localOc);
+                  if (Array.isArray(parsed) && parsed.length > 0) {
+                    salvarChaveSupabase(ORDENS_STORAGE_KEY, parsed);
+                  }
+                } catch {}
+              }
             }
-            if (dadosNuvem[SOLICITACOES_STORAGE_KEY]) {
+            if (
+              Array.isArray(dadosNuvem[SOLICITACOES_STORAGE_KEY]) &&
+              dadosNuvem[SOLICITACOES_STORAGE_KEY].length > 0
+            ) {
               setSolicitacoes(dadosNuvem[SOLICITACOES_STORAGE_KEY]);
               try {
                 window.localStorage.setItem(
@@ -2162,9 +2605,15 @@ export default function HomePage() {
 
       await salvarChaveSupabase(SETTINGS_STORAGE_KEY, settings);
       await salvarChaveSupabase(FORNECEDORES_STORAGE_KEY, fornecedores);
-      await salvarChaveSupabase(OBRAS_STORAGE_KEY, obras);
-      await salvarChaveSupabase(ORDENS_STORAGE_KEY, ordens);
-      await salvarChaveSupabase(SOLICITACOES_STORAGE_KEY, solicitacoes);
+      if (Array.isArray(obras) && obras.length > 0) {
+        await salvarChaveSupabase(OBRAS_STORAGE_KEY, obras);
+      }
+      if (Array.isArray(ordens) && ordens.length > 0) {
+        await salvarChaveSupabase(ORDENS_STORAGE_KEY, ordens);
+      }
+      if (Array.isArray(solicitacoes) && solicitacoes.length > 0) {
+        await salvarChaveSupabase(SOLICITACOES_STORAGE_KEY, solicitacoes);
+      }
       await salvarChaveSupabase(CONTRATOS_STORAGE_KEY, contratos);
       await salvarChaveSupabase(ORCAMENTO_STORAGE_KEY, orcamento);
       await salvarChaveSupabase(ESTOQUE_STORAGE_KEY, estoque);
@@ -2219,12 +2668,19 @@ export default function HomePage() {
           JSON.stringify(dados[SETTINGS_STORAGE_KEY])
         );
       }
-      if (dados[OBRAS_STORAGE_KEY]) {
+      if (
+        Array.isArray(dados[OBRAS_STORAGE_KEY]) &&
+        dados[OBRAS_STORAGE_KEY].length > 0
+      ) {
         setObras(dados[OBRAS_STORAGE_KEY]);
         window.localStorage.setItem(
           OBRAS_STORAGE_KEY,
           JSON.stringify(dados[OBRAS_STORAGE_KEY])
         );
+      } else {
+        if (Array.isArray(obras) && obras.length > 0) {
+          salvarChaveSupabase(OBRAS_STORAGE_KEY, obras);
+        }
       }
       if (dados[COMPARATIVO_STORAGE_KEY]) {
         setComparativoSalvo(dados[COMPARATIVO_STORAGE_KEY]);
@@ -2233,14 +2689,24 @@ export default function HomePage() {
           JSON.stringify(dados[COMPARATIVO_STORAGE_KEY])
         );
       }
-      if (dados[ORDENS_STORAGE_KEY]) {
+      if (
+        Array.isArray(dados[ORDENS_STORAGE_KEY]) &&
+        dados[ORDENS_STORAGE_KEY].length > 0
+      ) {
         setOrdens(dados[ORDENS_STORAGE_KEY]);
         window.localStorage.setItem(
           ORDENS_STORAGE_KEY,
           JSON.stringify(dados[ORDENS_STORAGE_KEY])
         );
+      } else {
+        if (Array.isArray(ordens) && ordens.length > 0) {
+          salvarChaveSupabase(ORDENS_STORAGE_KEY, ordens);
+        }
       }
-      if (dados[SOLICITACOES_STORAGE_KEY]) {
+      if (
+        Array.isArray(dados[SOLICITACOES_STORAGE_KEY]) &&
+        dados[SOLICITACOES_STORAGE_KEY].length > 0
+      ) {
         setSolicitacoes(dados[SOLICITACOES_STORAGE_KEY]);
         window.localStorage.setItem(
           SOLICITACOES_STORAGE_KEY,
@@ -14561,7 +15027,7 @@ function TelaLoginCorporativa({
     usuarios.find((u) => u.cargo === "Administrador") ||
     USUARIOS_INICIAIS[0] || {
       id: "usr-admin-1",
-      nome: "Administrador do Sistema",
+      nome: "João Carlos Bauer",
       cargo: "Administrador" as const,
       obraId: "ALL",
       obraNome: "Todas as Obras (Central de Compras)",
