@@ -243,6 +243,7 @@ interface OrdemCompra {
   prazoPagamento: string;
   tipoFrete: "CIF" | "FOB";
   freteValor: number;
+  descontoValor?: number;
   valorTotal: number;
   savingGerado: number;
   alcadaAprovacao?: NivelAlcada;
@@ -352,6 +353,7 @@ interface FornecedorCotadoRapido {
   condicao: string;
   freteTipo: "CIF" | "FOB";
   freteValor: number;
+  descontoValor?: number;
 }
 
 interface ColaboradorMapeado {
@@ -1302,6 +1304,7 @@ export default function HomePage() {
       condicao: "",
       freteTipo: "CIF",
       freteValor: 0,
+      descontoValor: 0,
     },
     {
       nome: "",
@@ -1311,6 +1314,7 @@ export default function HomePage() {
       condicao: "",
       freteTipo: "CIF",
       freteValor: 0,
+      descontoValor: 0,
     },
     {
       nome: "",
@@ -1320,6 +1324,7 @@ export default function HomePage() {
       condicao: "",
       freteTipo: "CIF",
       freteValor: 0,
+      descontoValor: 0,
     },
   ]);
   const [comparativoItens, setComparativoItens] = useState<
@@ -3030,6 +3035,18 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         </tr>`
             : ""
         }
+        ${
+          (oc.descontoValor || 0) > 0
+            ? `<tr style="background: #f0fdf4; font-size: 12px;">
+          <td colspan="5" style="padding: 6px 12px; border: 1px solid #bbf7d0; text-align: right; font-weight: 600; color: #166534;">
+            Desconto Comercial (R$):
+          </td>
+          <td style="padding: 6px 12px; border: 1px solid #bbf7d0; text-align: right; font-weight: 700; color: #166534;">
+            -${formatBRL(oc.descontoValor || 0)}
+          </td>
+        </tr>`
+            : ""
+        }
         <tr style="background: #ecfdf5; font-size: 14px;">
           <td colspan="5" style="padding: 10px 12px; border: 1px solid #a7f3d0; text-align: right; font-weight: 900; color: #065f46;">
             VALOR TOTAL DA ORDEM DE COMPRA:
@@ -4121,16 +4138,19 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       nome: "Fornecedor 1",
       freteValor: 0,
       freteTipo: "CIF" as const,
+      descontoValor: 0,
     };
     const forn1 = comparativoFornecedores?.[1] ?? {
       nome: "Fornecedor 2",
       freteValor: 0,
       freteTipo: "CIF" as const,
+      descontoValor: 0,
     };
     const forn2 = comparativoFornecedores?.[2] ?? {
       nome: "Fornecedor 3",
       freteValor: 0,
       freteTipo: "CIF" as const,
+      descontoValor: 0,
     };
 
     const itensCalculados = (comparativoItens || []).map((item) => {
@@ -4196,9 +4216,13 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     const frete2 = Number(forn1.freteValor) || 0;
     const frete3 = Number(forn2.freteValor) || 0;
 
-    const total1 = subtotal1 + frete1;
-    const total2 = subtotal2 + frete2;
-    const total3 = subtotal3 + frete3;
+    const desc1 = Number(forn0.descontoValor) || 0;
+    const desc2 = Number(forn1.descontoValor) || 0;
+    const desc3 = Number(forn2.descontoValor) || 0;
+
+    const total1 = Math.max(0, subtotal1 + frete1 - desc1);
+    const total2 = Math.max(0, subtotal2 + frete2 - desc2);
+    const total3 = Math.max(0, subtotal3 + frete3 - desc3);
 
     const totaisValidos = [
       {
@@ -4206,6 +4230,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         nome: forn0.nome || "Orçamento 1",
         subtotal: subtotal1,
         frete: frete1,
+        desconto: desc1,
         total: total1,
         forn: forn0,
       },
@@ -4214,6 +4239,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         nome: forn1.nome || "Orçamento 2",
         subtotal: subtotal2,
         frete: frete2,
+        desconto: desc2,
         total: total2,
         forn: forn1,
       },
@@ -4222,10 +4248,11 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         nome: forn2.nome || "Orçamento 3",
         subtotal: subtotal3,
         frete: frete3,
+        desconto: desc3,
         total: total3,
         forn: forn2,
       },
-    ].filter((t) => t.total > 0);
+    ].filter((t) => t.total > 0 || t.subtotal > 0);
 
     const ranking = [...totaisValidos].sort((a, b) => a.total - b.total);
     const vencedorGeral = ranking[0] || null;
@@ -4247,6 +4274,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       subtotal1,
       subtotal2,
       subtotal3,
+      frete1,
+      frete2,
+      frete3,
+      desc1,
+      desc2,
+      desc3,
       total1,
       total2,
       total3,
@@ -4293,9 +4326,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     valor: string | number
   ) => {
     setComparativoFornecedores((prev) => {
-      const f0 = prev?.[0] || { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0 };
-      const f1 = prev?.[1] || { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0 };
-      const f2 = prev?.[2] || { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0 };
+      const f0 = prev?.[0] || { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0, descontoValor: 0 };
+      const f1 = prev?.[1] || { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0, descontoValor: 0 };
+      const f2 = prev?.[2] || { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0, descontoValor: 0 };
       const copia: [
         FornecedorCotadoRapido,
         FornecedorCotadoRapido,
@@ -4313,9 +4346,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     const achado = fornecedores.find((f) => f.id === fornecedorId);
     if (!achado) return;
     setComparativoFornecedores((prev) => {
-      const f0 = prev?.[0] || { nome: "Fornecedor 1", vendedor: "", telefone: "", prazo: "3 a 5 dias", condicao: "28 dias (Faturado)", freteTipo: "CIF" as const, freteValor: 0 };
-      const f1 = prev?.[1] || { nome: "Fornecedor 2", vendedor: "", telefone: "", prazo: "5 a 7 dias", condicao: "30 dias", freteTipo: "CIF" as const, freteValor: 0 };
-      const f2 = prev?.[2] || { nome: "Fornecedor 3", vendedor: "", telefone: "", prazo: "Pronta Entrega", condicao: "21 dias", freteTipo: "FOB" as const, freteValor: 0 };
+      const f0 = prev?.[0] || { nome: "Fornecedor 1", vendedor: "", telefone: "", prazo: "3 a 5 dias", condicao: "28 dias (Faturado)", freteTipo: "CIF" as const, freteValor: 0, descontoValor: 0 };
+      const f1 = prev?.[1] || { nome: "Fornecedor 2", vendedor: "", telefone: "", prazo: "5 a 7 dias", condicao: "30 dias", freteTipo: "CIF" as const, freteValor: 0, descontoValor: 0 };
+      const f2 = prev?.[2] || { nome: "Fornecedor 3", vendedor: "", telefone: "", prazo: "Pronta Entrega", condicao: "21 dias", freteTipo: "FOB" as const, freteValor: 0, descontoValor: 0 };
       const copia: [
         FornecedorCotadoRapido,
         FornecedorCotadoRapido,
@@ -4385,6 +4418,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       prazoPagamento: forn.condicao || "A Combinar",
       tipoFrete: forn.freteTipo,
       freteValor: forn.freteValor,
+      descontoValor: forn.descontoValor || 0,
       valorTotal: total,
       savingGerado: resumoComparativo.savingGlobal,
       alcadaAprovacao: "Comprador Autorizado",
@@ -4420,9 +4454,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       setComparativoItens([]);
       setComparativoTitulo("");
       setComparativoFornecedores([
-        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0 },
-        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0 },
-        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0 },
+        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
+        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
+        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
       ]);
       try { window.localStorage.removeItem(COMPARATIVO_STORAGE_KEY); } catch {}
       dispararAviso("Quadro comparativo zerado com sucesso! Nenhum item pendente.");
@@ -4641,13 +4675,19 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         <td class="text-right">${formatBRL(resumoComparativo.subtotal3)}</td>
       </tr>
       <tr style="background: #f8fafc;">
+        <td colspan="2">Desconto Comercial (R$)</td>
+        <td class="text-right" style="color: #16a34a;">-${formatBRL(comparativoFornecedores?.[0]?.descontoValor || 0)}</td>
+        <td class="text-right" style="color: #16a34a;">-${formatBRL(comparativoFornecedores?.[1]?.descontoValor || 0)}</td>
+        <td class="text-right" style="color: #16a34a;">-${formatBRL(comparativoFornecedores?.[2]?.descontoValor || 0)}</td>
+      </tr>
+      <tr style="background: #f8fafc;">
         <td colspan="2">Frete (CIF / FOB)</td>
         <td class="text-right">${comparativoFornecedores?.[0]?.freteTipo || "CIF"} (${formatBRL(comparativoFornecedores?.[0]?.freteValor || 0)})</td>
         <td class="text-right">${comparativoFornecedores?.[1]?.freteTipo || "CIF"} (${formatBRL(comparativoFornecedores?.[1]?.freteValor || 0)})</td>
         <td class="text-right">${comparativoFornecedores?.[2]?.freteTipo || "CIF"} (${formatBRL(comparativoFornecedores?.[2]?.freteValor || 0)})</td>
       </tr>
       <tr style="background: #0f172a; color: #ffffff; font-weight: 800; font-size: 11px;">
-        <td colspan="2" style="border-color: #0f172a;">VALOR TOTAL FINAL (COM FRETE)</td>
+        <td colspan="2" style="border-color: #0f172a;">VALOR TOTAL FINAL (COM FRETE E DESCONTO)</td>
         <td class="text-right" style="border-color: #0f172a;">${formatBRL(resumoComparativo.total1)}</td>
         <td class="text-right" style="border-color: #0f172a;">${formatBRL(resumoComparativo.total2)}</td>
         <td class="text-right" style="border-color: #0f172a;">${formatBRL(resumoComparativo.total3)}</td>
@@ -7762,6 +7802,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                         condicao: "",
                         freteTipo: "CIF" as const,
                         freteValor: 0,
+                        descontoValor: 0,
                       };
                       const total =
                         idx === 0
@@ -7982,6 +8023,37 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           </div>
 
                           {/* Rodapé do Card: Valor Total + Botão de Emitir OC */}
+      {/* Desconto Comercial (R$) */}
+      <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-2.5 mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-bold text-emerald-900">
+            🏷️ Desconto:
+          </span>
+          <span className="text-[10px] text-emerald-700">
+            (em R$)
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[11px] font-bold text-emerald-700">
+            - R$
+          </span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={forn.descontoValor === 0 ? "" : forn.descontoValor ?? ""}
+            onChange={(e) =>
+              handleAtualizarFornecedorComparativo(
+                idx,
+                "descontoValor",
+                parseFloat(e.target.value) || 0
+              )
+            }
+            placeholder="0,00"
+            className="w-24 bg-white border border-emerald-300 rounded px-2 py-0.5 text-xs font-bold text-right text-emerald-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-xs"
+          />
+        </div>
+      </div>
                           <div className="border-t border-slate-200 pt-3">
                             <div className="flex items-baseline justify-between mb-2">
                               <span className="text-xs font-semibold text-slate-500">
@@ -7999,8 +8071,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                 </div>
                                 {subtotal !== total && (
                                   <div className="text-[10px] text-slate-500">
-                                    (Materiais: {formatBRL(subtotal)} + Frete:{" "}
-                                    {formatBRL(forn.freteValor)})
+                                    (Mat: {formatBRL(subtotal)}
+                                    {Number(forn.freteValor) > 0 ? ` + Frete: ${formatBRL(forn.freteValor)}` : ""}
+                                    {Number(forn.descontoValor) > 0 ? ` - Desc: ${formatBRL(forn.descontoValor)}` : ""})
                                   </div>
                                 )}
                               </div>
@@ -8326,6 +8399,53 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                               <td></td>
                             </tr>
 
+                            <tr className="bg-emerald-50/60 text-xs border-y border-emerald-200">
+                              <td
+                                colSpan={2}
+                                className="py-2.5 px-4 text-emerald-950 font-bold"
+                              >
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span>🏷️</span>
+                                  <span>Desconto Comercial (R$)</span>
+                                </span>
+                              </td>
+                              {([0, 1, 2] as const).map((idx) => {
+                                const descAtual =
+                                  comparativoFornecedores?.[idx]?.descontoValor ?? 0;
+                                return (
+                                  <td
+                                    key={idx}
+                                    className="py-1.5 px-2 text-right border-l border-emerald-200 text-xs tabular-nums"
+                                  >
+                                    <div className="flex items-center justify-end gap-1">
+                                      <span className="text-[11px] font-bold text-emerald-700">
+                                        - R$
+                                      </span>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        value={descAtual === 0 ? "" : descAtual}
+                                        onChange={(e) =>
+                                          handleAtualizarFornecedorComparativo(
+                                            idx,
+                                            "descontoValor",
+                                            parseFloat(e.target.value) || 0
+                                          )
+                                        }
+                                        placeholder="0,00"
+                                        className="w-24 bg-white border border-emerald-300 rounded px-2 py-0.5 text-xs font-bold text-right text-emerald-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-xs"
+                                        title={`Desconto em R$ concedido por ${
+                                          comparativoFornecedores?.[idx]?.nome ||
+                                          `Fornecedor ${idx + 1}`
+                                        }`}
+                                      />
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                              <td></td>
+                            </tr>
                             <tr className="bg-slate-50 text-xs">
                               <td
                                 colSpan={2}
@@ -8354,7 +8474,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                 colSpan={2}
                                 className="py-3 px-4 font-black"
                               >
-                                VALOR TOTAL FINAL (COM FRETE)
+                                VALOR TOTAL FINAL (COM FRETE E DESCONTO)
                               </td>
                               {([0, 1, 2] as const).map((idx) => {
                                 const tot =
@@ -17412,8 +17532,20 @@ function ModalVisualizarComparativoPdf({
                   <td className="p-2 text-right">{formatBRL(resumoComparativo.subtotal2)}</td>
                   <td className="p-2 text-right">{formatBRL(resumoComparativo.subtotal3)}</td>
                 </tr>
+                <tr className="bg-emerald-50/70 text-emerald-950 font-semibold border-t border-slate-200">
+                  <td colSpan={2} className="p-2">Desconto Comercial (R$)</td>
+                  <td className="p-2 text-right text-emerald-700">-{formatBRL(comparativoFornecedores?.[0]?.descontoValor || 0)}</td>
+                  <td className="p-2 text-right text-emerald-700">-{formatBRL(comparativoFornecedores?.[1]?.descontoValor || 0)}</td>
+                  <td className="p-2 text-right text-emerald-700">-{formatBRL(comparativoFornecedores?.[2]?.descontoValor || 0)}</td>
+                </tr>
+                <tr className="bg-slate-50 text-slate-700 font-semibold border-t border-slate-200">
+                  <td colSpan={2} className="p-2">Frete (CIF / FOB)</td>
+                  <td className="p-2 text-right">{comparativoFornecedores?.[0]?.freteTipo || "CIF"} ({formatBRL(comparativoFornecedores?.[0]?.freteValor || 0)})</td>
+                  <td className="p-2 text-right">{comparativoFornecedores?.[1]?.freteTipo || "CIF"} ({formatBRL(comparativoFornecedores?.[1]?.freteValor || 0)})</td>
+                  <td className="p-2 text-right">{comparativoFornecedores?.[2]?.freteTipo || "CIF"} ({formatBRL(comparativoFornecedores?.[2]?.freteValor || 0)})</td>
+                </tr>
                 <tr className="bg-slate-900 text-white font-extrabold text-xs">
-                  <td colSpan={2} className="p-2.5">VALOR TOTAL (COM FRETE)</td>
+                  <td colSpan={2} className="p-2.5">VALOR TOTAL (COM FRETE E DESCONTO)</td>
                   <td className="p-2.5 text-right">{formatBRL(resumoComparativo.total1)}</td>
                   <td className="p-2.5 text-right">{formatBRL(resumoComparativo.total2)}</td>
                   <td className="p-2.5 text-right">{formatBRL(resumoComparativo.total3)}</td>
