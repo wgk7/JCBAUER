@@ -8399,17 +8399,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   const tituloAbaAtual: Record<TabId, string> = {
     Painel: "Painel de Compras",
     DesempenhoFinanceiro: "BI Financeiro & Obras",
-    Cotacoes: "Mapa de CotaÃ§Ãµes",
+    Cotacoes: "Mapa de Cota\u00E7\u00F5es",
     Concreteiras: "Quadro de Concreteiras (Usinado & Bomba)",
     ComprasColetivas: "Central de Compras Coletivas (Multiobra)",
     Fornecedores: "Fornecedores & IQF",
     Ordens: "Ordens de Compra",
     Estoque: "Almoxarifado & Estoque",
-    Medicoes: "Contratos & MediÃ§Ãµes",
-    Orcamento: "OrÃ§amento da Obra",
-    Logistica: "CalendÃ¡rio de Cargas",
-    Importacao: "ImportaÃ§Ã£o de Planilhas",
-    Configuracoes: "ConfiguraÃ§Ãµes",
+    Medicoes: "Contratos & Medi\u00E7\u00F5es",
+    Orcamento: "Or\u00E7amento da Obra",
+    Logistica: "Calend\u00E1rio de Cargas",
+    Importacao: "Importa\u00E7\u00E3o de Planilhas",
+    Configuracoes: "Configura\u00E7\u00F5es",
   };
   const renderBotaoPrimarioHeader = () => {
     switch (activeTab) {
@@ -8758,8 +8758,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                 },
                 {
                   id: "Cotacoes",
-                  label: "Comparativo de Preços",
-                  badge: "3 Orçamentos",
+                  label: "Comparativo de Pre\u00E7os",
+                  badge: "3 Or\u00E7amentos",
                   iconPath: "M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3",
                 },
                 {
@@ -8791,17 +8791,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                 },
                 {
                   id: "Medicoes",
-                  label: "Contratos & Medições",
+                  label: "Contratos & Medi\u00E7\u00F5es",
                   iconPath: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z",
                 },
                 {
                   id: "Orcamento",
-                  label: "Orçamento da Obra",
+                  label: "Or\u00E7amento da Obra",
                   iconPath: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
                 },
                 {
                   id: "Logistica",
-                  label: "Calendário de Cargas",
+                  label: "Calend\u00E1rio de Cargas",
                   iconPath: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
                 },
                 {
@@ -8811,7 +8811,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                 },
                 {
                   id: "Configuracoes",
-                  label: "Configurações",
+                  label: "Configura\u00E7\u00F5es",
                   iconPath: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z",
                 },
               ] as { id: TabId; label: string; badge?: string; iconPath: string }[]
@@ -10868,7 +10868,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                     <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
                     </svg>
-                    <span>Comparativo de 3 Orçamentos (Rápido)</span>
+                    <span>{"Comparativo de 3 Or\u00E7amentos (R\u00E1pido)"}</span>
                   </button>
                   <button
                     type="button"
@@ -10882,7 +10882,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                     <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                     </svg>
-                    <span>Central de Cotações Salvas ({processosCotacoes.length})</span>
+                    <span>{`Central de Cota\u00E7\u00F5es Salvas (${processosCotacoes.length})`}</span>
                   </button>
                   <button
                     type="button"
@@ -10896,7 +10896,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                     <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                     </svg>
-                    <span>Cotações Vinculadas a Obras ({solicitacoes.length})</span>
+                    <span>{`Cota\u00E7\u00F5es Vinculadas a Obras (${solicitacoes.length})`}</span>
                   </button>
                 </div>
 
