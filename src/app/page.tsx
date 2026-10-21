@@ -20,6 +20,8 @@ type TabId =
   | "Painel"
   | "DesempenhoFinanceiro"
   | "Cotacoes"
+  | "Concreteiras"
+  | "ComprasColetivas"
   | "Fornecedores"
   | "Ordens"
   | "Estoque"
@@ -1407,6 +1409,7 @@ export default function HomePage() {
 
   // Navegação de Abas do Administrador (6 Abas Independentes)
   const [activeTab, setActiveTab] = useState<TabId>("Painel");
+  const [menuLateralAberto, setMenuLateralAberto] = useState<boolean>(false);
 
   // Navegação de Abas Restritas da Obra (3 Abas Exclusivas para Engenheiro/Almoxarife/Encarregado)
   const [obraActiveTab, setObraActiveTab] = useState<ObraTabId>("NovoPedido");
@@ -6515,7 +6518,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     dispararAviso(
       `Ordem de Compra ${novaOc.numeroOc} gerada com sucesso para ${concreteira.nome} (${formatBRL(total)})!`
     );
-    setActiveTab("ordens");
+    setActiveTab("Ordens");
   };
 
   const handleExportarConcreteirasExcel = () => {
@@ -7198,7 +7201,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     dispararAviso(
       `Sucesso absoluto! Lote desmembrado em ${novasOCs.length} Ordens de Compra emitidas para ${vencedor.nome} com economia de ${formatBRL(resumoComprasColetivas.vencedor?.savingEmRelacaoAoVarejo || 0)}!`
     );
-    setActiveTab("ordens");
+    setActiveTab("Ordens");
   };
 
   const handleExportarColetivasExcel = () => {
@@ -8396,15 +8399,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   const tituloAbaAtual: Record<TabId, string> = {
     Painel: "Painel de Compras",
     DesempenhoFinanceiro: "BI Financeiro & Obras",
-    Cotacoes: "Mapa de Cotações",
+    Cotacoes: "Mapa de CotaÃ§Ãµes",
+    Concreteiras: "Quadro de Concreteiras (Usinado & Bomba)",
+    ComprasColetivas: "Central de Compras Coletivas (Multiobra)",
     Fornecedores: "Fornecedores & IQF",
     Ordens: "Ordens de Compra",
     Estoque: "Almoxarifado & Estoque",
-    Medicoes: "Contratos & Medições",
-    Orcamento: "Orçamento da Obra",
-    Logistica: "Calendário de Cargas",
-    Importacao: "Importação de Planilhas",
-    Configuracoes: "Configurações",
+    Medicoes: "Contratos & MediÃ§Ãµes",
+    Orcamento: "OrÃ§amento da Obra",
+    Logistica: "CalendÃ¡rio de Cargas",
+    Importacao: "ImportaÃ§Ã£o de Planilhas",
+    Configuracoes: "ConfiguraÃ§Ãµes",
   };
 
   const renderBotaoPrimarioHeader = () => {
@@ -8443,16 +8448,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             <button
               type="button"
               onClick={() => {
-                if (modoCotacoes === "compras_coletivas") {
-                  handleExportarColetivasExcel();
-                } else if (modoCotacoes === "concreteiras") {
-                  handleExportarConcreteirasExcel();
-                } else if (modoCotacoes === "comparativo_rapido" || modoCotacoes === "painel_cotacoes") {
+                if (modoCotacoes === "comparativo_rapido" || modoCotacoes === "painel_cotacoes") {
                   handleExportarComparativoRapidoExcel();
                 } else if (scAtiva) {
                   exportarCotacaoExcel(scAtiva, obraScAtiva.nome);
                 } else {
-                  dispararAviso("Nenhuma cotação ativa para exportar.");
+                  dispararAviso("Nenhuma cotaÃ§Ã£o ativa para exportar.");
                 }
               }}
               className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold transition whitespace-nowrap"
@@ -8462,21 +8463,55 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             <button
               type="button"
               onClick={() => {
-                if (modoCotacoes === "compras_coletivas") {
-                  handleGerarColetivasPDF();
-                } else if (modoCotacoes === "concreteiras") {
-                  handleGerarConcreteirasPDF();
-                } else if (modoCotacoes === "comparativo_rapido" || modoCotacoes === "painel_cotacoes") {
+                if (modoCotacoes === "comparativo_rapido" || modoCotacoes === "painel_cotacoes") {
                   handleGerarComparativoRapidoPDF();
                 } else if (scAtiva) {
                   handleGeneratePDF();
                 } else {
-                  dispararAviso("Selecione ou adicione itens à cotação para gerar o PDF.");
+                  dispararAviso("Selecione ou adicione itens Ã  cotaÃ§Ã£o para gerar o PDF.");
                 }
               }}
               className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold transition whitespace-nowrap shadow-xs flex items-center gap-1.5"
             >
-              <span>📄</span> Gerar PDF
+              <span>ðŸ„</span> Gerar PDF
+            </button>
+          </div>
+        );
+      case "Concreteiras":
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportarConcreteirasExcel}
+              className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold transition whitespace-nowrap"
+            >
+              Exportar Excel (.xlsx)
+            </button>
+            <button
+              type="button"
+              onClick={handleGerarConcreteirasPDF}
+              className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold transition whitespace-nowrap shadow-xs flex items-center gap-1.5"
+            >
+              <span>ðŸ„</span> Gerar PDF
+            </button>
+          </div>
+        );
+      case "ComprasColetivas":
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportarColetivasExcel}
+              className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold transition whitespace-nowrap"
+            >
+              Exportar Excel (.xlsx)
+            </button>
+            <button
+              type="button"
+              onClick={handleGerarColetivasPDF}
+              className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold transition whitespace-nowrap shadow-xs flex items-center gap-1.5"
+            >
+              <span>ðŸ„</span> Gerar PDF
             </button>
           </div>
         );
@@ -8656,69 +8691,155 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#F4F6F8] text-slate-900 font-sans">
       {/* ================================================================= */}
-      {/* SIDEBAR ESQUERDA COMPACTA (w-72 shrink-0 bg-slate-900 text-white) */}
+      {/* BACKDROP DO MENU LATERAL (DRAWER)                                 */}
       {/* ================================================================= */}
-      <aside className="no-print w-72 shrink-0 bg-slate-900 text-white flex flex-col justify-between h-full">
+      {menuLateralAberto && (
+        <div
+          onClick={() => setMenuLateralAberto(false)}
+          className="no-print fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-40 transition-opacity"
+          title="Clique fora para fechar o menu lateral"
+        />
+      )}
+
+      {/* ================================================================= */}
+      {/* MENU LATERAL DESLIZANTE (DRAWER) - LIBERA 100% DA LARGURA DA TELA */}
+      {/* ================================================================= */}
+      <aside
+        className={`no-print fixed top-0 bottom-0 left-0 z-50 w-72 bg-slate-900 text-white flex flex-col justify-between h-full shadow-2xl transition-transform duration-300 ease-in-out ${
+          menuLateralAberto ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
         <div>
-          {/* Identidade Dinâmica da Construtora (vinda das Configurações) */}
-          <div className="h-20 px-4 border-b border-slate-800 flex items-center gap-3">
-            <div className="bg-white p-1 rounded-lg border border-amber-300/40 shadow-xs shrink-0 flex items-center justify-center">
-              <img
-                src="/logo.png"
-                alt="JC Bauer Empreendimentos"
-                className="h-10 w-auto object-contain"
-              />
-            </div>
-            <div className="min-w-0">
-              <div className="font-extrabold text-sm text-white tracking-wide truncate">
-                JC BAUER
+          {/* Identidade Dinâmica da Construtora + Botão Fechar Menu */}
+          <div className="h-20 px-4 border-b border-slate-800 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="bg-white p-1 rounded-lg border border-amber-300/40 shadow-xs shrink-0 flex items-center justify-center">
+                <img
+                  src="/logo.png"
+                  alt="JC Bauer Empreendimentos"
+                  className="h-10 w-auto object-contain"
+                />
               </div>
-              <div className="text-[11px] text-amber-400 font-semibold truncate">
-                Empreendimentos & Obras
+              <div className="min-w-0">
+                <div className="font-extrabold text-sm text-white tracking-wide truncate">
+                  JC BAUER
+                </div>
+                <div className="text-[11px] text-amber-400 font-semibold truncate">
+                  Empreendimentos & Obras
+                </div>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setMenuLateralAberto(false)}
+              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer shrink-0"
+              title="Fechar menu lateral"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
 
           {/* Menu com Abas Independentes + Configurações */}
-          <nav className="p-3 space-y-1">
+          <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-160px)]">
             {(
               [
-                { id: "Painel", label: "📋 Painel de Compras" },
+                {
+                  id: "Painel",
+                  label: "Painel de Compras",
+                  iconPath: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
+                },
                 {
                   id: "DesempenhoFinanceiro",
-                  label: "📊 BI Financeiro & Obras",
+                  label: "BI Financeiro & Obras",
+                  badge: "Saving",
+                  iconPath: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
                 },
-                { id: "Cotacoes", label: "⚖️ Comparativo de Preços" },
-                { id: "Fornecedores", label: "🏢 Fornecedores & IQF" },
-                { id: "Ordens", label: "📦 Ordens de Compra" },
-                { id: "Estoque", label: "🧱 Almoxarifado & Estoque" },
-                { id: "Medicoes", label: "📐 Contratos & Medições" },
-                { id: "Orcamento", label: "💰 Orçamento da Obra" },
-                { id: "Logistica", label: "🚚 Calendário de Cargas" },
-                { id: "Importacao", label: "📥 Importar Planilhas" },
-                { id: "Configuracoes", label: "⚙️ Configurações" },
-              ] as { id: TabId; label: string }[]
+                {
+                  id: "Cotacoes",
+                  label: "Comparativo de Preços",
+                  badge: "3 Orçamentos",
+                  iconPath: "M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3",
+                },
+                {
+                  id: "Concreteiras",
+                  label: "Concreteiras (Concreto & Bomba)",
+                  badge: "Especializado",
+                  iconPath: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
+                },
+                {
+                  id: "ComprasColetivas",
+                  label: "Compras Coletivas (Ganho de Escala)",
+                  badge: "Multiobra",
+                  iconPath: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z",
+                },
+                {
+                  id: "Fornecedores",
+                  label: "Fornecedores & IQF",
+                  iconPath: "M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
+                },
+                {
+                  id: "Ordens",
+                  label: "Ordens de Compra",
+                  iconPath: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
+                },
+                {
+                  id: "Estoque",
+                  label: "Almoxarifado & Estoque",
+                  iconPath: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
+                },
+                {
+                  id: "Medicoes",
+                  label: "Contratos & Medições",
+                  iconPath: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z",
+                },
+                {
+                  id: "Orcamento",
+                  label: "Orçamento da Obra",
+                  iconPath: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+                },
+                {
+                  id: "Logistica",
+                  label: "Calendário de Cargas",
+                  iconPath: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+                },
+                {
+                  id: "Importacao",
+                  label: "Importar Planilhas",
+                  iconPath: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12",
+                },
+                {
+                  id: "Configuracoes",
+                  label: "Configurações",
+                  iconPath: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z",
+                },
+              ] as { id: TabId; label: string; badge?: string; iconPath: string }[]
             ).map((item) => {
               const ativo = activeTab === item.id;
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition text-left ${
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setMenuLateralAberto(false);
+                  }}
+                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-lg text-xs font-semibold transition text-left cursor-pointer ${
                     ativo
                       ? "bg-emerald-600 text-white shadow-xs"
                       : "text-slate-300 hover:bg-slate-800 hover:text-white"
                   }`}
                 >
-                  <span className="truncate">{item.label}</span>
-                  {item.id === "Cotacoes" && (
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <svg className={`w-4 h-4 shrink-0 ${ativo ? "text-white" : "text-slate-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.iconPath} />
+                    </svg>
+                    <span className="truncate">{item.label}</span>
+                  </div>
+                  {item.badge && (
                     <span className="px-1.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-600 text-[10px] font-extrabold shrink-0">
-                      3 Orçamentos
-                    </span>
-                  )}
-                  {item.id === "DesempenhoFinanceiro" && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-600 text-[10px] font-extrabold shrink-0">
-                      Saving
+                      {item.badge}
                     </span>
                   )}
                   {item.id === "Painel" && novosPedidosCanteiroCount > 0 && (
@@ -8748,9 +8869,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         {/* Rodapé Dinâmico da Sidebar (Perfil Logado + Botão Sair / Trocar Conta) */}
         <div className="p-3 border-t border-slate-800 space-y-2">
           <button
-            onClick={() => setActiveTab("Configuracoes")}
+            onClick={() => {
+              setActiveTab("Configuracoes");
+              setMenuLateralAberto(false);
+            }}
             title="Clique para gerenciar configurações e acessos"
-            className="text-left hover:bg-slate-800/70 p-2.5 rounded-lg transition w-full block"
+            className="text-left hover:bg-slate-800/70 p-2.5 rounded-lg transition w-full block cursor-pointer"
           >
             <div className="flex items-center gap-1.5">
               <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold">
@@ -8767,23 +8891,51 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
           <button
             onClick={handleLogout}
-            className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-red-900/80 text-slate-200 hover:text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-slate-700"
+            className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-red-900/80 text-slate-200 hover:text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
           >
-            <span>🚪</span> Sair / Trocar Conta
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span>Sair / Trocar Conta</span>
           </button>
         </div>
       </aside>
 
       {/* ================================================================= */}
-      {/* ÁREA PRINCIPAL (flex-1 flex flex-col min-w-0 h-full overflow-hidden)*/}
+      {/* ÁREA PRINCIPAL (100% DA LARGURA DA TELA - SEM AMONTOADO)          */}
       {/* ================================================================= */}
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden w-full">
         {/* HEADER SUPERIOR FIXO (h-16 shrink-0, sticky z-20) */}
-        <header className="no-print sticky top-0 z-20 h-16 shrink-0 bg-white border-b border-slate-200 px-6 flex items-center justify-between gap-4">
-          {/* Esquerda: Título da Aba Atual + Alerta de Novos Pedidos */}
+        <header className="no-print sticky top-0 z-20 h-16 shrink-0 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between gap-4">
+          {/* Esquerda: Botão Menu (Hamburger) + Título da Aba Atual + Alerta de Novos Pedidos */}
           <div className="flex items-center gap-3 min-w-0">
-            <h1 className="text-base font-bold text-slate-900 whitespace-nowrap">
+            <button
+              type="button"
+              onClick={() => setMenuLateralAberto((prev) => !prev)}
+              className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white flex items-center gap-2 text-xs font-bold transition shadow-xs cursor-pointer shrink-0"
+              title="Abrir / Fechar Menu Lateral de Navegação"
+            >
+              <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              <span>Menu</span>
+            </button>
+            <h1 className="text-base font-bold text-slate-900 whitespace-nowrap truncate">
               {tituloAbaAtual[activeTab]}
+            </h1>
+            {novosPedidosCanteiroCount > 0 && (
+              <button
+                onClick={() => {
+                  setActiveTab("Painel");
+                  setPainelSubView("solicitacoes");
+                }}
+                className="px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 text-xs font-bold flex items-center gap-1.5 shrink-0 transition"
+                title="Ver novas solicitações de compras enviadas pelos canteiros"
+              >
+                <span>🔔</span> {novosPedidosCanteiroCount} Novo(s)
+              </button>
+            )}
+          </div>
             </h1>
             {novosPedidosCanteiroCount > 0 && (
               <button
@@ -10721,28 +10873,6 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setModoCotacoes("compras_coletivas")}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
-                      modoCotacoes === "compras_coletivas"
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                    }`}
-                  >
-                    <span>ðŸ“¦</span> Compras Coletivas (Ganho de Escala)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setModoCotacoes("concreteiras")}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
-                      modoCotacoes === "concreteiras"
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                    }`}
-                  >
-                    <span>ðŸ—ï¸</span> Concreteiras (Concreto & Bomba)
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => setModoCotacoes("comparativo_rapido")}
                     className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
                       modoCotacoes === "comparativo_rapido"
@@ -10750,7 +10880,10 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                         : "bg-slate-100 hover:bg-slate-200 text-slate-700"
                     }`}
                   >
-                    <span>⚖️</span> Comparativo de 3 Orçamentos (Rápido)
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                    </svg>
+                    <span>Comparativo de 3 Orçamentos (Rápido)</span>
                   </button>
                   <button
                     type="button"
@@ -10761,7 +10894,10 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                         : "bg-slate-100 hover:bg-slate-200 text-slate-700"
                     }`}
                   >
-                    <span>📂</span> Central de Cotações Salvas ({processosCotacoes.length})
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    <span>Central de Cotações Salvas ({processosCotacoes.length})</span>
                   </button>
                   <button
                     type="button"
@@ -10772,7 +10908,10 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                         : "bg-slate-100 hover:bg-slate-200 text-slate-700"
                     }`}
                   >
-                    <span>📋</span> Cotações Vinculadas a Obras ({solicitacoes.length})
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    <span>Cotações Vinculadas a Obras ({solicitacoes.length})</span>
                   </button>
                 </div>
 
@@ -11756,1153 +11895,6 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                   </div>
                 </div>
               )}
-              {/* MODO 2: COMPARATIVO DE CONCRETEIRAS (CONCRETO USINADO & BOMBA - MODELO PLANILHA JC BAUER) */}
-              {modoCotacoes === "concreteiras" && (
-                <div className="space-y-6">
-                  {/* Barra Superior de Gestão da Cotação de Concreto */}
-                  <div className="bg-slate-900 border border-slate-800 text-white rounded-xl p-4 shadow-md flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex flex-wrap items-center gap-4 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-emerald-400 text-xl">🏗️</span>
-                        <div>
-                          <div className="text-sm font-bold text-white flex items-center gap-2">
-                            <span>Quadro de Equalização de Concreteiras</span>
-                            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                              Usinado & Bomba
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-slate-400">
-                            Cálculo de volume real, seleção de slump/traço e bombeamento integrado — 100% editável na tabela
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={handleAdicionarSlumpConcreto}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
-                        title="Adicionar uma nova opção de traço/slump de concreto"
-                      >
-                        <span>➕</span> Novo Traço / Slump
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleAdicionarConcreteira}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
-                        title="Adicionar uma nova concreteira para cotação lado a lado"
-                      >
-                        <span>🏢</span> + Concreteira
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSalvarCotacaoConcreto}
-                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
-                        title="Salvar alterações no banco de dados e nuvem"
-                      >
-                        <span>💾</span> Salvar Cotação
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleLimparCotacaoConcreto}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/40 text-rose-300 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition"
-                        title="Redefinir volumes e valores para o padrão inicial"
-                      >
-                        <span>↺</span> Redefinir Padrão
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Metadados da Concretagem: Obra, Peça/Elemento, Volume Concreto, Volume Bomba */}
-                  <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Empreendimento / Obra:
-                        </label>
-                        <div className="space-y-1">
-                          <input
-                            type="text"
-                            value={concretoObraNomeCustom}
-                            onChange={(e) => {
-                              setConcretoObraNomeCustom(e.target.value);
-                              const achada = obras.find(o => o.nome.toLowerCase() === e.target.value.toLowerCase());
-                              if (achada) setConcretoObraId(achada.id);
-                            }}
-                            placeholder="Digite o nome da Obra..."
-                            className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900"
-                          />
-                          {obras.length > 0 && (
-                            <select
-                              value={concretoObraId}
-                              onChange={(e) => {
-                                setConcretoObraId(e.target.value);
-                                const oSel = obras.find((o) => o.id === e.target.value);
-                                if (oSel) setConcretoObraNomeCustom(oSel.nome);
-                              }}
-                              className="w-full bg-slate-100 border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-600 focus:outline-none"
-                            >
-                              <option value="">(Ou selecione obra cadastrada...)</option>
-                              {obras.map((o) => (
-                                <option key={o.id} value={o.id}>
-                                  {o.nome}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Peça / Elemento Concretado:
-                        </label>
-                        <input
-                          type="text"
-                          value={concretoElemento}
-                          onChange={(e) => setConcretoElemento(e.target.value)}
-                          placeholder="Ex: Laje 3º Pavimento, Pilares..."
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-900"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Volume Concreto (m³):
-                        </label>
-                        <input
-                          type="number"
-                          step="0.5"
-                          min="0"
-                          value={concretoVolumeM3 === 0 ? "" : concretoVolumeM3}
-                          onChange={(e) => setConcretoVolumeM3(parseFloat(e.target.value) || 0)}
-                          placeholder="0"
-                          className="w-full bg-emerald-50 border-2 border-emerald-300 rounded-lg px-3 py-2 text-xs font-black text-emerald-950 focus:outline-none focus:border-emerald-600 text-right"
-                          title="Também editável diretamente na tabela abaixo"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Volume Bomba (m³):
-                        </label>
-                        <input
-                          type="number"
-                          step="0.5"
-                          min="0"
-                          value={concretoVolumeBombaM3 === 0 ? "" : concretoVolumeBombaM3}
-                          onChange={(e) => setConcretoVolumeBombaM3(parseFloat(e.target.value) || 0)}
-                          placeholder="0"
-                          className="w-full bg-amber-50 border-2 border-amber-300 rounded-lg px-3 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-amber-600 text-right"
-                          title="Também editável diretamente na tabela abaixo"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
-                      <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={concretoIncluirBombaNoTotal}
-                          onChange={(e) => setConcretoIncluirBombaNoTotal(e.target.checked)}
-                          className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                        />
-                        <span>Incluir Serviço de Bomba no Valor Total e no Preço Un./m³</span>
-                      </label>
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        💡 Dica: Todos os campos, nomes, volumes (QUANT) e valores são editáveis diretamente dentro das células da tabela.
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Resumo e Indicadores do Melhor Fornecedor */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 shadow-xs">
-                      <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wide flex items-center justify-between">
-                        <span>🏆 Melhor Cotação (Vencedor)</span>
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-200/80 text-emerald-900 text-[10px]">
-                          1º Lugar
-                        </span>
-                      </div>
-                      <div className="text-lg font-black text-emerald-950 mt-1">
-                        {resumoConcreteiras.vencedor?.nome || "A Definir"}
-                      </div>
-                      <div className="text-xs text-emerald-700 font-semibold mt-0.5">
-                        Total: {formatBRL(resumoConcreteiras.vencedor?.valorTotal || 0)}
-                      </div>
-                    </div>
-
-                    <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 shadow-xs">
-                      <div className="text-[11px] font-bold text-sky-800 uppercase tracking-wide">
-                        💡 Saving em Relação ao Maior
-                      </div>
-                      <div className="text-lg font-black text-sky-950 mt-1">
-                        {formatBRL(resumoConcreteiras.saving)}
-                      </div>
-                      <div className="text-xs text-sky-700 font-semibold mt-0.5">
-                        Economia direta na concretagem
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-xs">
-                      <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
-                        📏 Traço Selecionado
-                      </div>
-                      <div className="text-sm font-bold text-slate-900 mt-1 truncate" title={resumoConcreteiras.slumpEscolhido?.descricao}>
-                        {resumoConcreteiras.slumpEscolhido?.descricao || "Nenhum selecionado"}
-                      </div>
-                      <div className="text-xs text-slate-500 mt-0.5">
-                        Volume: <strong>{concretoVolumeM3} m³</strong>
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-xs">
-                      <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
-                        🚚 Concreteiras Equalizadas
-                      </div>
-                      <div className="text-lg font-black text-slate-900 mt-1">
-                        {concreteiras.length} Fornecedores
-                      </div>
-                      <div className="text-xs text-slate-500 mt-0.5">
-                        Bomba programada: {concretoVolumeBombaM3} m³
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* TABELA COMPARATIVA DE CONCRETEIRAS (ESTRUTURA EXATA DA PLANILHA EXCEL - 100% EDITÁVEL) */}
-                  <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs text-left border-collapse min-w-[900px]">
-                        <thead>
-                          {/* LINHA 1 DE CABEÇALHO */}
-                          <tr className="bg-slate-900 text-white border-b border-slate-800 font-bold">
-                            <th
-                              rowSpan={2}
-                              className="py-3 px-3 text-center border-r-2 border-slate-700 bg-slate-800 align-middle w-52"
-                            >
-                              <div className="text-[10px] uppercase text-emerald-400 font-extrabold tracking-wider mb-1">
-                                OBRA:
-                              </div>
-                              <input
-                                type="text"
-                                value={concretoObraNomeCustom}
-                                onChange={(e) => {
-                                  setConcretoObraNomeCustom(e.target.value);
-                                  const enc = obras.find(o => o.nome.toLowerCase() === e.target.value.toLowerCase());
-                                  if (enc) setConcretoObraId(enc.id);
-                                }}
-                                placeholder="Nome da Obra..."
-                                className="w-full bg-slate-900/90 border border-slate-600 hover:border-slate-400 focus:border-emerald-400 text-white font-black text-center text-sm rounded px-2 py-1 outline-none transition uppercase"
-                                title="Editar nome da Obra diretamente aqui"
-                              />
-                            </th>
-                            <th
-                              colSpan={2}
-                              className="py-2 px-3 text-center border-r-2 border-slate-700 bg-slate-800 uppercase tracking-wider text-[11px] w-32"
-                            >
-                              ESPECIFICAÇÕES
-                            </th>
-                            {concreteiras.map((c) => (
-                              <th
-                                key={c.id}
-                                className="py-2.5 px-3 text-center border-r border-slate-700 bg-slate-900 font-extrabold text-sm"
-                              >
-                                <div className="flex items-center justify-between gap-1">
-                                  <input
-                                    type="text"
-                                    value={c.nome}
-                                    onChange={(e) => handleAtualizarNomeConcreteira(c.id, e.target.value)}
-                                    placeholder="Concreteira"
-                                    className="bg-slate-800/90 border border-slate-700 hover:border-slate-500 focus:border-emerald-400 focus:bg-slate-950 text-white font-black text-center text-sm w-full outline-none uppercase py-1 px-1.5 rounded transition shadow-inner"
-                                    title="Editar nome da concreteira/fornecedor"
-                                  />
-                                  {concreteiras.length > 2 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoverConcreteira(c.id)}
-                                      className="text-slate-400 hover:text-rose-400 text-xs px-1 font-bold"
-                                      title="Remover esta concreteira"
-                                    >
-                                      ✕
-                                    </button>
-                                  )}
-                                </div>
-                                <div className="flex items-center justify-center gap-1 mt-1 text-[11px] font-normal text-slate-300">
-                                  <span className="text-slate-400 text-[10px]">Nome:</span>
-                                  <input
-                                    type="text"
-                                    value={c.contatoNome}
-                                    onChange={(e) => handleAtualizarContatoConcreteira(c.id, e.target.value)}
-                                    placeholder="Contato..."
-                                    className="bg-slate-800/80 border border-slate-700 hover:border-slate-500 focus:border-emerald-400 text-slate-200 text-xs text-center w-28 outline-none py-0.5 px-1.5 rounded transition"
-                                    title="Editar nome do contato/vendedor"
-                                  />
-                                </div>
-                              </th>
-                            ))}
-                          </tr>
-
-                          {/* LINHA 2 DE CABEÇALHO */}
-                          <tr className="bg-slate-100 text-slate-700 border-b-2 border-slate-300 font-black text-[11px]">
-                            <th className="py-2 px-2 text-center border-r border-slate-300 w-20">
-                              QUANT:
-                            </th>
-                            <th className="py-2 px-2 text-center border-r-2 border-slate-400 w-14">
-                              UND:
-                            </th>
-                            {concreteiras.map((c) => (
-                              <th
-                                key={`sub-${c.id}`}
-                                className="py-2 px-2 text-center border-r border-slate-300 bg-emerald-50 text-emerald-950 font-black tracking-wide"
-                              >
-                                VALOR UN / M:
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-
-                        <tbody className="divide-y divide-slate-200">
-                          {/* LINHAS DE SLUMPS DE CONCRETO */}
-                          {concretoSlumps.map((slump) => {
-                            const isAtivo = slump.id === concretoSlumpSelecionadoId;
-                            return (
-                              <tr
-                                key={slump.id}
-                                className={`transition-colors ${
-                                  isAtivo
-                                    ? "bg-emerald-50/70 font-semibold text-slate-900"
-                                    : "bg-white hover:bg-slate-50/60 text-slate-700"
-                                }`}
-                              >
-                                {/* Descrição do Traço */}
-                                <td className="py-2 px-3 border-r-2 border-slate-300">
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="radio"
-                                      name="slump_ativo"
-                                      checked={isAtivo}
-                                      onChange={() => setConcretoSlumpSelecionadoId(slump.id)}
-                                      className="text-emerald-600 focus:ring-emerald-500 cursor-pointer h-4 w-4 shrink-0"
-                                      title="Marcar este slump como o traço a ser executado"
-                                    />
-                                    <input
-                                      type="text"
-                                      value={slump.descricao}
-                                      onChange={(e) => handleAtualizarDescricaoSlump(slump.id, e.target.value)}
-                                      placeholder="Ex: Concreto 14+-20 40mpa"
-                                      className="bg-slate-50/90 border border-slate-200 hover:border-slate-400 focus:border-slate-900 focus:bg-white text-xs font-bold text-slate-900 w-full outline-none px-2 py-1 rounded transition"
-                                      title="Editar descrição do traço de concreto"
-                                    />
-                                    {isAtivo && (
-                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0 border border-emerald-200">
-                                        Ativo
-                                      </span>
-                                    )}
-                                    {concretoSlumps.length > 1 && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoverSlumpConcreto(slump.id)}
-                                        className="text-slate-300 hover:text-rose-500 text-xs px-1 font-bold"
-                                        title="Remover este traço"
-                                      >
-                                        ✕
-                                      </button>
-                                    )}
-                                  </div>
-                                </td>
-
-                                {/* QUANTIDADE (METROS CÚBICOS) - TOTALMENTE EDITÁVEL NA CÉLULA */}
-                                <td className="py-2 px-2 text-center border-r border-slate-300">
-                                  <input
-                                    type="number"
-                                    step="0.5"
-                                    min="0"
-                                    value={isAtivo ? (concretoVolumeM3 === 0 ? "" : concretoVolumeM3) : ""}
-                                    placeholder={isAtivo ? "0" : "—"}
-                                    onChange={(e) => {
-                                      const val = parseFloat(e.target.value) || 0;
-                                      setConcretoSlumpSelecionadoId(slump.id);
-                                      setConcretoVolumeM3(val);
-                                    }}
-                                    onFocus={() => {
-                                      if (!isAtivo) {
-                                        setConcretoSlumpSelecionadoId(slump.id);
-                                      }
-                                    }}
-                                    className={`w-18 text-center font-black text-xs py-1 px-1 rounded-md border-2 outline-none transition ${
-                                      isAtivo
-                                        ? "bg-emerald-50 border-emerald-400 text-emerald-950 ring-1 ring-emerald-300"
-                                        : "bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-400 focus:border-slate-900"
-                                    }`}
-                                    title={isAtivo ? "Volume em m³ para este traço (editável)" : "Clique ou digite para ativar este traço e definir seu volume"}
-                                  />
-                                </td>
-
-                                {/* UNIDADE */}
-                                <td className="py-2 px-1 text-center border-r-2 border-slate-400">
-                                  <input
-                                    type="text"
-                                    value={slump.unidade || "m³"}
-                                    onChange={(e) => handleAtualizarUndSlump(slump.id, e.target.value)}
-                                    className="w-10 text-center font-bold text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 outline-none text-slate-700 py-0.5"
-                                    title="Editar unidade de medida"
-                                  />
-                                </td>
-
-                                {/* PREÇOS UNITÁRIOS POR CONCRETEIRA */}
-                                {concreteiras.map((c) => {
-                                  const preco = c.precosSlumps[slump.id] || 0;
-                                  return (
-                                    <td
-                                      key={`${slump.id}-${c.id}`}
-                                      className="py-2 px-3 text-right border-r border-slate-300"
-                                    >
-                                      <div className="flex items-center justify-end gap-1">
-                                        <span className="text-[10px] text-slate-400 font-bold">R$</span>
-                                        <input
-                                          type="number"
-                                          step="0.01"
-                                          min="0"
-                                          value={preco === 0 ? "" : preco}
-                                          onChange={(e) =>
-                                            handleAtualizarPrecoSlump(
-                                              c.id,
-                                              slump.id,
-                                              parseFloat(e.target.value) || 0
-                                            )
-                                          }
-                                          placeholder="0,00"
-                                          className="w-24 text-right font-bold text-xs bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 focus:bg-white rounded px-2 py-1 outline-none text-slate-900 transition"
-                                          title="Editar preço do concreto desta empresa"
-                                        />
-                                      </div>
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            );
-                          })}
-
-                          {/* LINHA DE BOMBA */}
-                          <tr className="bg-amber-50/40 text-slate-900 font-medium border-t border-slate-300">
-                            {/* Nome e descrição da Bomba */}
-                            <td className="py-2 px-3 border-r-2 border-slate-300">
-                              <div className="flex items-center gap-2">
-                                <span className="text-amber-600 font-bold">🚚</span>
-                                <input
-                                  type="text"
-                                  value={concretoNomeBomba}
-                                  onChange={(e) => setConcretoNomeBomba(e.target.value)}
-                                  placeholder="Bomba"
-                                  className="bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 rounded px-2 py-1 text-xs font-bold text-slate-900 outline-none w-24"
-                                  title="Editar nome do serviço de bomba"
-                                />
-                                <input
-                                  type="text"
-                                  value={concretoDescricaoBomba}
-                                  onChange={(e) => setConcretoDescricaoBomba(e.target.value)}
-                                  placeholder="(Serviço de Bombeamento)"
-                                  className="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 text-[11px] text-slate-500 outline-none flex-1 py-0.5"
-                                  title="Editar subtítulo da bomba"
-                                />
-                              </div>
-                            </td>
-
-                            {/* QUANTIDADE DA BOMBA - TOTALMENTE EDITÁVEL NA CÉLULA */}
-                            <td className="py-2 px-2 text-center border-r border-slate-300">
-                              <input
-                                type="number"
-                                step="0.5"
-                                min="0"
-                                value={concretoVolumeBombaM3 === 0 ? "" : concretoVolumeBombaM3}
-                                onChange={(e) => setConcretoVolumeBombaM3(parseFloat(e.target.value) || 0)}
-                                placeholder="0"
-                                className="w-18 text-center font-black text-xs py-1 px-1 rounded-md bg-amber-50 border-2 border-amber-300 text-slate-900 ring-1 ring-amber-200 outline-none focus:border-slate-900"
-                                title="Volume bombeado em m³ (editável)"
-                              />
-                            </td>
-
-                            {/* UNIDADE DA BOMBA */}
-                            <td className="py-2 px-1 text-center border-r-2 border-slate-400">
-                              <input
-                                type="text"
-                                value={concretoUndBomba}
-                                onChange={(e) => setConcretoUndBomba(e.target.value)}
-                                className="w-10 text-center font-bold text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 outline-none text-slate-700 py-0.5"
-                                title="Editar unidade da bomba"
-                              />
-                            </td>
-
-                            {/* PREÇOS DA BOMBA POR CONCRETEIRA */}
-                            {concreteiras.map((c) => (
-                              <td
-                                key={`bomba-${c.id}`}
-                                className="py-2 px-3 text-right border-r border-slate-300 bg-amber-50/20"
-                              >
-                                <div className="flex items-center justify-end gap-1">
-                                  <span className="text-[10px] text-slate-400 font-bold">R$</span>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={c.precoBomba === 0 ? "" : c.precoBomba}
-                                    onChange={(e) =>
-                                      handleAtualizarPrecoBomba(
-                                        c.id,
-                                        parseFloat(e.target.value) || 0
-                                      )
-                                    }
-                                    placeholder="0,00"
-                                    className="w-24 text-right font-bold text-xs bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 focus:bg-white rounded px-2 py-1 outline-none text-slate-900 transition"
-                                    title="Editar preço da bomba desta empresa"
-                                  />
-                                </div>
-                              </td>
-                            ))}
-                          </tr>
-
-                          {/* LINHA AZUL: VALOR UN / M: (CONCRETO ESCOLHIDO + BOMBA) */}
-                          <tr className="bg-sky-200/90 border-t-2 border-b-2 border-sky-600 font-black text-sky-950">
-                            <td colSpan={3} className="py-2.5 px-3 border-r-2 border-slate-900 text-right uppercase tracking-wider text-[11px]">
-                              VALOR UN / M: (
-                              {resumoConcreteiras.slumpEscolhido?.descricao || "Concreto"} + {concretoNomeBomba || "Bomba"}):
-                            </td>
-                            {resumoConcreteiras.calculados.map((c) => {
-                              const isMelhorUnit =
-                                resumoConcreteiras.vencedor?.id === c.id;
-                              return (
-                                <td
-                                  key={c.id}
-                                  className={`py-2.5 px-3 text-right border-r border-slate-800 text-sm ${
-                                    isMelhorUnit ? "bg-emerald-200 text-emerald-950 font-black" : ""
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-end gap-1">
-                                    {isMelhorUnit && <span>🏆</span>}
-                                    <span>{formatBRL(c.somaUnitariaM3)}</span>
-                                  </div>
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        </tbody>
-
-                        {/* RODAPÉ: VALOR TOTAL FINAL */}
-                        <tfoot>
-                          <tr className="bg-slate-900 text-white font-black">
-                            <td
-                              colSpan={3}
-                              className="py-3 px-3 text-right border-r-2 border-slate-700 uppercase tracking-wider text-xs"
-                            >
-                              VALOR TOTAL: ({concretoVolumeM3} m³)
-                            </td>
-                            {resumoConcreteiras.calculados.map((c) => {
-                              const isVencedor = resumoConcreteiras.vencedor?.id === c.id;
-                              return (
-                                <td
-                                  key={c.id}
-                                  className={`py-3 px-3 text-right border-r border-slate-800 ${
-                                    isVencedor ? "bg-emerald-900/90 text-emerald-300 ring-2 ring-emerald-400 inset-0" : ""
-                                  }`}
-                                >
-                                  <div className="text-base font-black tabular-nums">
-                                    {formatBRL(c.valorTotal)}
-                                  </div>
-                                  <div className="text-[10px] text-slate-400 font-normal mt-0.5">
-                                    Mat: {formatBRL(c.subtotalConcreto)} + Bomba: {formatBRL(c.subtotalBomba)}
-                                  </div>
-                                </td>
-                              );
-                            })}
-                          </tr>
-
-                          {/* Linha de Ações: Botão Emitir OC para cada Concreteira */}
-                          <tr className="bg-slate-100">
-                            <td colSpan={3} className="py-2.5 px-3 border-r-2 border-slate-300 text-slate-600 text-right text-[11px] font-semibold">
-                              Ações Comerciais:
-                            </td>
-                            {resumoConcreteiras.calculados.map((c) => {
-                              const isVencedor = resumoConcreteiras.vencedor?.id === c.id;
-                              return (
-                                <td key={c.id} className="py-2.5 px-3 border-r border-slate-300 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEmitirOrdemConcreteira(c.id)}
-                                    className={`w-full py-1.5 px-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 shadow-2xs ${
-                                      isVencedor
-                                        ? "bg-emerald-700 hover:bg-emerald-800 text-white"
-                                        : "bg-slate-800 hover:bg-slate-700 text-slate-200"
-                                    }`}
-                                  >
-                                    <span>📄</span> Emitir OC
-                                  </button>
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* MODO 5: CENTRAL DE COMPRAS COLETIVAS (AGRUPAMENTO MULTIOBRA PARA GANHO DE ESCALA) */}
-              {modoCotacoes === "compras_coletivas" && (
-                <div className="space-y-6">
-                  {/* Barra Superior Executiva de Compras Coletivas */}
-                  <div className="bg-slate-900 border border-slate-800 text-white rounded-xl p-4 shadow-md flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex flex-wrap items-center gap-4 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-amber-400 text-2xl">📦</span>
-                        <div>
-                          <div className="text-sm font-bold text-white flex items-center gap-2">
-                            <span>Central de Compras Coletivas & Sourcing Corporativo</span>
-                            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                              Ganho de Escala Multiobra
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-slate-400">
-                            Unifique requisições de múltiplos canteiros para negociar preço de indústria/atacado e desmembrar OCs em 1 clique
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={handlePuxarDemandasDeSCsAbertas}
-                        className="px-3 py-1.5 rounded-lg bg-sky-900/60 hover:bg-sky-800/80 border border-sky-700/80 text-sky-200 text-xs font-semibold flex items-center gap-1.5 transition"
-                        title="Varrer requisições de compras abertas nos canteiros e puxar insumos comuns para este lote"
-                      >
-                        <span>⚡</span> Puxar Demandas de SCs
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleAdicionarItemColetivo}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
-                        title="Adicionar mais um insumo ao lote corporativo"
-                      >
-                        <span>➕</span> Novo Insumo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleAdicionarFornecedorColetivo}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
-                        title="Adicionar fornecedor atacadista ou indústria para cotação lado a lado"
-                      >
-                        <span>🏭</span> + Atacadista
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSalvarLoteColetivo}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
-                        title="Salvar alterações no banco de dados e nuvem"
-                      >
-                        <span>💾</span> Salvar Lote
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleDesmembrarEEmitirOCs}
-                        className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center gap-1.5 shadow-md transition"
-                        title="Desmembrar o lote e emitir automaticamente as Ordens de Compra oficiais para cada obra participante"
-                      >
-                        <span>🚀</span> Desmembrar e Emitir OCs por Obra
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Informações do Lote Corporativo e KPIs de Escala */}
-                  <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div className="flex-1 min-w-[280px]">
-                        <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                          Título do Lote de Negociação Corporativa:
-                        </label>
-                        <input
-                          type="text"
-                          value={loteColetivoTitulo}
-                          onChange={(e) => setLoteColetivoTitulo(e.target.value)}
-                          placeholder="Ex: Lote Corporativo de Aço e Cimento..."
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900"
-                        />
-                      </div>
-
-                      {/* Seletor rápido para incluir mais uma obra existente no lote */}
-                      <div className="flex items-center gap-2">
-                        {obras.length > 0 && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-slate-600">Incluir Obra no Lote:</span>
-                            <select
-                              onChange={(e) => {
-                                if (!e.target.value) return;
-                                const o = obras.find((ob) => ob.id === e.target.value);
-                                if (o) handleAdicionarObraAoLote(o.id, o.nome);
-                                e.target.value = "";
-                              }}
-                              className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:outline-none cursor-pointer"
-                            >
-                              <option value="">Selecionar obra para adicionar...</option>
-                              {obras
-                                .filter((o) => !loteObrasParticipantes.some((p) => p.id === o.id))
-                                .map((o) => (
-                                  <option key={o.id} value={o.id}>
-                                    + {o.nome}
-                                  </option>
-                                ))}
-                            </select>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Cards de Métricas e Saving Corporativo de Escala */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
-                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 shadow-xs">
-                        <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wide flex items-center justify-between">
-                          <span>🏆 Melhor Atacadista (Vencedor)</span>
-                          <span className="px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-900 text-[10px] font-black">
-                            1º Lugar
-                          </span>
-                        </div>
-                        <div className="text-base font-black text-emerald-950 mt-1 truncate" title={resumoComprasColetivas.vencedor?.nome}>
-                          {resumoComprasColetivas.vencedor?.nome || "A definir cotação"}
-                        </div>
-                        <div className="text-xs text-emerald-700 font-semibold mt-0.5">
-                          Lote: <strong>{formatBRL(resumoComprasColetivas.vencedor?.valorTotal || 0)}</strong>
-                        </div>
-                      </div>
-
-                      <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 shadow-xs">
-                        <div className="text-[11px] font-bold text-sky-800 uppercase tracking-wide">
-                          💡 Economia Corporativa (Saving)
-                        </div>
-                        <div className="text-xl font-black text-sky-950 mt-1">
-                          {formatBRL(resumoComprasColetivas.vencedor?.savingEmRelacaoAoVarejo || 0)}
-                        </div>
-                        <div className="text-xs text-sky-700 font-semibold mt-0.5">
-                          Economia de <strong>{(resumoComprasColetivas.vencedor?.percentualSaving || 0).toFixed(1)}%</strong> vs Varejo
-                        </div>
-                      </div>
-
-                      <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 shadow-xs">
-                        <div className="text-[11px] font-bold text-rose-800 uppercase tracking-wide">
-                          🛒 Custo Base Balcão (Sem Escala)
-                        </div>
-                        <div className="text-lg font-black text-rose-950 mt-1">
-                          {formatBRL(resumoComprasColetivas.custoTotalVarejo)}
-                        </div>
-                        <div className="text-xs text-rose-700 font-semibold mt-0.5">
-                          Se cada obra comprasse picado no balcão
-                        </div>
-                      </div>
-
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-xs">
-                        <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
-                          🏢 Obras & Insumos no Lote
-                        </div>
-                        <div className="text-lg font-black text-slate-900 mt-1">
-                          {loteObrasParticipantes.length} Obras | {loteItens.length} Insumos
-                        </div>
-                        <div className="text-xs text-slate-500 mt-0.5">
-                          {loteFornecedores.length} fornecedores equalizados
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Cards de Rateio Individual por Empreendimento */}
-                  <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
-                    <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sky-600">📊</span>
-                        <span>Rateio por Empreendimento (Com Preço Negociado de Atacado):</span>
-                      </div>
-                      <span className="text-[11px] text-slate-500 font-normal">
-                        Cada obra paga apenas o que consome, usufruindo do desconto corporativo
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {resumoComprasColetivas.rateioPorObra.map((r) => (
-                        <div
-                          key={r.obraId}
-                          className="bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-lg p-3 transition"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-extrabold text-xs text-slate-900">
-                              🏢 {r.obraNome}
-                            </span>
-                            <span className="text-[10px] font-bold text-slate-500">
-                              {r.totalItensObra} insumo(s)
-                            </span>
-                          </div>
-                          <div className="text-base font-black text-slate-900 mt-1">
-                            {formatBRL(r.subtotalNegociadoObra)}
-                          </div>
-                          <div className="text-[11px] text-emerald-700 font-bold mt-0.5 flex items-center justify-between">
-                            <span>Economia gerada:</span>
-                            <span>{formatBRL(r.savingObra)} ({r.percSavingObra.toFixed(1)}%)</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* TABELA CORPORATIVA: DEMANDAS POR OBRA, VOLUME CONSOLIDADO E EQUALIZAÇÃO DE FORNECEDORES */}
-                  <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs text-left border-collapse min-w-[1000px]">
-                        <thead>
-                          {/* LINHA 1 DE CABEÇALHO */}
-                          <tr className="bg-slate-900 text-white border-b border-slate-800 font-bold">
-                            <th
-                              rowSpan={2}
-                              className="py-3 px-3 text-left border-r-2 border-slate-700 bg-slate-800 align-middle min-w-[200px]"
-                            >
-                              INSUMO / ESPECIFICAÇÃO
-                            </th>
-                            <th
-                              rowSpan={2}
-                              className="py-3 px-2 text-center border-r border-slate-700 bg-slate-800 align-middle w-12"
-                            >
-                              UND
-                            </th>
-                            <th
-                              colSpan={loteObrasParticipantes.length}
-                              className="py-2 px-2 text-center border-r-2 border-slate-700 bg-sky-950 text-sky-200 font-black tracking-wider text-[11px]"
-                            >
-                              DEMANDAS PROGRAMADAS POR OBRA
-                            </th>
-                            <th
-                              rowSpan={2}
-                              className="py-3 px-2 text-center border-r border-slate-700 bg-amber-500/20 text-amber-300 font-black align-middle text-xs min-w-[70px]"
-                            >
-                              VOLUME<br />TOTAL
-                            </th>
-                            <th
-                              rowSpan={2}
-                              className="py-3 px-2 text-right border-r-2 border-slate-700 bg-rose-500/20 text-rose-300 font-bold align-middle text-xs min-w-[85px]"
-                            >
-                              REF. VAREJO<br />(UN.)
-                            </th>
-                            {loteFornecedores.map((f) => (
-                              <th
-                                key={f.id}
-                                className="py-2.5 px-3 text-center border-r border-slate-700 bg-slate-900 font-extrabold text-xs min-w-[160px]"
-                              >
-                                <div className="flex items-center justify-between gap-1">
-                                  <input
-                                    type="text"
-                                    value={f.nome}
-                                    onChange={(e) => handleAtualizarNomeFornecedorColetivo(f.id, e.target.value)}
-                                    placeholder="Nome Atacadista"
-                                    className="bg-slate-800 border border-slate-700 hover:border-slate-500 focus:border-amber-400 text-white font-black text-center text-xs w-full outline-none uppercase py-1 px-1.5 rounded"
-                                    title="Editar nome do fornecedor atacadista"
-                                  />
-                                  {loteFornecedores.length > 1 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoverFornecedorColetivo(f.id)}
-                                      className="text-slate-400 hover:text-rose-400 text-xs px-1 font-bold"
-                                      title="Remover este fornecedor"
-                                    >
-                                      ✕
-                                    </button>
-                                  )}
-                                </div>
-                                <div className="flex items-center justify-center gap-1 mt-1 text-[10px] font-normal text-slate-300">
-                                  <input
-                                    type="text"
-                                    value={f.contato}
-                                    onChange={(e) => handleAtualizarContatoFornecedorColetivo(f.id, e.target.value)}
-                                    placeholder="Contato..."
-                                    className="bg-slate-800/80 border border-slate-700 hover:border-slate-500 text-slate-300 text-[10px] text-center w-24 outline-none py-0.5 rounded"
-                                  />
-                                </div>
-                              </th>
-                            ))}
-                            <th
-                              rowSpan={2}
-                              className="py-3 px-2 text-center bg-slate-800 align-middle w-10 text-slate-400"
-                            >
-                              Ação
-                            </th>
-                          </tr>
-
-                          {/* LINHA 2 DE CABEÇALHO */}
-                          <tr className="bg-slate-100 text-slate-700 border-b-2 border-slate-300 font-black text-[11px]">
-                            {loteObrasParticipantes.map((o) => (
-                              <th
-                                key={o.id}
-                                className="py-2 px-2 text-center border-r border-slate-300 bg-sky-50 text-sky-950 font-bold min-w-[70px]"
-                              >
-                                <div className="flex items-center justify-center gap-1">
-                                  <span className="truncate max-w-[80px]" title={o.nome}>
-                                    {o.nome}
-                                  </span>
-                                  {loteObrasParticipantes.length > 1 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoverObraDoLote(o.id)}
-                                      className="text-slate-400 hover:text-rose-500 text-[10px]"
-                                      title="Remover esta obra do lote"
-                                    >
-                                      ✕
-                                    </button>
-                                  )}
-                                </div>
-                              </th>
-                            ))}
-                            {loteFornecedores.map((f) => (
-                              <th
-                                key={`sub-${f.id}`}
-                                className="py-2 px-2 text-center border-r border-slate-300 bg-emerald-50 text-emerald-950 font-bold"
-                              >
-                                PREÇO LOTE (UN.)
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-
-                        <tbody className="divide-y divide-slate-200">
-                          {resumoComprasColetivas.itensCalculados.map((it) => (
-                            <tr key={it.id} className="hover:bg-slate-50/70 transition-colors">
-                              {/* Descrição do Insumo */}
-                              <td className="py-2 px-3 border-r-2 border-slate-300">
-                                <input
-                                  type="text"
-                                  value={it.descricao}
-                                  onChange={(e) => handleAtualizarDescricaoItemColetivo(it.id, e.target.value)}
-                                  placeholder="Descrição do insumo..."
-                                  className="w-full bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 focus:bg-white text-xs font-bold text-slate-900 px-2 py-1 rounded outline-none"
-                                />
-                              </td>
-
-                              {/* Unidade */}
-                              <td className="py-2 px-1 text-center border-r border-slate-300">
-                                <input
-                                  type="text"
-                                  value={it.unidade}
-                                  onChange={(e) => handleAtualizarUndItemColetivo(it.id, e.target.value)}
-                                  className="w-8 text-center font-bold text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 outline-none text-slate-600"
-                                />
-                              </td>
-
-                              {/* Demandas por Obra (Colunas editáveis de cada empreendimento) */}
-                              {loteObrasParticipantes.map((obra) => {
-                                const qtd = it.demandasPorObra[obra.id] || 0;
-                                return (
-                                  <td
-                                    key={`${it.id}-${obra.id}`}
-                                    className="py-2 px-1.5 text-center border-r border-slate-300 bg-sky-50/20"
-                                  >
-                                    <input
-                                      type="number"
-                                      step="1"
-                                      min="0"
-                                      value={qtd === 0 ? "" : qtd}
-                                      onChange={(e) =>
-                                        handleAtualizarDemandaItem(
-                                          it.id,
-                                          obra.id,
-                                          parseFloat(e.target.value) || 0
-                                        )
-                                      }
-                                      placeholder="0"
-                                      className="w-16 text-center font-bold text-xs bg-white border border-slate-200 hover:border-sky-400 focus:border-sky-600 rounded py-1 px-1 outline-none text-slate-900"
-                                      title={`Quantidade necessária para ${obra.nome}`}
-                                    />
-                                  </td>
-                                );
-                              })}
-
-                              {/* Volume Total Consolidado */}
-                              <td className="py-2 px-2 text-center border-r border-slate-300 bg-amber-50 font-black text-amber-950 text-xs">
-                                {it.qtdTotalItem}
-                              </td>
-
-                              {/* Preço de Referência Varejo */}
-                              <td className="py-2 px-2 text-right border-r-2 border-slate-300 bg-rose-50/40">
-                                <div className="flex items-center justify-end gap-1">
-                                  <span className="text-[10px] text-slate-400">R$</span>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={it.precoReferenciaVarejo === 0 ? "" : it.precoReferenciaVarejo}
-                                    onChange={(e) =>
-                                      handleAtualizarPrecoReferencia(
-                                        it.id,
-                                        parseFloat(e.target.value) || 0
-                                      )
-                                    }
-                                    placeholder="0,00"
-                                    className="w-18 text-right font-semibold text-xs bg-white border border-rose-200 hover:border-rose-400 focus:border-slate-900 rounded py-1 px-1.5 outline-none text-rose-900"
-                                    title="Preço unitário de balcão/varejo para cálculo do saving de escala"
-                                  />
-                                </div>
-                              </td>
-
-                              {/* Preços Unitários Negociados por Fornecedor Atacadista */}
-                              {loteFornecedores.map((f) => {
-                                const preco = it.precosFornecedores[f.id] || 0;
-                                return (
-                                  <td
-                                    key={`${it.id}-${f.id}`}
-                                    className="py-2 px-3 text-right border-r border-slate-300"
-                                  >
-                                    <div className="flex items-center justify-end gap-1">
-                                      <span className="text-[10px] text-slate-400 font-bold">R$</span>
-                                      <input
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        value={preco === 0 ? "" : preco}
-                                        onChange={(e) =>
-                                          handleAtualizarPrecoFornecedorColetivo(
-                                            it.id,
-                                            f.id,
-                                            parseFloat(e.target.value) || 0
-                                          )
-                                        }
-                                        placeholder="0,00"
-                                        className="w-20 text-right font-bold text-xs bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-emerald-600 focus:bg-white rounded py-1 px-1.5 outline-none text-slate-900"
-                                        title={`Preço unitário em lote para ${f.nome}`}
-                                      />
-                                    </div>
-                                  </td>
-                                );
-                              })}
-
-                              {/* Ação Remover Item */}
-                              <td className="py-2 px-1 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoverItemColetivo(it.id)}
-                                  className="text-slate-300 hover:text-rose-500 font-bold text-xs px-1"
-                                  title="Remover este item do lote"
-                                >
-                                  ✕
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-
-                        {/* RODAPÉ EXECUTIVO DE TOTAIS */}
-                        <tfoot>
-                          {/* Linha Condições Comerciais e Frete */}
-                          <tr className="bg-slate-100 text-slate-700 text-xs font-semibold border-t-2 border-slate-300">
-                            <td
-                              colSpan={2 + loteObrasParticipantes.length + 2}
-                              className="py-2 px-3 text-right border-r-2 border-slate-300 text-[11px]"
-                            >
-                              Condições Comerciais & Frete do Lote:
-                            </td>
-                            {loteFornecedores.map((f) => (
-                              <td key={`cond-${f.id}`} className="py-2 px-2 border-r border-slate-300">
-                                <div className="space-y-1 text-[10px]">
-                                  <div className="flex items-center justify-between gap-1">
-                                    <span className="text-slate-500">Prazo:</span>
-                                    <input
-                                      type="text"
-                                      value={f.condicaoPagamento}
-                                      onChange={(e) =>
-                                        handleAtualizarCondicaoFornecedorColetivo(f.id, e.target.value)
-                                      }
-                                      placeholder="Ex: 30 DDL"
-                                      className="bg-white border border-slate-200 text-center text-[10px] w-20 py-0.5 rounded outline-none"
-                                    />
-                                  </div>
-                                  <div className="flex items-center justify-between gap-1">
-                                    <span className="text-slate-500">Frete:</span>
-                                    <div className="flex items-center gap-1">
-                                      <select
-                                        value={f.tipoFrete}
-                                        onChange={(e) =>
-                                          handleAtualizarFreteFornecedorColetivo(
-                                            f.id,
-                                            e.target.value as "CIF" | "FOB",
-                                            f.valorFreteTotal
-                                          )
-                                        }
-                                        className="bg-white border border-slate-200 text-[10px] py-0.5 rounded outline-none"
-                                      >
-                                        <option value="CIF">CIF</option>
-                                        <option value="FOB">FOB</option>
-                                      </select>
-                                      {f.tipoFrete === "FOB" && (
-                                        <input
-                                          type="number"
-                                          value={f.valorFreteTotal === 0 ? "" : f.valorFreteTotal}
-                                          onChange={(e) =>
-                                            handleAtualizarFreteFornecedorColetivo(
-                                              f.id,
-                                              f.tipoFrete,
-                                              parseFloat(e.target.value) || 0
-                                            )
-                                          }
-                                          placeholder="R$"
-                                          className="w-12 text-right bg-white border border-slate-200 text-[10px] py-0.5 px-1 rounded outline-none"
-                                        />
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                            ))}
-                            <td className="bg-slate-100"></td>
-                          </tr>
-
-                          {/* Linha Total Geral do Lote */}
-                          <tr className="bg-slate-900 text-white font-black text-xs">
-                            <td
-                              colSpan={2 + loteObrasParticipantes.length}
-                              className="py-3 px-3 text-right border-r-2 border-slate-700 uppercase tracking-wider text-xs"
-                            >
-                              VALOR TOTAL CONSOLIDADO:
-                            </td>
-                            <td className="py-3 px-2 text-center border-r border-slate-700 bg-amber-500/10 text-amber-300">
-                              -
-                            </td>
-                            <td className="py-3 px-2 text-right border-r-2 border-slate-700 bg-rose-950/60 text-rose-300 tabular-nums">
-                              {formatBRL(resumoComprasColetivas.custoTotalVarejo)}
-                            </td>
-                            {resumoComprasColetivas.fornecedoresCalculados.map((f) => {
-                              const isVencedor = resumoComprasColetivas.vencedor?.id === f.id;
-                              return (
-                                <td
-                                  key={`total-${f.id}`}
-                                  className={`py-3 px-3 text-right border-r border-slate-800 ${
-                                    isVencedor
-                                      ? "bg-emerald-900/90 text-emerald-300 ring-2 ring-emerald-400 inset-0"
-                                      : ""
-                                  }`}
-                                >
-                                  <div className="text-sm font-black tabular-nums">
-                                    {formatBRL(f.valorTotal)}
-                                  </div>
-                                  {isVencedor && (
-                                    <div className="text-[10px] text-emerald-400 font-extrabold flex items-center justify-end gap-1 mt-0.5">
-                                      <span>🏆 1º LUGAR</span>
-                                      <span>(-{f.percentualSaving.toFixed(1)}%)</span>
-                                    </div>
-                                  )}
-                                </td>
-                              );
-                            })}
-                            <td className="bg-slate-900"></td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* MODO 3: PAINEL / CENTRAL DE COTAÇÕES SALVAS */}
               {modoCotacoes === "painel_cotacoes" && (() => {
                 const totalCotacoes = processosCotacoes.length;
@@ -13685,6 +12677,1159 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           )}
         </div>
       )}
+
+          {/* ============================================================= */}
+          {/* ABA DEDICADA: QUADRO DE CONCRETEIRAS (USINADO & BOMBA)         */}
+          {/* ============================================================= */}
+          {activeTab === "Concreteiras" && (
+                <div className="space-y-6">
+                  {/* Barra Superior de Gestão da Cotação de Concreto */}
+                  <div className="bg-slate-900 border border-slate-800 text-white rounded-xl p-4 shadow-md flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-4 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-emerald-400 text-xl">🏗️</span>
+                        <div>
+                          <div className="text-sm font-bold text-white flex items-center gap-2">
+                            <span>Quadro de Equalização de Concreteiras</span>
+                            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              Usinado & Bomba
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400">
+                            Cálculo de volume real, seleção de slump/traço e bombeamento integrado — 100% editável na tabela
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleAdicionarSlumpConcreto}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Adicionar uma nova opção de traço/slump de concreto"
+                      >
+                        <span>➕</span> Novo Traço / Slump
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAdicionarConcreteira}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Adicionar uma nova concreteira para cotação lado a lado"
+                      >
+                        <span>🏢</span> + Concreteira
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSalvarCotacaoConcreto}
+                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+                        title="Salvar alterações no banco de dados e nuvem"
+                      >
+                        <span>💾</span> Salvar Cotação
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLimparCotacaoConcreto}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/40 text-rose-300 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Redefinir volumes e valores para o padrão inicial"
+                      >
+                        <span>↺</span> Redefinir Padrão
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Metadados da Concretagem: Obra, Peça/Elemento, Volume Concreto, Volume Bomba */}
+                  <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Empreendimento / Obra:
+                        </label>
+                        <div className="space-y-1">
+                          <input
+                            type="text"
+                            value={concretoObraNomeCustom}
+                            onChange={(e) => {
+                              setConcretoObraNomeCustom(e.target.value);
+                              const achada = obras.find(o => o.nome.toLowerCase() === e.target.value.toLowerCase());
+                              if (achada) setConcretoObraId(achada.id);
+                            }}
+                            placeholder="Digite o nome da Obra..."
+                            className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900"
+                          />
+                          {obras.length > 0 && (
+                            <select
+                              value={concretoObraId}
+                              onChange={(e) => {
+                                setConcretoObraId(e.target.value);
+                                const oSel = obras.find((o) => o.id === e.target.value);
+                                if (oSel) setConcretoObraNomeCustom(oSel.nome);
+                              }}
+                              className="w-full bg-slate-100 border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-600 focus:outline-none"
+                            >
+                              <option value="">(Ou selecione obra cadastrada...)</option>
+                              {obras.map((o) => (
+                                <option key={o.id} value={o.id}>
+                                  {o.nome}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Peça / Elemento Concretado:
+                        </label>
+                        <input
+                          type="text"
+                          value={concretoElemento}
+                          onChange={(e) => setConcretoElemento(e.target.value)}
+                          placeholder="Ex: Laje 3º Pavimento, Pilares..."
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-900"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Volume Concreto (m³):
+                        </label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          value={concretoVolumeM3 === 0 ? "" : concretoVolumeM3}
+                          onChange={(e) => setConcretoVolumeM3(parseFloat(e.target.value) || 0)}
+                          placeholder="0"
+                          className="w-full bg-emerald-50 border-2 border-emerald-300 rounded-lg px-3 py-2 text-xs font-black text-emerald-950 focus:outline-none focus:border-emerald-600 text-right"
+                          title="Também editável diretamente na tabela abaixo"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Volume Bomba (m³):
+                        </label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          value={concretoVolumeBombaM3 === 0 ? "" : concretoVolumeBombaM3}
+                          onChange={(e) => setConcretoVolumeBombaM3(parseFloat(e.target.value) || 0)}
+                          placeholder="0"
+                          className="w-full bg-amber-50 border-2 border-amber-300 rounded-lg px-3 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-amber-600 text-right"
+                          title="Também editável diretamente na tabela abaixo"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
+                      <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={concretoIncluirBombaNoTotal}
+                          onChange={(e) => setConcretoIncluirBombaNoTotal(e.target.checked)}
+                          className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                        />
+                        <span>Incluir Serviço de Bomba no Valor Total e no Preço Un./m³</span>
+                      </label>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        💡 Dica: Todos os campos, nomes, volumes (QUANT) e valores são editáveis diretamente dentro das células da tabela.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Resumo e Indicadores do Melhor Fornecedor */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 shadow-xs">
+                      <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wide flex items-center justify-between">
+                        <span>🏆 Melhor Cotação (Vencedor)</span>
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-200/80 text-emerald-900 text-[10px]">
+                          1º Lugar
+                        </span>
+                      </div>
+                      <div className="text-lg font-black text-emerald-950 mt-1">
+                        {resumoConcreteiras.vencedor?.nome || "A Definir"}
+                      </div>
+                      <div className="text-xs text-emerald-700 font-semibold mt-0.5">
+                        Total: {formatBRL(resumoConcreteiras.vencedor?.valorTotal || 0)}
+                      </div>
+                    </div>
+
+                    <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 shadow-xs">
+                      <div className="text-[11px] font-bold text-sky-800 uppercase tracking-wide">
+                        💡 Saving em Relação ao Maior
+                      </div>
+                      <div className="text-lg font-black text-sky-950 mt-1">
+                        {formatBRL(resumoConcreteiras.saving)}
+                      </div>
+                      <div className="text-xs text-sky-700 font-semibold mt-0.5">
+                        Economia direta na concretagem
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-xs">
+                      <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
+                        📏 Traço Selecionado
+                      </div>
+                      <div className="text-sm font-bold text-slate-900 mt-1 truncate" title={resumoConcreteiras.slumpEscolhido?.descricao}>
+                        {resumoConcreteiras.slumpEscolhido?.descricao || "Nenhum selecionado"}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        Volume: <strong>{concretoVolumeM3} m³</strong>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-xs">
+                      <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
+                        🚚 Concreteiras Equalizadas
+                      </div>
+                      <div className="text-lg font-black text-slate-900 mt-1">
+                        {concreteiras.length} Fornecedores
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        Bomba programada: {concretoVolumeBombaM3} m³
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* TABELA COMPARATIVA DE CONCRETEIRAS (ESTRUTURA EXATA DA PLANILHA EXCEL - 100% EDITÁVEL) */}
+                  <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left border-collapse min-w-[900px]">
+                        <thead>
+                          {/* LINHA 1 DE CABEÇALHO */}
+                          <tr className="bg-slate-900 text-white border-b border-slate-800 font-bold">
+                            <th
+                              rowSpan={2}
+                              className="py-3 px-3 text-center border-r-2 border-slate-700 bg-slate-800 align-middle w-52"
+                            >
+                              <div className="text-[10px] uppercase text-emerald-400 font-extrabold tracking-wider mb-1">
+                                OBRA:
+                              </div>
+                              <input
+                                type="text"
+                                value={concretoObraNomeCustom}
+                                onChange={(e) => {
+                                  setConcretoObraNomeCustom(e.target.value);
+                                  const enc = obras.find(o => o.nome.toLowerCase() === e.target.value.toLowerCase());
+                                  if (enc) setConcretoObraId(enc.id);
+                                }}
+                                placeholder="Nome da Obra..."
+                                className="w-full bg-slate-900/90 border border-slate-600 hover:border-slate-400 focus:border-emerald-400 text-white font-black text-center text-sm rounded px-2 py-1 outline-none transition uppercase"
+                                title="Editar nome da Obra diretamente aqui"
+                              />
+                            </th>
+                            <th
+                              colSpan={2}
+                              className="py-2 px-3 text-center border-r-2 border-slate-700 bg-slate-800 uppercase tracking-wider text-[11px] w-32"
+                            >
+                              ESPECIFICAÇÕES
+                            </th>
+                            {concreteiras.map((c) => (
+                              <th
+                                key={c.id}
+                                className="py-2.5 px-3 text-center border-r border-slate-700 bg-slate-900 font-extrabold text-sm"
+                              >
+                                <div className="flex items-center justify-between gap-1">
+                                  <input
+                                    type="text"
+                                    value={c.nome}
+                                    onChange={(e) => handleAtualizarNomeConcreteira(c.id, e.target.value)}
+                                    placeholder="Concreteira"
+                                    className="bg-slate-800/90 border border-slate-700 hover:border-slate-500 focus:border-emerald-400 focus:bg-slate-950 text-white font-black text-center text-sm w-full outline-none uppercase py-1 px-1.5 rounded transition shadow-inner"
+                                    title="Editar nome da concreteira/fornecedor"
+                                  />
+                                  {concreteiras.length > 2 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoverConcreteira(c.id)}
+                                      className="text-slate-400 hover:text-rose-400 text-xs px-1 font-bold"
+                                      title="Remover esta concreteira"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="flex items-center justify-center gap-1 mt-1 text-[11px] font-normal text-slate-300">
+                                  <span className="text-slate-400 text-[10px]">Nome:</span>
+                                  <input
+                                    type="text"
+                                    value={c.contatoNome}
+                                    onChange={(e) => handleAtualizarContatoConcreteira(c.id, e.target.value)}
+                                    placeholder="Contato..."
+                                    className="bg-slate-800/80 border border-slate-700 hover:border-slate-500 focus:border-emerald-400 text-slate-200 text-xs text-center w-28 outline-none py-0.5 px-1.5 rounded transition"
+                                    title="Editar nome do contato/vendedor"
+                                  />
+                                </div>
+                              </th>
+                            ))}
+                          </tr>
+
+                          {/* LINHA 2 DE CABEÇALHO */}
+                          <tr className="bg-slate-100 text-slate-700 border-b-2 border-slate-300 font-black text-[11px]">
+                            <th className="py-2 px-2 text-center border-r border-slate-300 w-20">
+                              QUANT:
+                            </th>
+                            <th className="py-2 px-2 text-center border-r-2 border-slate-400 w-14">
+                              UND:
+                            </th>
+                            {concreteiras.map((c) => (
+                              <th
+                                key={`sub-${c.id}`}
+                                className="py-2 px-2 text-center border-r border-slate-300 bg-emerald-50 text-emerald-950 font-black tracking-wide"
+                              >
+                                VALOR UN / M:
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+
+                        <tbody className="divide-y divide-slate-200">
+                          {/* LINHAS DE SLUMPS DE CONCRETO */}
+                          {concretoSlumps.map((slump) => {
+                            const isAtivo = slump.id === concretoSlumpSelecionadoId;
+                            return (
+                              <tr
+                                key={slump.id}
+                                className={`transition-colors ${
+                                  isAtivo
+                                    ? "bg-emerald-50/70 font-semibold text-slate-900"
+                                    : "bg-white hover:bg-slate-50/60 text-slate-700"
+                                }`}
+                              >
+                                {/* Descrição do Traço */}
+                                <td className="py-2 px-3 border-r-2 border-slate-300">
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="radio"
+                                      name="slump_ativo"
+                                      checked={isAtivo}
+                                      onChange={() => setConcretoSlumpSelecionadoId(slump.id)}
+                                      className="text-emerald-600 focus:ring-emerald-500 cursor-pointer h-4 w-4 shrink-0"
+                                      title="Marcar este slump como o traço a ser executado"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={slump.descricao}
+                                      onChange={(e) => handleAtualizarDescricaoSlump(slump.id, e.target.value)}
+                                      placeholder="Ex: Concreto 14+-20 40mpa"
+                                      className="bg-slate-50/90 border border-slate-200 hover:border-slate-400 focus:border-slate-900 focus:bg-white text-xs font-bold text-slate-900 w-full outline-none px-2 py-1 rounded transition"
+                                      title="Editar descrição do traço de concreto"
+                                    />
+                                    {isAtivo && (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0 border border-emerald-200">
+                                        Ativo
+                                      </span>
+                                    )}
+                                    {concretoSlumps.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoverSlumpConcreto(slump.id)}
+                                        className="text-slate-300 hover:text-rose-500 text-xs px-1 font-bold"
+                                        title="Remover este traço"
+                                      >
+                                        ✕
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* QUANTIDADE (METROS CÚBICOS) - TOTALMENTE EDITÁVEL NA CÉLULA */}
+                                <td className="py-2 px-2 text-center border-r border-slate-300">
+                                  <input
+                                    type="number"
+                                    step="0.5"
+                                    min="0"
+                                    value={isAtivo ? (concretoVolumeM3 === 0 ? "" : concretoVolumeM3) : ""}
+                                    placeholder={isAtivo ? "0" : "—"}
+                                    onChange={(e) => {
+                                      const val = parseFloat(e.target.value) || 0;
+                                      setConcretoSlumpSelecionadoId(slump.id);
+                                      setConcretoVolumeM3(val);
+                                    }}
+                                    onFocus={() => {
+                                      if (!isAtivo) {
+                                        setConcretoSlumpSelecionadoId(slump.id);
+                                      }
+                                    }}
+                                    className={`w-18 text-center font-black text-xs py-1 px-1 rounded-md border-2 outline-none transition ${
+                                      isAtivo
+                                        ? "bg-emerald-50 border-emerald-400 text-emerald-950 ring-1 ring-emerald-300"
+                                        : "bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-400 focus:border-slate-900"
+                                    }`}
+                                    title={isAtivo ? "Volume em m³ para este traço (editável)" : "Clique ou digite para ativar este traço e definir seu volume"}
+                                  />
+                                </td>
+
+                                {/* UNIDADE */}
+                                <td className="py-2 px-1 text-center border-r-2 border-slate-400">
+                                  <input
+                                    type="text"
+                                    value={slump.unidade || "m³"}
+                                    onChange={(e) => handleAtualizarUndSlump(slump.id, e.target.value)}
+                                    className="w-10 text-center font-bold text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 outline-none text-slate-700 py-0.5"
+                                    title="Editar unidade de medida"
+                                  />
+                                </td>
+
+                                {/* PREÇOS UNITÁRIOS POR CONCRETEIRA */}
+                                {concreteiras.map((c) => {
+                                  const preco = c.precosSlumps[slump.id] || 0;
+                                  return (
+                                    <td
+                                      key={`${slump.id}-${c.id}`}
+                                      className="py-2 px-3 text-right border-r border-slate-300"
+                                    >
+                                      <div className="flex items-center justify-end gap-1">
+                                        <span className="text-[10px] text-slate-400 font-bold">R$</span>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          value={preco === 0 ? "" : preco}
+                                          onChange={(e) =>
+                                            handleAtualizarPrecoSlump(
+                                              c.id,
+                                              slump.id,
+                                              parseFloat(e.target.value) || 0
+                                            )
+                                          }
+                                          placeholder="0,00"
+                                          className="w-24 text-right font-bold text-xs bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 focus:bg-white rounded px-2 py-1 outline-none text-slate-900 transition"
+                                          title="Editar preço do concreto desta empresa"
+                                        />
+                                      </div>
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
+
+                          {/* LINHA DE BOMBA */}
+                          <tr className="bg-amber-50/40 text-slate-900 font-medium border-t border-slate-300">
+                            {/* Nome e descrição da Bomba */}
+                            <td className="py-2 px-3 border-r-2 border-slate-300">
+                              <div className="flex items-center gap-2">
+                                <span className="text-amber-600 font-bold">🚚</span>
+                                <input
+                                  type="text"
+                                  value={concretoNomeBomba}
+                                  onChange={(e) => setConcretoNomeBomba(e.target.value)}
+                                  placeholder="Bomba"
+                                  className="bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 rounded px-2 py-1 text-xs font-bold text-slate-900 outline-none w-24"
+                                  title="Editar nome do serviço de bomba"
+                                />
+                                <input
+                                  type="text"
+                                  value={concretoDescricaoBomba}
+                                  onChange={(e) => setConcretoDescricaoBomba(e.target.value)}
+                                  placeholder="(Serviço de Bombeamento)"
+                                  className="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 text-[11px] text-slate-500 outline-none flex-1 py-0.5"
+                                  title="Editar subtítulo da bomba"
+                                />
+                              </div>
+                            </td>
+
+                            {/* QUANTIDADE DA BOMBA - TOTALMENTE EDITÁVEL NA CÉLULA */}
+                            <td className="py-2 px-2 text-center border-r border-slate-300">
+                              <input
+                                type="number"
+                                step="0.5"
+                                min="0"
+                                value={concretoVolumeBombaM3 === 0 ? "" : concretoVolumeBombaM3}
+                                onChange={(e) => setConcretoVolumeBombaM3(parseFloat(e.target.value) || 0)}
+                                placeholder="0"
+                                className="w-18 text-center font-black text-xs py-1 px-1 rounded-md bg-amber-50 border-2 border-amber-300 text-slate-900 ring-1 ring-amber-200 outline-none focus:border-slate-900"
+                                title="Volume bombeado em m³ (editável)"
+                              />
+                            </td>
+
+                            {/* UNIDADE DA BOMBA */}
+                            <td className="py-2 px-1 text-center border-r-2 border-slate-400">
+                              <input
+                                type="text"
+                                value={concretoUndBomba}
+                                onChange={(e) => setConcretoUndBomba(e.target.value)}
+                                className="w-10 text-center font-bold text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 outline-none text-slate-700 py-0.5"
+                                title="Editar unidade da bomba"
+                              />
+                            </td>
+
+                            {/* PREÇOS DA BOMBA POR CONCRETEIRA */}
+                            {concreteiras.map((c) => (
+                              <td
+                                key={`bomba-${c.id}`}
+                                className="py-2 px-3 text-right border-r border-slate-300 bg-amber-50/20"
+                              >
+                                <div className="flex items-center justify-end gap-1">
+                                  <span className="text-[10px] text-slate-400 font-bold">R$</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={c.precoBomba === 0 ? "" : c.precoBomba}
+                                    onChange={(e) =>
+                                      handleAtualizarPrecoBomba(
+                                        c.id,
+                                        parseFloat(e.target.value) || 0
+                                      )
+                                    }
+                                    placeholder="0,00"
+                                    className="w-24 text-right font-bold text-xs bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 focus:bg-white rounded px-2 py-1 outline-none text-slate-900 transition"
+                                    title="Editar preço da bomba desta empresa"
+                                  />
+                                </div>
+                              </td>
+                            ))}
+                          </tr>
+
+                          {/* LINHA AZUL: VALOR UN / M: (CONCRETO ESCOLHIDO + BOMBA) */}
+                          <tr className="bg-sky-200/90 border-t-2 border-b-2 border-sky-600 font-black text-sky-950">
+                            <td colSpan={3} className="py-2.5 px-3 border-r-2 border-slate-900 text-right uppercase tracking-wider text-[11px]">
+                              VALOR UN / M: (
+                              {resumoConcreteiras.slumpEscolhido?.descricao || "Concreto"} + {concretoNomeBomba || "Bomba"}):
+                            </td>
+                            {resumoConcreteiras.calculados.map((c) => {
+                              const isMelhorUnit =
+                                resumoConcreteiras.vencedor?.id === c.id;
+                              return (
+                                <td
+                                  key={c.id}
+                                  className={`py-2.5 px-3 text-right border-r border-slate-800 text-sm ${
+                                    isMelhorUnit ? "bg-emerald-200 text-emerald-950 font-black" : ""
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-end gap-1">
+                                    {isMelhorUnit && <span>🏆</span>}
+                                    <span>{formatBRL(c.somaUnitariaM3)}</span>
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </tbody>
+
+                        {/* RODAPÉ: VALOR TOTAL FINAL */}
+                        <tfoot>
+                          <tr className="bg-slate-900 text-white font-black">
+                            <td
+                              colSpan={3}
+                              className="py-3 px-3 text-right border-r-2 border-slate-700 uppercase tracking-wider text-xs"
+                            >
+                              VALOR TOTAL: ({concretoVolumeM3} m³)
+                            </td>
+                            {resumoConcreteiras.calculados.map((c) => {
+                              const isVencedor = resumoConcreteiras.vencedor?.id === c.id;
+                              return (
+                                <td
+                                  key={c.id}
+                                  className={`py-3 px-3 text-right border-r border-slate-800 ${
+                                    isVencedor ? "bg-emerald-900/90 text-emerald-300 ring-2 ring-emerald-400 inset-0" : ""
+                                  }`}
+                                >
+                                  <div className="text-base font-black tabular-nums">
+                                    {formatBRL(c.valorTotal)}
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 font-normal mt-0.5">
+                                    Mat: {formatBRL(c.subtotalConcreto)} + Bomba: {formatBRL(c.subtotalBomba)}
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Linha de Ações: Botão Emitir OC para cada Concreteira */}
+                          <tr className="bg-slate-100">
+                            <td colSpan={3} className="py-2.5 px-3 border-r-2 border-slate-300 text-slate-600 text-right text-[11px] font-semibold">
+                              Ações Comerciais:
+                            </td>
+                            {resumoConcreteiras.calculados.map((c) => {
+                              const isVencedor = resumoConcreteiras.vencedor?.id === c.id;
+                              return (
+                                <td key={c.id} className="py-2.5 px-3 border-r border-slate-300 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEmitirOrdemConcreteira(c.id)}
+                                    className={`w-full py-1.5 px-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 shadow-2xs ${
+                                      isVencedor
+                                        ? "bg-emerald-700 hover:bg-emerald-800 text-white"
+                                        : "bg-slate-800 hover:bg-slate-700 text-slate-200"
+                                    }`}
+                                  >
+                                    <span>📄</span> Emitir OC
+                                  </button>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+
+          {/* ============================================================= */}
+          {/* ABA DEDICADA: CENTRAL DE COMPRAS COLETIVAS (MULTIOBRA)         */}
+          {/* ============================================================= */}
+          {activeTab === "ComprasColetivas" && (
+                <div className="space-y-6">
+                  {/* Barra Superior Executiva de Compras Coletivas */}
+                  <div className="bg-slate-900 border border-slate-800 text-white rounded-xl p-4 shadow-md flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-4 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-amber-400 text-2xl">📦</span>
+                        <div>
+                          <div className="text-sm font-bold text-white flex items-center gap-2">
+                            <span>Central de Compras Coletivas & Sourcing Corporativo</span>
+                            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                              Ganho de Escala Multiobra
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400">
+                            Unifique requisições de múltiplos canteiros para negociar preço de indústria/atacado e desmembrar OCs em 1 clique
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handlePuxarDemandasDeSCsAbertas}
+                        className="px-3 py-1.5 rounded-lg bg-sky-900/60 hover:bg-sky-800/80 border border-sky-700/80 text-sky-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Varrer requisições de compras abertas nos canteiros e puxar insumos comuns para este lote"
+                      >
+                        <span>⚡</span> Puxar Demandas de SCs
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAdicionarItemColetivo}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Adicionar mais um insumo ao lote corporativo"
+                      >
+                        <span>➕</span> Novo Insumo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAdicionarFornecedorColetivo}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Adicionar fornecedor atacadista ou indústria para cotação lado a lado"
+                      >
+                        <span>🏭</span> + Atacadista
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSalvarLoteColetivo}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Salvar alterações no banco de dados e nuvem"
+                      >
+                        <span>💾</span> Salvar Lote
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDesmembrarEEmitirOCs}
+                        className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center gap-1.5 shadow-md transition"
+                        title="Desmembrar o lote e emitir automaticamente as Ordens de Compra oficiais para cada obra participante"
+                      >
+                        <span>🚀</span> Desmembrar e Emitir OCs por Obra
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Informações do Lote Corporativo e KPIs de Escala */}
+                  <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex-1 min-w-[280px]">
+                        <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                          Título do Lote de Negociação Corporativa:
+                        </label>
+                        <input
+                          type="text"
+                          value={loteColetivoTitulo}
+                          onChange={(e) => setLoteColetivoTitulo(e.target.value)}
+                          placeholder="Ex: Lote Corporativo de Aço e Cimento..."
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900"
+                        />
+                      </div>
+
+                      {/* Seletor rápido para incluir mais uma obra existente no lote */}
+                      <div className="flex items-center gap-2">
+                        {obras.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-slate-600">Incluir Obra no Lote:</span>
+                            <select
+                              onChange={(e) => {
+                                if (!e.target.value) return;
+                                const o = obras.find((ob) => ob.id === e.target.value);
+                                if (o) handleAdicionarObraAoLote(o.id, o.nome);
+                                e.target.value = "";
+                              }}
+                              className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:outline-none cursor-pointer"
+                            >
+                              <option value="">Selecionar obra para adicionar...</option>
+                              {obras
+                                .filter((o) => !loteObrasParticipantes.some((p) => p.id === o.id))
+                                .map((o) => (
+                                  <option key={o.id} value={o.id}>
+                                    + {o.nome}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Cards de Métricas e Saving Corporativo de Escala */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 shadow-xs">
+                        <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wide flex items-center justify-between">
+                          <span>🏆 Melhor Atacadista (Vencedor)</span>
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-900 text-[10px] font-black">
+                            1º Lugar
+                          </span>
+                        </div>
+                        <div className="text-base font-black text-emerald-950 mt-1 truncate" title={resumoComprasColetivas.vencedor?.nome}>
+                          {resumoComprasColetivas.vencedor?.nome || "A definir cotação"}
+                        </div>
+                        <div className="text-xs text-emerald-700 font-semibold mt-0.5">
+                          Lote: <strong>{formatBRL(resumoComprasColetivas.vencedor?.valorTotal || 0)}</strong>
+                        </div>
+                      </div>
+
+                      <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 shadow-xs">
+                        <div className="text-[11px] font-bold text-sky-800 uppercase tracking-wide">
+                          💡 Economia Corporativa (Saving)
+                        </div>
+                        <div className="text-xl font-black text-sky-950 mt-1">
+                          {formatBRL(resumoComprasColetivas.vencedor?.savingEmRelacaoAoVarejo || 0)}
+                        </div>
+                        <div className="text-xs text-sky-700 font-semibold mt-0.5">
+                          Economia de <strong>{(resumoComprasColetivas.vencedor?.percentualSaving || 0).toFixed(1)}%</strong> vs Varejo
+                        </div>
+                      </div>
+
+                      <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 shadow-xs">
+                        <div className="text-[11px] font-bold text-rose-800 uppercase tracking-wide">
+                          🛒 Custo Base Balcão (Sem Escala)
+                        </div>
+                        <div className="text-lg font-black text-rose-950 mt-1">
+                          {formatBRL(resumoComprasColetivas.custoTotalVarejo)}
+                        </div>
+                        <div className="text-xs text-rose-700 font-semibold mt-0.5">
+                          Se cada obra comprasse picado no balcão
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-xs">
+                        <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
+                          🏢 Obras & Insumos no Lote
+                        </div>
+                        <div className="text-lg font-black text-slate-900 mt-1">
+                          {loteObrasParticipantes.length} Obras | {loteItens.length} Insumos
+                        </div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {loteFornecedores.length} fornecedores equalizados
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cards de Rateio Individual por Empreendimento */}
+                  <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+                    <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sky-600">📊</span>
+                        <span>Rateio por Empreendimento (Com Preço Negociado de Atacado):</span>
+                      </div>
+                      <span className="text-[11px] text-slate-500 font-normal">
+                        Cada obra paga apenas o que consome, usufruindo do desconto corporativo
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {resumoComprasColetivas.rateioPorObra.map((r) => (
+                        <div
+                          key={r.obraId}
+                          className="bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-lg p-3 transition"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-extrabold text-xs text-slate-900">
+                              🏢 {r.obraNome}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-500">
+                              {r.totalItensObra} insumo(s)
+                            </span>
+                          </div>
+                          <div className="text-base font-black text-slate-900 mt-1">
+                            {formatBRL(r.subtotalNegociadoObra)}
+                          </div>
+                          <div className="text-[11px] text-emerald-700 font-bold mt-0.5 flex items-center justify-between">
+                            <span>Economia gerada:</span>
+                            <span>{formatBRL(r.savingObra)} ({r.percSavingObra.toFixed(1)}%)</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* TABELA CORPORATIVA: DEMANDAS POR OBRA, VOLUME CONSOLIDADO E EQUALIZAÇÃO DE FORNECEDORES */}
+                  <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left border-collapse min-w-[1000px]">
+                        <thead>
+                          {/* LINHA 1 DE CABEÇALHO */}
+                          <tr className="bg-slate-900 text-white border-b border-slate-800 font-bold">
+                            <th
+                              rowSpan={2}
+                              className="py-3 px-3 text-left border-r-2 border-slate-700 bg-slate-800 align-middle min-w-[200px]"
+                            >
+                              INSUMO / ESPECIFICAÇÃO
+                            </th>
+                            <th
+                              rowSpan={2}
+                              className="py-3 px-2 text-center border-r border-slate-700 bg-slate-800 align-middle w-12"
+                            >
+                              UND
+                            </th>
+                            <th
+                              colSpan={loteObrasParticipantes.length}
+                              className="py-2 px-2 text-center border-r-2 border-slate-700 bg-sky-950 text-sky-200 font-black tracking-wider text-[11px]"
+                            >
+                              DEMANDAS PROGRAMADAS POR OBRA
+                            </th>
+                            <th
+                              rowSpan={2}
+                              className="py-3 px-2 text-center border-r border-slate-700 bg-amber-500/20 text-amber-300 font-black align-middle text-xs min-w-[70px]"
+                            >
+                              VOLUME<br />TOTAL
+                            </th>
+                            <th
+                              rowSpan={2}
+                              className="py-3 px-2 text-right border-r-2 border-slate-700 bg-rose-500/20 text-rose-300 font-bold align-middle text-xs min-w-[85px]"
+                            >
+                              REF. VAREJO<br />(UN.)
+                            </th>
+                            {loteFornecedores.map((f) => (
+                              <th
+                                key={f.id}
+                                className="py-2.5 px-3 text-center border-r border-slate-700 bg-slate-900 font-extrabold text-xs min-w-[160px]"
+                              >
+                                <div className="flex items-center justify-between gap-1">
+                                  <input
+                                    type="text"
+                                    value={f.nome}
+                                    onChange={(e) => handleAtualizarNomeFornecedorColetivo(f.id, e.target.value)}
+                                    placeholder="Nome Atacadista"
+                                    className="bg-slate-800 border border-slate-700 hover:border-slate-500 focus:border-amber-400 text-white font-black text-center text-xs w-full outline-none uppercase py-1 px-1.5 rounded"
+                                    title="Editar nome do fornecedor atacadista"
+                                  />
+                                  {loteFornecedores.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoverFornecedorColetivo(f.id)}
+                                      className="text-slate-400 hover:text-rose-400 text-xs px-1 font-bold"
+                                      title="Remover este fornecedor"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="flex items-center justify-center gap-1 mt-1 text-[10px] font-normal text-slate-300">
+                                  <input
+                                    type="text"
+                                    value={f.contato}
+                                    onChange={(e) => handleAtualizarContatoFornecedorColetivo(f.id, e.target.value)}
+                                    placeholder="Contato..."
+                                    className="bg-slate-800/80 border border-slate-700 hover:border-slate-500 text-slate-300 text-[10px] text-center w-24 outline-none py-0.5 rounded"
+                                  />
+                                </div>
+                              </th>
+                            ))}
+                            <th
+                              rowSpan={2}
+                              className="py-3 px-2 text-center bg-slate-800 align-middle w-10 text-slate-400"
+                            >
+                              Ação
+                            </th>
+                          </tr>
+
+                          {/* LINHA 2 DE CABEÇALHO */}
+                          <tr className="bg-slate-100 text-slate-700 border-b-2 border-slate-300 font-black text-[11px]">
+                            {loteObrasParticipantes.map((o) => (
+                              <th
+                                key={o.id}
+                                className="py-2 px-2 text-center border-r border-slate-300 bg-sky-50 text-sky-950 font-bold min-w-[70px]"
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  <span className="truncate max-w-[80px]" title={o.nome}>
+                                    {o.nome}
+                                  </span>
+                                  {loteObrasParticipantes.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoverObraDoLote(o.id)}
+                                      className="text-slate-400 hover:text-rose-500 text-[10px]"
+                                      title="Remover esta obra do lote"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+                              </th>
+                            ))}
+                            {loteFornecedores.map((f) => (
+                              <th
+                                key={`sub-${f.id}`}
+                                className="py-2 px-2 text-center border-r border-slate-300 bg-emerald-50 text-emerald-950 font-bold"
+                              >
+                                PREÇO LOTE (UN.)
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+
+                        <tbody className="divide-y divide-slate-200">
+                          {resumoComprasColetivas.itensCalculados.map((it) => (
+                            <tr key={it.id} className="hover:bg-slate-50/70 transition-colors">
+                              {/* Descrição do Insumo */}
+                              <td className="py-2 px-3 border-r-2 border-slate-300">
+                                <input
+                                  type="text"
+                                  value={it.descricao}
+                                  onChange={(e) => handleAtualizarDescricaoItemColetivo(it.id, e.target.value)}
+                                  placeholder="Descrição do insumo..."
+                                  className="w-full bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 focus:bg-white text-xs font-bold text-slate-900 px-2 py-1 rounded outline-none"
+                                />
+                              </td>
+
+                              {/* Unidade */}
+                              <td className="py-2 px-1 text-center border-r border-slate-300">
+                                <input
+                                  type="text"
+                                  value={it.unidade}
+                                  onChange={(e) => handleAtualizarUndItemColetivo(it.id, e.target.value)}
+                                  className="w-8 text-center font-bold text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 outline-none text-slate-600"
+                                />
+                              </td>
+
+                              {/* Demandas por Obra (Colunas editáveis de cada empreendimento) */}
+                              {loteObrasParticipantes.map((obra) => {
+                                const qtd = it.demandasPorObra[obra.id] || 0;
+                                return (
+                                  <td
+                                    key={`${it.id}-${obra.id}`}
+                                    className="py-2 px-1.5 text-center border-r border-slate-300 bg-sky-50/20"
+                                  >
+                                    <input
+                                      type="number"
+                                      step="1"
+                                      min="0"
+                                      value={qtd === 0 ? "" : qtd}
+                                      onChange={(e) =>
+                                        handleAtualizarDemandaItem(
+                                          it.id,
+                                          obra.id,
+                                          parseFloat(e.target.value) || 0
+                                        )
+                                      }
+                                      placeholder="0"
+                                      className="w-16 text-center font-bold text-xs bg-white border border-slate-200 hover:border-sky-400 focus:border-sky-600 rounded py-1 px-1 outline-none text-slate-900"
+                                      title={`Quantidade necessária para ${obra.nome}`}
+                                    />
+                                  </td>
+                                );
+                              })}
+
+                              {/* Volume Total Consolidado */}
+                              <td className="py-2 px-2 text-center border-r border-slate-300 bg-amber-50 font-black text-amber-950 text-xs">
+                                {it.qtdTotalItem}
+                              </td>
+
+                              {/* Preço de Referência Varejo */}
+                              <td className="py-2 px-2 text-right border-r-2 border-slate-300 bg-rose-50/40">
+                                <div className="flex items-center justify-end gap-1">
+                                  <span className="text-[10px] text-slate-400">R$</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={it.precoReferenciaVarejo === 0 ? "" : it.precoReferenciaVarejo}
+                                    onChange={(e) =>
+                                      handleAtualizarPrecoReferencia(
+                                        it.id,
+                                        parseFloat(e.target.value) || 0
+                                      )
+                                    }
+                                    placeholder="0,00"
+                                    className="w-18 text-right font-semibold text-xs bg-white border border-rose-200 hover:border-rose-400 focus:border-slate-900 rounded py-1 px-1.5 outline-none text-rose-900"
+                                    title="Preço unitário de balcão/varejo para cálculo do saving de escala"
+                                  />
+                                </div>
+                              </td>
+
+                              {/* Preços Unitários Negociados por Fornecedor Atacadista */}
+                              {loteFornecedores.map((f) => {
+                                const preco = it.precosFornecedores[f.id] || 0;
+                                return (
+                                  <td
+                                    key={`${it.id}-${f.id}`}
+                                    className="py-2 px-3 text-right border-r border-slate-300"
+                                  >
+                                    <div className="flex items-center justify-end gap-1">
+                                      <span className="text-[10px] text-slate-400 font-bold">R$</span>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={preco === 0 ? "" : preco}
+                                        onChange={(e) =>
+                                          handleAtualizarPrecoFornecedorColetivo(
+                                            it.id,
+                                            f.id,
+                                            parseFloat(e.target.value) || 0
+                                          )
+                                        }
+                                        placeholder="0,00"
+                                        className="w-20 text-right font-bold text-xs bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-emerald-600 focus:bg-white rounded py-1 px-1.5 outline-none text-slate-900"
+                                        title={`Preço unitário em lote para ${f.nome}`}
+                                      />
+                                    </div>
+                                  </td>
+                                );
+                              })}
+
+                              {/* Ação Remover Item */}
+                              <td className="py-2 px-1 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoverItemColetivo(it.id)}
+                                  className="text-slate-300 hover:text-rose-500 font-bold text-xs px-1"
+                                  title="Remover este item do lote"
+                                >
+                                  ✕
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+
+                        {/* RODAPÉ EXECUTIVO DE TOTAIS */}
+                        <tfoot>
+                          {/* Linha Condições Comerciais e Frete */}
+                          <tr className="bg-slate-100 text-slate-700 text-xs font-semibold border-t-2 border-slate-300">
+                            <td
+                              colSpan={2 + loteObrasParticipantes.length + 2}
+                              className="py-2 px-3 text-right border-r-2 border-slate-300 text-[11px]"
+                            >
+                              Condições Comerciais & Frete do Lote:
+                            </td>
+                            {loteFornecedores.map((f) => (
+                              <td key={`cond-${f.id}`} className="py-2 px-2 border-r border-slate-300">
+                                <div className="space-y-1 text-[10px]">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-slate-500">Prazo:</span>
+                                    <input
+                                      type="text"
+                                      value={f.condicaoPagamento}
+                                      onChange={(e) =>
+                                        handleAtualizarCondicaoFornecedorColetivo(f.id, e.target.value)
+                                      }
+                                      placeholder="Ex: 30 DDL"
+                                      className="bg-white border border-slate-200 text-center text-[10px] w-20 py-0.5 rounded outline-none"
+                                    />
+                                  </div>
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-slate-500">Frete:</span>
+                                    <div className="flex items-center gap-1">
+                                      <select
+                                        value={f.tipoFrete}
+                                        onChange={(e) =>
+                                          handleAtualizarFreteFornecedorColetivo(
+                                            f.id,
+                                            e.target.value as "CIF" | "FOB",
+                                            f.valorFreteTotal
+                                          )
+                                        }
+                                        className="bg-white border border-slate-200 text-[10px] py-0.5 rounded outline-none"
+                                      >
+                                        <option value="CIF">CIF</option>
+                                        <option value="FOB">FOB</option>
+                                      </select>
+                                      {f.tipoFrete === "FOB" && (
+                                        <input
+                                          type="number"
+                                          value={f.valorFreteTotal === 0 ? "" : f.valorFreteTotal}
+                                          onChange={(e) =>
+                                            handleAtualizarFreteFornecedorColetivo(
+                                              f.id,
+                                              f.tipoFrete,
+                                              parseFloat(e.target.value) || 0
+                                            )
+                                          }
+                                          placeholder="R$"
+                                          className="w-12 text-right bg-white border border-slate-200 text-[10px] py-0.5 px-1 rounded outline-none"
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                            ))}
+                            <td className="bg-slate-100"></td>
+                          </tr>
+
+                          {/* Linha Total Geral do Lote */}
+                          <tr className="bg-slate-900 text-white font-black text-xs">
+                            <td
+                              colSpan={2 + loteObrasParticipantes.length}
+                              className="py-3 px-3 text-right border-r-2 border-slate-700 uppercase tracking-wider text-xs"
+                            >
+                              VALOR TOTAL CONSOLIDADO:
+                            </td>
+                            <td className="py-3 px-2 text-center border-r border-slate-700 bg-amber-500/10 text-amber-300">
+                              -
+                            </td>
+                            <td className="py-3 px-2 text-right border-r-2 border-slate-700 bg-rose-950/60 text-rose-300 tabular-nums">
+                              {formatBRL(resumoComprasColetivas.custoTotalVarejo)}
+                            </td>
+                            {resumoComprasColetivas.fornecedoresCalculados.map((f) => {
+                              const isVencedor = resumoComprasColetivas.vencedor?.id === f.id;
+                              return (
+                                <td
+                                  key={`total-${f.id}`}
+                                  className={`py-3 px-3 text-right border-r border-slate-800 ${
+                                    isVencedor
+                                      ? "bg-emerald-900/90 text-emerald-300 ring-2 ring-emerald-400 inset-0"
+                                      : ""
+                                  }`}
+                                >
+                                  <div className="text-sm font-black tabular-nums">
+                                    {formatBRL(f.valorTotal)}
+                                  </div>
+                                  {isVencedor && (
+                                    <div className="text-[10px] text-emerald-400 font-extrabold flex items-center justify-end gap-1 mt-0.5">
+                                      <span>🏆 1º LUGAR</span>
+                                      <span>(-{f.percentualSaving.toFixed(1)}%)</span>
+                                    </div>
+                                  )}
+                                </td>
+                              );
+                            })}
+                            <td className="bg-slate-900"></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
 
           {/* ============================================================= */}
           {/* ABA 3: FORNECEDORES & VENDEDORES (`Fornecedores`)             */}
@@ -18357,6 +18502,7 @@ function VisaoRestritaObra({
 }) {
   // Estado local para modais do Canteiro
   const [novoBmModalContrato, setNovoBmModalContrato] =
+  const [menuLateralObraAberto, setMenuLateralObraAberto] = useState<boolean>(false);
     useState<ContratoSubempreitada | null>(null);
   const [scChatModal, setScChatModal] = useState<SolicitacaoCompra | null>(null);
 
@@ -18525,77 +18671,124 @@ function VisaoRestritaObra({
   );
 
   const tituloObraTab: Record<ObraTabId, string> = {
-    PainelDiario: "📋 Painel Diário do Canteiro & Checklist Operacional",
-    NovoPedido: "📝 Novo Pedido de Material (Requisição de Canteiro)",
-    MeusPedidos: "📋 Meus Pedidos da Obra (Acompanhamento em Tempo Real)",
-    Recebimento: "📦 Recebimento & Controle Interno (Almoxarifado)",
-    Estoque: "🧱 Estoque do Canteiro & Almoxarifado",
-    Medicoes: "📐 Contratos de Subempreitada & Boletins de Medição (BM)",
+    PainelDiario: "Painel DiÃ¡rio do Canteiro & Checklist Operacional",
+    NovoPedido: "Novo Pedido de Material (RequisiÃ§Ã£o de Canteiro)",
+    MeusPedidos: "Meus Pedidos da Obra (Acompanhamento em Tempo Real)",
+    Recebimento: "Recebimento & Controle Interno (Almoxarifado)",
+    Estoque: "Estoque do Canteiro & Almoxarifado",
+    Medicoes: "Contratos de Subempreitada & Boletins de MediÃ§Ã£o (BM)",
     Logistica: "🚚 Calendário de Cargas & Descargas no Canteiro",
   };
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#F4F6F8] text-slate-900 font-sans">
-      {/* SIDEBAR RESTRITA DA OBRA (ABAS PERMITIDAS) */}
-      <aside className="w-72 shrink-0 bg-slate-900 text-white flex flex-col justify-between h-full">
+      {/* BACKDROP DO MENU LATERAL (CANTEIRO) */}
+      {menuLateralObraAberto && (
+        <div
+          onClick={() => setMenuLateralObraAberto(false)}
+          className="no-print fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-40 transition-opacity"
+          title="Clique fora para fechar o menu"
+        />
+      )}
+
+      {/* SIDEBAR RESTRITA DA OBRA (ABAS PERMITIDAS) - DRAWER DESLIZANTE */}
+      <aside
+        className={`no-print fixed top-0 bottom-0 left-0 z-50 w-72 bg-slate-900 text-white flex flex-col justify-between h-full shadow-2xl transition-transform duration-300 ease-in-out ${
+          menuLateralObraAberto ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
         <div>
-          <div className="h-20 px-4 border-b border-slate-800 flex items-center gap-3">
-            <div className="bg-white p-1 rounded-lg border border-amber-300/40 shadow-xs shrink-0 flex items-center justify-center">
-              <img
-                src="/logo.png"
-                alt="JC Bauer Empreendimentos"
-                className="h-10 w-auto object-contain"
-              />
-            </div>
-            <div className="min-w-0">
-              <div className="font-extrabold text-sm text-white tracking-wide truncate">
-                JC BAUER
+          <div className="h-20 px-4 border-b border-slate-800 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="bg-white p-1 rounded-lg border border-amber-300/40 shadow-xs shrink-0 flex items-center justify-center">
+                <img
+                  src="/logo.png"
+                  alt="JC Bauer Empreendimentos"
+                  className="h-10 w-auto object-contain"
+                />
               </div>
-              <div className="text-[11px] text-emerald-400 font-semibold truncate">
-                Portal do Canteiro de Obras
+              <div className="min-w-0">
+                <div className="font-extrabold text-sm text-white tracking-wide truncate">
+                  JC BAUER
+                </div>
+                <div className="text-[11px] text-emerald-400 font-semibold truncate">
+                  Portal do Canteiro de Obras
+                </div>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setMenuLateralObraAberto(false)}
+              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer shrink-0"
+              title="Fechar menu"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
 
-          <nav className="p-3 space-y-1">
+          <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-230px)]">
             {(
               [
                 {
                   id: "PainelDiario",
-                  label: "📋 Rotina Diária & Checklist",
+                  label: "Rotina Diária & Checklist",
+                  iconPath: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4",
                 },
-                { id: "NovoPedido", label: "📝 Novo Pedido de Material" },
-                { id: "MeusPedidos", label: "📋 Meus Pedidos da Obra" },
+                {
+                  id: "NovoPedido",
+                  label: "Novo Pedido de Material",
+                  iconPath: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z",
+                },
+                {
+                  id: "MeusPedidos",
+                  label: "Meus Pedidos da Obra",
+                  iconPath: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
+                },
                 {
                   id: "Recebimento",
-                  label: "📦 Recebimento de Cargas",
+                  label: "Recebimento de Cargas",
+                  iconPath: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
                 },
                 {
                   id: "Estoque",
-                  label: "🧱 Almoxarifado da Obra",
+                  label: "Almoxarifado da Obra",
+                  iconPath: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10",
                 },
                 {
                   id: "Medicoes",
-                  label: "📐 Contratos & Medições",
+                  label: "Contratos & Medições",
+                  iconPath: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z",
                 },
                 {
                   id: "Logistica",
-                  label: "🚚 Calendário de Cargas",
+                  label: "Calendário de Cargas",
+                  iconPath: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
                 },
-              ] as { id: ObraTabId; label: string }[]
+              ] as { id: ObraTabId; label: string; iconPath: string }[]
             ).map((item) => {
               const ativo = obraActiveTab === item.id;
               return (
                 <button
                   key={item.id}
-                  onClick={() => setObraActiveTab(item.id)}
-                  className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition text-left ${
+                  onClick={() => {
+                    setObraActiveTab(item.id);
+                    setMenuLateralObraAberto(false);
+                  }}
+                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-lg text-xs font-semibold transition text-left cursor-pointer ${
                     ativo
                       ? "bg-emerald-600 text-white shadow-xs"
                       : "text-slate-300 hover:bg-slate-800 hover:text-white"
                   }`}
                 >
-                  <span className="truncate">{item.label}</span>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <svg className={`w-4 h-4 shrink-0 ${ativo ? "text-white" : "text-slate-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.iconPath} />
+                    </svg>
+                    <span className="truncate">{item.label}</span>
+                  </div>
                   {item.id === "PainelDiario" && (
                     <span
                       className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
@@ -18604,7 +18797,7 @@ function VisaoRestritaObra({
                           : "bg-amber-900 text-amber-200 border border-amber-600 animate-pulse"
                       }`}
                     >
-                      {diarioHojeEfetivo ? "🟢 Em Dia" : "🟡 Pendente"}
+                      {diarioHojeEfetivo ? "Em Dia" : "Pendente"}
                     </span>
                   )}
                   {item.id === "MeusPedidos" && (
@@ -18646,7 +18839,7 @@ function VisaoRestritaObra({
           {/* Aviso de Segurança RBAC */}
           <div className="mx-3 mt-3 p-3 rounded-lg bg-slate-800/80 border border-slate-700 text-xs text-slate-300 space-y-1">
             <div className="font-bold text-emerald-400">
-              🔒 Acesso Restrito de Campo
+              Acesso Restrito de Campo
             </div>
             <p className="text-[11px] text-slate-400 leading-relaxed">
               Visão exclusiva para requisições e conferência física de entregas
@@ -18667,25 +18860,42 @@ function VisaoRestritaObra({
               </span>
             </div>
             <div className="text-xs text-slate-400 truncate mt-1">
-              📍 {usuarioLogado.obraNome}
+              {usuarioLogado.obraNome}
             </div>
           </div>
 
           <button
             onClick={onLogout}
-            className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-red-900/80 text-slate-200 hover:text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-slate-700"
+            className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-red-900/80 text-slate-200 hover:text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
           >
-            <span>🚪</span> Sair / Trocar Conta
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span>Sair / Trocar Conta</span>
           </button>
         </div>
       </aside>
 
-      {/* ÁREA PRINCIPAL DA OBRA */}
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+      {/* ÁREA PRINCIPAL DA OBRA (100% DA LARGURA) */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden w-full">
         {/* HEADER SUPERIOR */}
-        <header className="h-16 shrink-0 bg-white border-b border-slate-200 px-6 flex items-center justify-between gap-4">
-          <h1 className="text-lg font-bold text-slate-900 truncate">
-            {tituloObraTab[obraActiveTab]}
+        <header className="h-16 shrink-0 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setMenuLateralObraAberto((prev) => !prev)}
+              className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white flex items-center gap-2 text-xs font-bold transition shadow-xs cursor-pointer shrink-0"
+              title="Abrir / Fechar Menu Lateral"
+            >
+              <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              <span>Menu</span>
+            </button>
+            <h1 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+              {tituloObraTab[obraActiveTab]}
+            </h1>
+          </div>
           </h1>
 
           <div className="flex items-center gap-3 shrink-0">
