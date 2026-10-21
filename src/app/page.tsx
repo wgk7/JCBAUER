@@ -8936,20 +8936,6 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               </button>
             )}
           </div>
-            </h1>
-            {novosPedidosCanteiroCount > 0 && (
-              <button
-                onClick={() => {
-                  setActiveTab("Painel");
-                  setPainelSubView("solicitacoes");
-                }}
-                className="px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 text-xs font-bold flex items-center gap-1.5 shrink-0 transition"
-                title="Ver novas solicitações de compras enviadas pelos canteiros"
-              >
-                <span>🔔</span> {novosPedidosCanteiroCount} Novo(s)
-              </button>
-            )}
-          </div>
 
           {/* Direita: Notificações + Selo do Perfil + Select de Obra + Botão Primário + Sair */}
           <div className="flex items-center gap-2.5 shrink-0">
@@ -18896,7 +18882,6 @@ function VisaoRestritaObra({
               {tituloObraTab[obraActiveTab]}
             </h1>
           </div>
-          </h1>
 
           <div className="flex items-center gap-3 shrink-0">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs">
