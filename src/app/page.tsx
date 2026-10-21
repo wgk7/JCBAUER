@@ -5685,8 +5685,11 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   };
 
   const handleExportarComparativoRapidoExcel = () => {
-    if (comparativoItens.length === 0) {
-      dispararAviso("Adicione ao menos um insumo na cotação para exportar a planilha.");
+    const itensValidos = (comparativoItens || []).filter(
+      (it) => it && it.nome && it.nome.trim() !== ""
+    );
+    if (!itensValidos || itensValidos.length === 0) {
+      dispararAviso("Adicione ao menos um insumo na cota\u00e7\u00e3o para exportar a planilha.");
       return;
     }
     const forn0 = comparativoFornecedores[0]?.nome || "Fornecedor 1";
@@ -5777,16 +5780,54 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     dispararAviso("Planilha do comparativo exportada com sucesso!");
   };
   const handleGerarComparativoRapidoPDF = (processoParam?: ProcessoCotacao) => {
-    const itensAlvo = processoParam ? (processoParam.itens || []) : comparativoItens;
-    const tituloAlvo = processoParam ? (processoParam.titulo || "Cotação de Suprimentos") : (comparativoTitulo || "Cotação de Suprimentos");
-    const obraIdAlvo = processoParam ? processoParam.obraId : comparativoObraId;
-    const categoriaAlvo = processoParam ? processoParam.categoria : comparativoCategoria;
-    const fornecedoresAlvo: [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido] = processoParam ? processoParam.fornecedores : comparativoFornecedores;
+    // Distinguir se processoParam Ã© um ProcessoCotacao real ou um SyntheticEvent de clique do React
+    const isProcesso = Boolean(
+      processoParam &&
+      typeof processoParam === "object" &&
+      "itens" in processoParam &&
+      Array.isArray((processoParam as any).itens) &&
+      !("nativeEvent" in (processoParam as any)) &&
+      !("target" in (processoParam as any))
+    );
+    const proc = isProcesso ? (processoParam as ProcessoCotacao) : null;
 
-    if (!itensAlvo || itensAlvo.length === 0) {
-      dispararAviso("Adicione ao menos um insumo na cotação para gerar a impressão ou PDF.");
+    // Resgata os itens da cotaÃ§Ã£o
+    let todosItens = proc ? (proc.itens || []) : (comparativoItens || []);
+
+    // Fallback: se os itens estiverem vazios no estado, tenta resgatar da cotaÃ§Ã£o ativa salva
+    if ((!todosItens || todosItens.length === 0) && cotacaoAtivaId) {
+      const ativa = processosCotacoes.find((p) => p.id === cotacaoAtivaId);
+      if (ativa && ativa.itens && ativa.itens.length > 0) {
+        todosItens = ativa.itens;
+      }
+    }
+
+    // Filtra itens com nome vÃ¡lido (evita linhas em branco ou rascunhos sem preenchimento)
+    const itensValidos = (todosItens || []).filter(
+      (it) => it && it.nome && it.nome.trim() !== ""
+    );
+    const itensAlvo = itensValidos.length > 0 ? itensValidos : (todosItens || []);
+
+    if (
+      !itensAlvo ||
+      itensAlvo.length === 0 ||
+      (itensAlvo.length === 1 && (!itensAlvo[0]?.nome || itensAlvo[0]?.nome.trim() === ""))
+    ) {
+      dispararAviso("Adicione ao menos um insumo na cota\u00e7\u00e3o para gerar a impress\u00e3o ou PDF.");
       return;
     }
+
+    const tituloAlvo = proc
+      ? (proc.titulo || "Cota\u00e7\u00e3o de Suprimentos")
+      : (comparativoTitulo || "Cota\u00e7\u00e3o de Suprimentos");
+    const obraIdAlvo = proc ? proc.obraId : comparativoObraId;
+    const categoriaAlvo = proc ? proc.categoria : (comparativoCategoria || "Geral / Suprimentos");
+    const fornecedoresAlvo: [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido] =
+      (proc ? proc.fornecedores : comparativoFornecedores) || [
+        { nome: "Fornecedor 1", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
+        { nome: "Fornecedor 2", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
+        { nome: "Fornecedor 3", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
+      ];
 
     const obraSel = obras.find((o) => o.id === obraIdAlvo) || obras[0];
     const dataHoje = new Date().toLocaleDateString("pt-BR");
@@ -5986,6 +6027,15 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       Aprovação Financeira
     </div>
   </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.focus();
+        window.print();
+      }, 250);
+    };
+  </script>
 </body>
 </html>`;
     imprimirDocumentoHtml(html);
@@ -6971,7 +7021,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             <button
               type="button"
               onClick={() => {
-                if (modoCotacoes === "comparativo_rapido") {
+                if (modoCotacoes === "comparativo_rapido" || modoCotacoes === "painel_cotacoes") {
                   handleExportarComparativoRapidoExcel();
                 } else if (scAtiva) {
                   exportarCotacaoExcel(scAtiva, obraScAtiva.nome);
@@ -6986,7 +7036,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             <button
               type="button"
               onClick={() => {
-                if (modoCotacoes === "comparativo_rapido") {
+                if (modoCotacoes === "comparativo_rapido" || modoCotacoes === "painel_cotacoes") {
                   handleGerarComparativoRapidoPDF();
                 } else if (scAtiva) {
                   handleGeneratePDF();
@@ -9304,7 +9354,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                     </button>
                     <button
                       type="button"
-                      onClick={handleGerarComparativoRapidoPDF}
+                      onClick={() => handleGerarComparativoRapidoPDF()}
                       className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
                       title="Gerar mapa comparativo impresso ou em PDF"
                     >
@@ -10244,7 +10294,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                         </button>
                         <button
                           type="button"
-                          onClick={handleGerarComparativoRapidoPDF}
+                          onClick={() => handleGerarComparativoRapidoPDF()}
                           className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
                         >
                           <span>🖨️</span> Imprimir Relatório Executivo
@@ -14376,7 +14426,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           settings={settings}
           obras={obras}
           onClose={() => setShowModalComparativoPdf(false)}
-          onAbrirNovaAba={handleGerarComparativoRapidoPDF}
+          onAbrirNovaAba={() => handleGerarComparativoRapidoPDF()}
         />
       )}
     </div>
@@ -21203,14 +21253,14 @@ function ModalVisualizarComparativoPdf({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onAbrirNovaAba}
+              onClick={() => onAbrirNovaAba()}
               className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
             >
               <span>🖨️</span> Imprimir / Salvar PDF
             </button>
             <button
               type="button"
-              onClick={onAbrirNovaAba}
+              onClick={() => onAbrirNovaAba()}
               className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition flex items-center gap-1"
             >
               <span>↗️</span> Nova Aba
