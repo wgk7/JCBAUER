@@ -8411,7 +8411,6 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     Importacao: "ImportaÃ§Ã£o de Planilhas",
     Configuracoes: "ConfiguraÃ§Ãµes",
   };
-
   const renderBotaoPrimarioHeader = () => {
     switch (activeTab) {
       case "Painel":
@@ -8907,7 +8906,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden w-full">
         {/* HEADER SUPERIOR FIXO (h-16 shrink-0, sticky z-20) */}
         <header className="no-print sticky top-0 z-20 h-16 shrink-0 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between gap-4">
-          {/* Esquerda: Botão Menu (Hamburger) + Título da Aba Atual + Alerta de Novos Pedidos */}
+          {/* Esquerda: Botão Menu (Hamburger) + Título da Aba Atual */}
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
@@ -8920,7 +8919,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               </svg>
               <span>Menu</span>
             </button>
-            <h1 className="text-base font-bold text-slate-900 whitespace-nowrap truncate">
+            <h1 className="text-base font-bold text-slate-900 whitespace-nowrap">
               {tituloAbaAtual[activeTab]}
             </h1>
             {novosPedidosCanteiroCount > 0 && (
@@ -18488,7 +18487,6 @@ function VisaoRestritaObra({
 }) {
   // Estado local para modais do Canteiro
   const [novoBmModalContrato, setNovoBmModalContrato] =
-  const [menuLateralObraAberto, setMenuLateralObraAberto] = useState<boolean>(false);
     useState<ContratoSubempreitada | null>(null);
   const [scChatModal, setScChatModal] = useState<SolicitacaoCompra | null>(null);
 
@@ -18657,124 +18655,77 @@ function VisaoRestritaObra({
   );
 
   const tituloObraTab: Record<ObraTabId, string> = {
-    PainelDiario: "Painel DiÃ¡rio do Canteiro & Checklist Operacional",
-    NovoPedido: "Novo Pedido de Material (RequisiÃ§Ã£o de Canteiro)",
-    MeusPedidos: "Meus Pedidos da Obra (Acompanhamento em Tempo Real)",
-    Recebimento: "Recebimento & Controle Interno (Almoxarifado)",
-    Estoque: "Estoque do Canteiro & Almoxarifado",
-    Medicoes: "Contratos de Subempreitada & Boletins de MediÃ§Ã£o (BM)",
+    PainelDiario: "📋 Painel Diário do Canteiro & Checklist Operacional",
+    NovoPedido: "📝 Novo Pedido de Material (Requisição de Canteiro)",
+    MeusPedidos: "📋 Meus Pedidos da Obra (Acompanhamento em Tempo Real)",
+    Recebimento: "📦 Recebimento & Controle Interno (Almoxarifado)",
+    Estoque: "🧱 Estoque do Canteiro & Almoxarifado",
+    Medicoes: "📐 Contratos de Subempreitada & Boletins de Medição (BM)",
     Logistica: "🚚 Calendário de Cargas & Descargas no Canteiro",
   };
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#F4F6F8] text-slate-900 font-sans">
-      {/* BACKDROP DO MENU LATERAL (CANTEIRO) */}
-      {menuLateralObraAberto && (
-        <div
-          onClick={() => setMenuLateralObraAberto(false)}
-          className="no-print fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-40 transition-opacity"
-          title="Clique fora para fechar o menu"
-        />
-      )}
-
-      {/* SIDEBAR RESTRITA DA OBRA (ABAS PERMITIDAS) - DRAWER DESLIZANTE */}
-      <aside
-        className={`no-print fixed top-0 bottom-0 left-0 z-50 w-72 bg-slate-900 text-white flex flex-col justify-between h-full shadow-2xl transition-transform duration-300 ease-in-out ${
-          menuLateralObraAberto ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
+      {/* SIDEBAR RESTRITA DA OBRA (ABAS PERMITIDAS) */}
+      <aside className="w-72 shrink-0 bg-slate-900 text-white flex flex-col justify-between h-full">
         <div>
-          <div className="h-20 px-4 border-b border-slate-800 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="bg-white p-1 rounded-lg border border-amber-300/40 shadow-xs shrink-0 flex items-center justify-center">
-                <img
-                  src="/logo.png"
-                  alt="JC Bauer Empreendimentos"
-                  className="h-10 w-auto object-contain"
-                />
+          <div className="h-20 px-4 border-b border-slate-800 flex items-center gap-3">
+            <div className="bg-white p-1 rounded-lg border border-amber-300/40 shadow-xs shrink-0 flex items-center justify-center">
+              <img
+                src="/logo.png"
+                alt="JC Bauer Empreendimentos"
+                className="h-10 w-auto object-contain"
+              />
+            </div>
+            <div className="min-w-0">
+              <div className="font-extrabold text-sm text-white tracking-wide truncate">
+                JC BAUER
               </div>
-              <div className="min-w-0">
-                <div className="font-extrabold text-sm text-white tracking-wide truncate">
-                  JC BAUER
-                </div>
-                <div className="text-[11px] text-emerald-400 font-semibold truncate">
-                  Portal do Canteiro de Obras
-                </div>
+              <div className="text-[11px] text-emerald-400 font-semibold truncate">
+                Portal do Canteiro de Obras
               </div>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setMenuLateralObraAberto(false)}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer shrink-0"
-              title="Fechar menu"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
           </div>
 
-          <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-230px)]">
+          <nav className="p-3 space-y-1">
             {(
               [
                 {
                   id: "PainelDiario",
-                  label: "Rotina Diária & Checklist",
-                  iconPath: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4",
+                  label: "📋 Rotina Diária & Checklist",
                 },
-                {
-                  id: "NovoPedido",
-                  label: "Novo Pedido de Material",
-                  iconPath: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z",
-                },
-                {
-                  id: "MeusPedidos",
-                  label: "Meus Pedidos da Obra",
-                  iconPath: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-                },
+                { id: "NovoPedido", label: "📝 Novo Pedido de Material" },
+                { id: "MeusPedidos", label: "📋 Meus Pedidos da Obra" },
                 {
                   id: "Recebimento",
-                  label: "Recebimento de Cargas",
-                  iconPath: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
+                  label: "📦 Recebimento de Cargas",
                 },
                 {
                   id: "Estoque",
-                  label: "Almoxarifado da Obra",
-                  iconPath: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10",
+                  label: "🧱 Almoxarifado da Obra",
                 },
                 {
                   id: "Medicoes",
-                  label: "Contratos & Medições",
-                  iconPath: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z",
+                  label: "📐 Contratos & Medições",
                 },
                 {
                   id: "Logistica",
-                  label: "Calendário de Cargas",
-                  iconPath: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+                  label: "🚚 Calendário de Cargas",
                 },
-              ] as { id: ObraTabId; label: string; iconPath: string }[]
+              ] as { id: ObraTabId; label: string }[]
             ).map((item) => {
               const ativo = obraActiveTab === item.id;
               return (
                 <button
                   key={item.id}
-                  onClick={() => {
-                    setObraActiveTab(item.id);
-                    setMenuLateralObraAberto(false);
-                  }}
-                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-lg text-xs font-semibold transition text-left cursor-pointer ${
+                  onClick={() => setObraActiveTab(item.id)}
+                  className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition text-left ${
                     ativo
                       ? "bg-emerald-600 text-white shadow-xs"
                       : "text-slate-300 hover:bg-slate-800 hover:text-white"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <svg className={`w-4 h-4 shrink-0 ${ativo ? "text-white" : "text-slate-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.iconPath} />
-                    </svg>
-                    <span className="truncate">{item.label}</span>
-                  </div>
+                  <span className="truncate">{item.label}</span>
                   {item.id === "PainelDiario" && (
                     <span
                       className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
@@ -18783,7 +18734,7 @@ function VisaoRestritaObra({
                           : "bg-amber-900 text-amber-200 border border-amber-600 animate-pulse"
                       }`}
                     >
-                      {diarioHojeEfetivo ? "Em Dia" : "Pendente"}
+                      {diarioHojeEfetivo ? "🟢 Em Dia" : "🟡 Pendente"}
                     </span>
                   )}
                   {item.id === "MeusPedidos" && (
@@ -18825,7 +18776,7 @@ function VisaoRestritaObra({
           {/* Aviso de Segurança RBAC */}
           <div className="mx-3 mt-3 p-3 rounded-lg bg-slate-800/80 border border-slate-700 text-xs text-slate-300 space-y-1">
             <div className="font-bold text-emerald-400">
-              Acesso Restrito de Campo
+              🔒 Acesso Restrito de Campo
             </div>
             <p className="text-[11px] text-slate-400 leading-relaxed">
               Visão exclusiva para requisições e conferência física de entregas
@@ -18846,42 +18797,26 @@ function VisaoRestritaObra({
               </span>
             </div>
             <div className="text-xs text-slate-400 truncate mt-1">
-              {usuarioLogado.obraNome}
+              📍 {usuarioLogado.obraNome}
             </div>
           </div>
 
           <button
             onClick={onLogout}
-            className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-red-900/80 text-slate-200 hover:text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
+            className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-red-900/80 text-slate-200 hover:text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-slate-700"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            <span>Sair / Trocar Conta</span>
+            <span>🚪</span> Sair / Trocar Conta
           </button>
         </div>
       </aside>
 
-      {/* ÁREA PRINCIPAL DA OBRA (100% DA LARGURA) */}
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden w-full">
+      {/* ÁREA PRINCIPAL DA OBRA */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {/* HEADER SUPERIOR */}
-        <header className="h-16 shrink-0 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              type="button"
-              onClick={() => setMenuLateralObraAberto((prev) => !prev)}
-              className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white flex items-center gap-2 text-xs font-bold transition shadow-xs cursor-pointer shrink-0"
-              title="Abrir / Fechar Menu Lateral"
-            >
-              <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-              <span>Menu</span>
-            </button>
-            <h1 className="text-base sm:text-lg font-bold text-slate-900 truncate">
-              {tituloObraTab[obraActiveTab]}
-            </h1>
-          </div>
+        <header className="h-16 shrink-0 bg-white border-b border-slate-200 px-6 flex items-center justify-between gap-4">
+          <h1 className="text-lg font-bold text-slate-900 truncate">
+            {tituloObraTab[obraActiveTab]}
+          </h1>
 
           <div className="flex items-center gap-3 shrink-0">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs">
