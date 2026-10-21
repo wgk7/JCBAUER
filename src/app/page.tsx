@@ -419,6 +419,37 @@ export interface DadosCotacaoConcreto {
   concreteiras: ConcreteiraCotada[];
 }
 
+export interface ItemCompraColetiva {
+  id: string;
+  descricao: string;
+  categoria: string;
+  unidade: string;
+  demandasPorObra: Record<string, number>; // obraId -> quantidade
+  precoReferenciaVarejo: number;
+  precosFornecedores: Record<string, number>; // fornecedorId -> precoUnitario
+}
+
+export interface FornecedorLoteColetivo {
+  id: string;
+  nome: string;
+  contato: string;
+  telefone: string;
+  condicaoPagamento: string;
+  tipoFrete: "CIF" | "FOB";
+  valorFreteTotal: number;
+}
+
+export interface LoteCompraColetiva {
+  id: string;
+  titulo: string;
+  dataCriacao: string;
+  status: "Em Negociação" | "Aprovado" | "OCs Emitidas";
+  fornecedorVencedorId?: string;
+  obrasParticipantes: { id: string; nome: string }[];
+  itens: ItemCompraColetiva[];
+  fornecedores: FornecedorLoteColetivo[];
+}
+
 
 interface ColaboradorMapeado {
   id: string;
@@ -1500,7 +1531,7 @@ export default function HomePage() {
 
   // Estados do Comparativo de Preços (3 Orçamentos) e Gestão Multi-Cotações
   const [modoCotacoes, setModoCotacoes] = useState<
-    "comparativo_rapido" | "solicitacoes_obra" | "painel_cotacoes" | "concreteiras"
+    "comparativo_rapido" | "solicitacoes_obra" | "painel_cotacoes" | "concreteiras" | "compras_coletivas"
   >("comparativo_rapido");
   const [processosCotacoes, setProcessosCotacoes] = useState<ProcessoCotacao[]>(
     []
@@ -1604,6 +1635,88 @@ export default function HomePage() {
       telefone: "",
       precosSlumps: { "slump-1": 527.63, "slump-2": 537.07 },
       precoBomba: 40,
+    },
+  ]);
+
+  // -----------------------------------------------------------------------
+  // ESTADOS DO MÓDULO DE COMPRAS COLETIVAS (AGRUPAMENTO MULTIOBRA)
+  // -----------------------------------------------------------------------
+  const [loteColetivoTitulo, setLoteColetivoTitulo] = useState<string>(
+    "Lote Corporativo #01 - Insumos Estruturais Básicos (Aço, Cimento, Argamassa e Tubos)"
+  );
+  const [loteStatus, setLoteStatus] = useState<"Em Negociação" | "Aprovado" | "OCs Emitidas">("Em Negociação");
+  const [loteObrasParticipantes, setLoteObrasParticipantes] = useState<{ id: string; nome: string }[]>([
+    { id: "obra-1", nome: "Galileu" },
+    { id: "obra-2", nome: "Residencial Aurora" },
+    { id: "obra-3", nome: "Edifício Solar" },
+  ]);
+
+  const [loteItens, setLoteItens] = useState<ItemCompraColetiva[]>([
+    {
+      id: "it-col-1",
+      descricao: "Cimento CP-IV 32 RS (Sacos 50kg)",
+      categoria: "Alvenaria & Estrutura",
+      unidade: "sc",
+      demandasPorObra: { "obra-1": 200, "obra-2": 350, "obra-3": 450 },
+      precoReferenciaVarejo: 44.5,
+      precosFornecedores: { "forn-col-1": 34.9, "forn-col-2": 35.5, "forn-col-3": 36.2 },
+    },
+    {
+      id: "it-col-2",
+      descricao: "Barra de Aço CA-50 10.0mm 12m (Gerdau)",
+      categoria: "Aço & Armaduras",
+      unidade: "br",
+      demandasPorObra: { "obra-1": 80, "obra-2": 120, "obra-3": 150 },
+      precoReferenciaVarejo: 68.0,
+      precosFornecedores: { "forn-col-1": 52.4, "forn-col-2": 53.1, "forn-col-3": 55.0 },
+    },
+    {
+      id: "it-col-3",
+      descricao: "Argamassa AC-III Cinza 20kg (Portokoll)",
+      categoria: "Acabamentos & Revestimento",
+      unidade: "sc",
+      demandasPorObra: { "obra-1": 150, "obra-2": 200, "obra-3": 250 },
+      precoReferenciaVarejo: 38.9,
+      precosFornecedores: { "forn-col-1": 29.8, "forn-col-2": 31.0, "forn-col-3": 32.5 },
+    },
+    {
+      id: "it-col-4",
+      descricao: "Tubo PVC Esgoto Série Normal 100mm 6m (Tigre)",
+      categoria: "Hidrossanitário",
+      unidade: "br",
+      demandasPorObra: { "obra-1": 40, "obra-2": 60, "obra-3": 80 },
+      precoReferenciaVarejo: 74.0,
+      precosFornecedores: { "forn-col-1": 58.9, "forn-col-2": 61.5, "forn-col-3": 59.2 },
+    },
+  ]);
+
+  const [loteFornecedores, setLoteFornecedores] = useState<FornecedorLoteColetivo[]>([
+    {
+      id: "forn-col-1",
+      nome: "VOTORAN DISTRIBUIÇÃO CORPORATIVA",
+      contato: "Carlos Eduardo",
+      telefone: "(47) 99881-2233",
+      condicaoPagamento: "28/42 DDL",
+      tipoFrete: "CIF",
+      valorFreteTotal: 0,
+    },
+    {
+      id: "forn-col-2",
+      nome: "COMERCIAL ESPERANÇA ATACADISTA",
+      contato: "Mariana Silva",
+      telefone: "(47) 99772-3344",
+      condicaoPagamento: "30 DDL",
+      tipoFrete: "CIF",
+      valorFreteTotal: 0,
+    },
+    {
+      id: "forn-col-3",
+      nome: "DISTRIBUIDORA SANTA CATARINA DE MATERIAIS",
+      contato: "Roberto Mendes",
+      telefone: "(47) 99663-4455",
+      condicaoPagamento: "21 DDL",
+      tipoFrete: "FOB",
+      valorFreteTotal: 1200,
     },
   ]);
 
@@ -6665,6 +6778,695 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     imprimirDocumentoHtml(html);
   };
 
+  /* ----------------------------------------------------------------------- */
+  /* CÁLCULOS E HANDLERS DA CENTRAL DE COMPRAS COLETIVAS (MULTIOBRA)         */
+  /* ----------------------------------------------------------------------- */
+  const resumoComprasColetivas = useMemo(() => {
+    // 1. Calcula quantidades totais por item e totais de referência (varejo)
+    let custoTotalVarejo = 0;
+
+    const itensCalculados = loteItens.map((item) => {
+      let qtdTotalItem = 0;
+      loteObrasParticipantes.forEach((obra) => {
+        qtdTotalItem += Number(item.demandasPorObra[obra.id]) || 0;
+      });
+
+      const subtotalVarejo = qtdTotalItem * (Number(item.precoReferenciaVarejo) || 0);
+      custoTotalVarejo += subtotalVarejo;
+
+      // Subtotais por fornecedor para este item
+      const subtotaisFornecedores: Record<string, number> = {};
+      loteFornecedores.forEach((f) => {
+        const precoUn = Number(item.precosFornecedores[f.id]) || 0;
+        subtotaisFornecedores[f.id] = qtdTotalItem * precoUn;
+      });
+
+      return {
+        ...item,
+        qtdTotalItem,
+        subtotalVarejo,
+        subtotaisFornecedores,
+      };
+    });
+
+    // 2. Calcula totais gerais por fornecedor
+    const fornecedoresCalculados = loteFornecedores.map((f) => {
+      let subtotalItens = 0;
+      itensCalculados.forEach((it) => {
+        subtotalItens += it.subtotaisFornecedores[f.id] || 0;
+      });
+      const frete = Number(f.valorFreteTotal) || 0;
+      const valorTotal = subtotalItens + frete;
+      const savingEmRelacaoAoVarejo = custoTotalVarejo > 0 ? Math.max(0, custoTotalVarejo - valorTotal) : 0;
+      const percentualSaving = custoTotalVarejo > 0 ? (savingEmRelacaoAoVarejo / custoTotalVarejo) * 100 : 0;
+
+      return {
+        ...f,
+        subtotalItens,
+        valorTotal,
+        savingEmRelacaoAoVarejo,
+        percentualSaving,
+      };
+    });
+
+    // 3. Identifica fornecedor vencedor (menor valor total maior que zero)
+    const validos = fornecedoresCalculados.filter((f) => f.valorTotal > 0 && f.nome.trim() !== "");
+    let vencedor: (typeof fornecedoresCalculados)[0] | null = null;
+    if (validos.length > 0) {
+      vencedor = [...validos].sort((a, b) => a.valorTotal - b.valorTotal)[0];
+    }
+
+    // 4. Rateio por Obra considerando o vencedor (ou referência)
+    const rateioPorObra = loteObrasParticipantes.map((obra) => {
+      let subtotalVarejoObra = 0;
+      let subtotalNegociadoObra = 0;
+      let totalItensObra = 0;
+
+      itensCalculados.forEach((it) => {
+        const qtdObra = Number(it.demandasPorObra[obra.id]) || 0;
+        if (qtdObra > 0) {
+          totalItensObra++;
+          subtotalVarejoObra += qtdObra * (Number(it.precoReferenciaVarejo) || 0);
+          const precoVencedor = vencedor ? Number(it.precosFornecedores[vencedor.id]) || 0 : 0;
+          subtotalNegociadoObra += qtdObra * precoVencedor;
+        }
+      });
+
+      const savingObra = Math.max(0, subtotalVarejoObra - subtotalNegociadoObra);
+      const percSavingObra = subtotalVarejoObra > 0 ? (savingObra / subtotalVarejoObra) * 100 : 0;
+
+      return {
+        obraId: obra.id,
+        obraNome: obra.nome,
+        totalItensObra,
+        subtotalVarejoObra,
+        subtotalNegociadoObra,
+        savingObra,
+        percSavingObra,
+      };
+    });
+
+    return {
+      custoTotalVarejo,
+      itensCalculados,
+      fornecedoresCalculados,
+      vencedor,
+      rateioPorObra,
+    };
+  }, [loteItens, loteObrasParticipantes, loteFornecedores]);
+
+  const handleAtualizarDemandaItem = (itemId: string, obraId: string, quantidade: number) => {
+    setLoteItens((prev) =>
+      prev.map((it) =>
+        it.id === itemId
+          ? {
+              ...it,
+              demandasPorObra: { ...it.demandasPorObra, [obraId]: Math.max(0, quantidade) },
+            }
+          : it
+      )
+    );
+  };
+
+  const handleAtualizarPrecoReferencia = (itemId: string, preco: number) => {
+    setLoteItens((prev) =>
+      prev.map((it) =>
+        it.id === itemId ? { ...it, precoReferenciaVarejo: Math.max(0, preco) } : it
+      )
+    );
+  };
+
+  const handleAtualizarPrecoFornecedorColetivo = (itemId: string, fornId: string, preco: number) => {
+    setLoteItens((prev) =>
+      prev.map((it) =>
+        it.id === itemId
+          ? {
+              ...it,
+              precosFornecedores: { ...it.precosFornecedores, [fornId]: Math.max(0, preco) },
+            }
+          : it
+      )
+    );
+  };
+
+  const handleAtualizarDescricaoItemColetivo = (itemId: string, descricao: string) => {
+    setLoteItens((prev) =>
+      prev.map((it) => (it.id === itemId ? { ...it, descricao } : it))
+    );
+  };
+
+  const handleAtualizarUndItemColetivo = (itemId: string, unidade: string) => {
+    setLoteItens((prev) =>
+      prev.map((it) => (it.id === itemId ? { ...it, unidade } : it))
+    );
+  };
+
+  const handleAtualizarNomeFornecedorColetivo = (fornId: string, nome: string) => {
+    setLoteFornecedores((prev) =>
+      prev.map((f) => (f.id === fornId ? { ...f, nome } : f))
+    );
+  };
+
+  const handleAtualizarContatoFornecedorColetivo = (fornId: string, contato: string) => {
+    setLoteFornecedores((prev) =>
+      prev.map((f) => (f.id === fornId ? { ...f, contato } : f))
+    );
+  };
+
+  const handleAtualizarCondicaoFornecedorColetivo = (fornId: string, condicaoPagamento: string) => {
+    setLoteFornecedores((prev) =>
+      prev.map((f) => (f.id === fornId ? { ...f, condicaoPagamento } : f))
+    );
+  };
+
+  const handleAtualizarFreteFornecedorColetivo = (fornId: string, tipoFrete: "CIF" | "FOB", valorFreteTotal: number) => {
+    setLoteFornecedores((prev) =>
+      prev.map((f) => (f.id === fornId ? { ...f, tipoFrete, valorFreteTotal } : f))
+    );
+  };
+
+  const handleAdicionarItemColetivo = () => {
+    const novoId = `it-col-${Date.now()}`;
+    const demandasIniciais: Record<string, number> = {};
+    loteObrasParticipantes.forEach((o) => {
+      demandasIniciais[o.id] = 100;
+    });
+
+    setLoteItens((prev) => [
+      ...prev,
+      {
+        id: novoId,
+        descricao: `Novo Insumo Corporativo #${prev.length + 1}`,
+        categoria: "Geral",
+        unidade: "un",
+        demandasPorObra: demandasIniciais,
+        precoReferenciaVarejo: 50,
+        precosFornecedores: {},
+      },
+    ]);
+    dispararAviso("Novo insumo adicionado ao lote coletivo!");
+  };
+
+  const handleRemoverItemColetivo = (itemId: string) => {
+    if (loteItens.length <= 1) {
+      dispararAviso("Mantenha ao menos um item no lote de compra coletiva.");
+      return;
+    }
+    setLoteItens((prev) => prev.filter((it) => it.id !== itemId));
+    dispararAviso("Item removido do lote.");
+  };
+
+  const handleAdicionarObraAoLote = (obraId: string, obraNome: string) => {
+    if (loteObrasParticipantes.some((o) => o.id === obraId)) {
+      dispararAviso("Esta obra já participa do lote coletivo.");
+      return;
+    }
+    setLoteObrasParticipantes((prev) => [...prev, { id: obraId, nome: obraNome }]);
+    dispararAviso(`Obra "${obraNome}" incluída no rateio de compra coletiva!`);
+  };
+
+  const handleRemoverObraDoLote = (obraId: string) => {
+    if (loteObrasParticipantes.length <= 1) {
+      dispararAviso("Mantenha ao menos uma obra para consolidar demandas.");
+      return;
+    }
+    const removida = loteObrasParticipantes.find((o) => o.id === obraId);
+    setLoteObrasParticipantes((prev) => prev.filter((o) => o.id !== obraId));
+    dispararAviso(`Obra "${removida?.nome || obraId}" removida do lote.`);
+  };
+
+  const handleAdicionarFornecedorColetivo = () => {
+    const novoId = `forn-col-${Date.now()}`;
+    setLoteFornecedores((prev) => [
+      ...prev,
+      {
+        id: novoId,
+        nome: `FORNECEDOR ATACADISTA ${prev.length + 1}`,
+        contato: "Gerente Comercial",
+        telefone: "",
+        condicaoPagamento: "28 DDL",
+        tipoFrete: "CIF",
+        valorFreteTotal: 0,
+      },
+    ]);
+    dispararAviso("Novo fornecedor atacadista incluído na equalização corporativa!");
+  };
+
+  const handleRemoverFornecedorColetivo = (fornId: string) => {
+    if (loteFornecedores.length <= 1) {
+      dispararAviso("Mantenha ao menos um fornecedor no comparativo.");
+      return;
+    }
+    setLoteFornecedores((prev) => prev.filter((f) => f.id !== fornId));
+    dispararAviso("Fornecedor removido do lote.");
+  };
+
+  const handlePuxarDemandasDeSCsAbertas = () => {
+    const scsAbertas = solicitacoes.filter(
+      (s) => s.status !== "Comprada" && s.status !== "Entregue na Obra" && s.itens && s.itens.length > 0
+    );
+
+    if (scsAbertas.length === 0) {
+      dispararAviso("Nenhuma requisição de obra aberta com itens pendentes no momento.");
+      return;
+    }
+
+    let itensAdicionados = 0;
+    const novosItensMap: Record<string, ItemCompraColetiva> = {};
+
+    scsAbertas.forEach((sc) => {
+      const obraRef = obras.find((o) => o.id === sc.obraId);
+      const obraNome = obraRef ? obraRef.nome : "Obra Solicitante";
+
+      // Garante que a obra está na lista de participantes
+      setLoteObrasParticipantes((prev) => {
+        if (!prev.some((o) => o.id === sc.obraId)) {
+          return [...prev, { id: sc.obraId, nome: obraNome }];
+        }
+        return prev;
+      });
+
+      sc.itens.forEach((it) => {
+        const chaveDesc = it.descricao.trim().toLowerCase();
+        if (!novosItensMap[chaveDesc]) {
+          novosItensMap[chaveDesc] = {
+            id: `sc-sync-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            descricao: it.descricao,
+            categoria: sc.categoria || "Geral",
+            unidade: it.unidade || "un",
+            demandasPorObra: { [sc.obraId]: it.quantidade },
+            precoReferenciaVarejo: it.orcamentoUnitario || 50,
+            precosFornecedores: {},
+          };
+          itensAdicionados++;
+        } else {
+          novosItensMap[chaveDesc].demandasPorObra[sc.obraId] =
+            (novosItensMap[chaveDesc].demandasPorObra[sc.obraId] || 0) + it.quantidade;
+        }
+      });
+    });
+
+    const listaNovos = Object.values(novosItensMap);
+    if (listaNovos.length > 0) {
+      setLoteItens((prev) => [...prev, ...listaNovos]);
+      dispararAviso(`Sucesso! ${listaNovos.length} insumos importados das requisições de canteiro.`);
+    } else {
+      dispararAviso("Todas as demandas de SCs já constam no lote.");
+    }
+  };
+
+  const handleSalvarLoteColetivo = () => {
+    const dadosSalvar: LoteCompraColetiva = {
+      id: "lote-coletivo-ativo",
+      titulo: loteColetivoTitulo,
+      dataCriacao: new Date().toLocaleDateString("pt-BR"),
+      status: loteStatus,
+      fornecedorVencedorId: resumoComprasColetivas.vencedor?.id,
+      obrasParticipantes: loteObrasParticipantes,
+      itens: loteItens,
+      fornecedores: loteFornecedores,
+    };
+
+    try {
+      window.localStorage.setItem("JCBAUER_LOTE_COMPRA_COLETIVA", JSON.stringify(dadosSalvar));
+      salvarChaveSupabase("JCBAUER_LOTE_COMPRA_COLETIVA", dadosSalvar).catch(() => {});
+      dispararAviso("Lote de compras coletivas salvo com sucesso na nuvem e local!");
+    } catch {
+      dispararAviso("Erro ao salvar lote de compras coletivas.");
+    }
+  };
+
+  const handleDesmembrarEEmitirOCs = () => {
+    const vencedor = resumoComprasColetivas.vencedor;
+    if (!vencedor) {
+      dispararAviso("Informe os preços dos fornecedores para apurar o vencedor antes de emitir as OCs.");
+      return;
+    }
+
+    const anoAtual = new Date().getFullYear();
+    const novasOCs: OrdemCompra[] = [];
+
+    loteObrasParticipantes.forEach((obra, idx) => {
+      const obraSel = obras.find((o) => o.id === obra.id);
+      const obraEndereco = obraSel?.endereco || "Itapema/SC";
+      const obraEngenheiro = obraSel?.engenheiro || "Engenharia JC Bauer";
+
+      const itensDaObra: {
+        codigo: string;
+        descricao: string;
+        unidade: string;
+        quantidade: number;
+        precoUnitario: number;
+        subtotal: number;
+      }[] = [];
+
+      let valorTotalObra = 0;
+      let savingObra = 0;
+
+      loteItens.forEach((item, itemIdx) => {
+        const qtd = Number(item.demandasPorObra[obra.id]) || 0;
+        if (qtd > 0) {
+          const precoUnitNegociado = Number(item.precosFornecedores[vencedor.id]) || 0;
+          const subtotalItem = qtd * precoUnitNegociado;
+          valorTotalObra += subtotalItem;
+
+          const precoRef = Number(item.precoReferenciaVarejo) || precoUnitNegociado;
+          savingObra += Math.max(0, (precoRef - precoUnitNegociado) * qtd);
+
+          itensDaObra.push({
+            codigo: `COL-${itemIdx + 1}`,
+            descricao: item.descricao,
+            unidade: item.unidade || "un",
+            quantidade: qtd,
+            precoUnitario: precoUnitNegociado,
+            subtotal: subtotalItem,
+          });
+        }
+      });
+
+      if (itensDaObra.length > 0) {
+        const numeroSeq = String(ordens.length + novasOCs.length + 1).padStart(4, "0");
+        const numeroOc = `OC-${anoAtual}-${numeroSeq}`;
+
+        const novaOc: OrdemCompra = {
+          id: `oc-coletiva-${Date.now()}-${obra.id}`,
+          numeroOc,
+          scId: "",
+          scCodigo: `COL-${obra.nome.substring(0, 4).toUpperCase()}`,
+          obraId: obra.id,
+          obraNome: obra.nome,
+          obraEndereco,
+          obraEngenheiro,
+          categoria: "Compra Coletiva Multiobra",
+          fornecedorNome: vencedor.nome,
+          fornecedorRazao: vencedor.nome,
+          fornecedorCnpj: "",
+          vendedorNome: vencedor.contato || "Atacado Corporativo",
+          whatsapp: vencedor.telefone || "",
+          chavePix: "",
+          dataEmissao: new Date().toISOString().split("T")[0],
+          dataPrevistaEntrega: new Date().toISOString().split("T")[0],
+          prazoPagamento: vencedor.condicaoPagamento || "30 DDL",
+          tipoFrete: vencedor.tipoFrete || "CIF",
+          freteValor: 0,
+          descontoValor: 0,
+          valorTotal: valorTotalObra,
+          savingGerado: savingObra,
+          alcadaAprovacao: "Comprador Autorizado",
+          status: "Emitida",
+          itens: itensDaObra,
+        };
+
+        novasOCs.push(novaOc);
+      }
+    });
+
+    if (novasOCs.length === 0) {
+      dispararAviso("Nenhuma quantidade informada para as obras participantes.");
+      return;
+    }
+
+    const listaAtualizada = [...novasOCs, ...ordens];
+    setOrdens(listaAtualizada);
+    setLoteStatus("OCs Emitidas");
+
+    try {
+      window.localStorage.setItem(ORDENS_STORAGE_KEY, JSON.stringify(listaAtualizada));
+    } catch {}
+    salvarChaveSupabase(ORDENS_STORAGE_KEY, listaAtualizada).catch(() => {});
+
+    dispararAviso(
+      `Sucesso absoluto! Lote desmembrado em ${novasOCs.length} Ordens de Compra emitidas para ${vencedor.nome} com economia de ${formatBRL(resumoComprasColetivas.vencedor?.savingEmRelacaoAoVarejo || 0)}!`
+    );
+    setActiveTab("ordens");
+  };
+
+  const handleExportarColetivasExcel = () => {
+    const vencedor = resumoComprasColetivas.vencedor;
+
+    let html = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">
+        <style>
+          table { border-collapse: collapse; font-family: Calibri, Arial, sans-serif; }
+          th, td { border: 1px solid #000000; padding: 6px 10px; font-size: 11pt; }
+          .header-main { background-color: #0f172a; color: #ffffff; font-weight: bold; font-size: 14pt; text-align: center; }
+          .header-sub { background-color: #f1f5f9; font-weight: bold; }
+          .col-obra { background-color: #e0f2fe; color: #0369a1; text-align: center; font-weight: bold; }
+          .col-forn { background-color: #d1fae5; color: #065f46; text-align: center; font-weight: bold; }
+          .linha-total { background-color: #0f172a; color: #ffffff; font-weight: bold; }
+          .num { text-align: right; }
+          .center { text-align: center; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <tr>
+            <th colspan="${4 + loteObrasParticipantes.length + loteFornecedores.length}" class="header-main">
+              JC BAUER - MAPA DE COMPRA COLETIVA E RATEIO MULTIOBRA
+            </th>
+          </tr>
+          <tr>
+            <td colspan="${4 + loteObrasParticipantes.length + loteFornecedores.length}" style="background-color: #f8fafc; font-size: 10pt;">
+              <b>Lote:</b> ${loteColetivoTitulo} | <b>Economia Corporativa de Escala:</b> ${formatBRL(vencedor?.savingEmRelacaoAoVarejo || 0)} (${(vencedor?.percentualSaving || 0).toFixed(1)}%) | <b>Data:</b> ${new Date().toLocaleDateString("pt-BR")}
+            </td>
+          </tr>
+          <tr>
+            <th rowspan="2" class="header-sub">INSUMO / ESPECIFICAÇÃO</th>
+            <th rowspan="2" class="header-sub center">UND</th>
+            <th colspan="${loteObrasParticipantes.length}" class="col-obra">DEMANDAS POR OBRA</th>
+            <th rowspan="2" class="header-sub center" style="background-color: #fef08a;">TOTAL LOTE</th>
+            <th rowspan="2" class="header-sub center" style="background-color: #fee2e2;">PREÇO REF. (VAREJO)</th>
+            ${loteFornecedores.map((f) => `<th class="col-forn">${f.nome}<br><span style="font-size: 9pt; font-weight: normal;">Cond: ${f.condicaoPagamento || "30 DDL"}</span></th>`).join("")}
+          </tr>
+          <tr>
+            ${loteObrasParticipantes.map((o) => `<th class="col-obra">${o.nome}</th>`).join("")}
+            ${loteFornecedores.map(() => `<th class="col-forn" style="font-size: 9pt;">UNIT. LOTE</th>`).join("")}
+          </tr>
+          ${resumoComprasColetivas.itensCalculados.map((it) => `
+            <tr>
+              <td>${it.descricao}</td>
+              <td class="center">${it.unidade}</td>
+              ${loteObrasParticipantes.map((o) => `<td class="center">${it.demandasPorObra[o.id] || 0}</td>`).join("")}
+              <td class="center" style="font-weight: bold; background-color: #fef9c3;">${it.qtdTotalItem}</td>
+              <td class="num" style="color: #991b1b;">${formatBRL(it.precoReferenciaVarejo)}</td>
+              ${loteFornecedores.map((f) => {
+                const p = it.precosFornecedores[f.id] || 0;
+                return `<td class="num" style="font-weight: bold;">${p > 0 ? formatBRL(p) : "-"}</td>`;
+              }).join("")}
+            </tr>
+          `).join("")}
+          <tr class="linha-total">
+            <td colspan="${2 + loteObrasParticipantes.length}" style="text-align: right;">VALOR TOTAL CORPORATIVO:</td>
+            <td class="center" style="color: #ffffff;">-</td>
+            <td class="num" style="background-color: #7f1d1d; color: #ffffff;">${formatBRL(resumoComprasColetivas.custoTotalVarejo)}</td>
+            ${resumoComprasColetivas.fornecedoresCalculados.map((f) => `
+              <td class="num" style="${vencedor?.id === f.id ? "background-color: #065f46; color: #ffffff; font-size: 12pt;" : "color: #ffffff;"}">
+                ${formatBRL(f.valorTotal)}
+                ${vencedor?.id === f.id ? "<br><span style='font-size: 9pt; color: #86efac;'>🏆 1º LUGAR</span>" : ""}
+              </td>
+            `).join("")}
+          </tr>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob(["\ufeff", html], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `compras_coletivas_rateio_multiobra_${new Date().toISOString().split("T")[0]}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    dispararAviso("Planilha de compras coletivas e rateio multiobra exportada!");
+  };
+
+  const handleGerarColetivasPDF = () => {
+    const vencedor = resumoComprasColetivas.vencedor;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Mapa de Compras Coletivas Multiobra - JC Bauer</title>
+  <style>
+    @page { size: landscape; margin: 10mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1e293b; margin: 0; padding: 15px; font-size: 11px; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
+    .brand { font-size: 18px; font-weight: 900; color: #0f172a; }
+    .brand-tag { font-size: 9px; font-weight: 700; color: #0369a1; text-transform: uppercase; background: #e0f2fe; padding: 2px 6px; border-radius: 4px; border: 1px solid #bae6fd; margin-left: 6px; }
+    .title { font-size: 14px; font-weight: 800; color: #334155; margin-top: 3px; }
+    .meta-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-size: 10.5px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 10px; }
+    th { background: #f1f5f9; font-weight: 700; color: #334155; }
+    .col-obra { background: #e0f2fe; color: #0369a1; font-weight: 800; text-align: center; }
+    .col-forn { background: #dcfce7; color: #064e3b; font-weight: 800; text-align: center; }
+    .linha-total { background: #0f172a !important; color: #ffffff !important; font-weight: 900; font-size: 11px; }
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+    .kpi-card { border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; background: #ffffff; }
+    .kpi-card.vencedor { border: 2px solid #10b981; background: #f0fdf4; }
+    .kpi-title { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #64748b; }
+    .kpi-val { font-size: 15px; font-weight: 900; color: #0f172a; margin-top: 2px; }
+    .rateio-box { display: grid; grid-template-columns: repeat(${loteObrasParticipantes.length}, 1fr); gap: 8px; margin-bottom: 15px; }
+    .rateio-card { border: 1px solid #bae6fd; background: #f0f9ff; border-radius: 6px; padding: 8px; }
+    .rateio-obra { font-size: 11px; font-weight: 800; color: #0369a1; }
+    .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 25px; padding-top: 15px; }
+    .sign-line { border-top: 1px solid #94a3b8; text-align: center; font-size: 10px; color: #475569; padding-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">JC BAUER CONSTRUTORA & INCORPORADORA <span class="brand-tag">Sourcing Corporativo Multiobra</span></div>
+      <div class="title">RELATÓRIO DE COMPRAS COLETIVAS (GANHO DE ESCALA & RATEIO)</div>
+    </div>
+    <div style="text-align: right; font-size: 10px; color: #64748b;">
+      Emitido em: <strong>${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</strong><br>
+      Sistema ERP de Suprimentos
+    </div>
+  </div>
+
+  <div class="meta-box">
+    <div>Lote: <strong>${loteColetivoTitulo}</strong></div>
+    <div>Obras Participantes: <strong>${loteObrasParticipantes.map((o) => o.nome).join(", ")}</strong></div>
+    <div>Custo Base Varejo: <strong style="color: #991b1b;">${formatBRL(resumoComprasColetivas.custoTotalVarejo)}</strong></div>
+    <div>Melhor Custo Negociado: <strong style="color: #059669;">${formatBRL(vencedor?.valorTotal || 0)}</strong></div>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi-card vencedor">
+      <div class="kpi-title" style="color: #059669;">🏆 Fornecedor Vencedor</div>
+      <div class="kpi-val" style="color: #047857; font-size: 13px;">${vencedor?.nome || "A definir"}</div>
+      <div style="font-size: 9px; color: #065f46; margin-top: 2px;">Total: <strong>${formatBRL(vencedor?.valorTotal || 0)}</strong></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-title">💡 Economia Total (Saving)</div>
+      <div class="kpi-val" style="color: #0369a1;">${formatBRL(vencedor?.savingEmRelacaoAoVarejo || 0)}</div>
+      <div style="font-size: 9px; color: #64748b; margin-top: 2px;">Desconto de escala: ${(vencedor?.percentualSaving || 0).toFixed(1)}%</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-title">📦 Total de Insumos Agrupados</div>
+      <div class="kpi-val">${loteItens.length} Insumos</div>
+      <div style="font-size: 9px; color: #64748b; margin-top: 2px;">Consolidação corporativa</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-title">🏢 Obras Beneficiadas</div>
+      <div class="kpi-val">${loteObrasParticipantes.length} Canteiros</div>
+      <div style="font-size: 9px; color: #64748b; margin-top: 2px;">Rateio automático por centro de custo</div>
+    </div>
+  </div>
+
+  <div style="font-weight: 800; font-size: 11px; margin-bottom: 6px; color: #0f172a;">
+    📊 RESUMO DO RATEIO POR EMPREENDIMENTO (APROVEITANDO PREÇO DE ATACADO):
+  </div>
+  <div class="rateio-box">
+    ${resumoComprasColetivas.rateioPorObra.map((r) => `
+      <div class="rateio-card">
+        <div class="rateio-obra">🏢 ${r.obraNome}</div>
+        <div style="font-size: 12px; font-weight: 900; color: #0f172a; margin-top: 3px;">
+          Valor Faturado: ${formatBRL(r.subtotalNegociadoObra)}
+        </div>
+        <div style="font-size: 9px; color: #047857; margin-top: 2px; font-weight: 700;">
+          Economia Gerada: ${formatBRL(r.savingObra)} (${r.percSavingObra.toFixed(1)}%)
+        </div>
+      </div>
+    `).join("")}
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th rowspan="2" style="text-align: left;">Insumo / Descrição</th>
+        <th rowspan="2" class="text-center" style="width: 40px;">Und</th>
+        <th colspan="${loteObrasParticipantes.length}" class="col-obra">Demandas por Obra</th>
+        <th rowspan="2" class="text-center" style="background: #fef08a; width: 60px;">Volume Total</th>
+        <th rowspan="2" class="text-right" style="background: #fee2e2; width: 75px;">Ref. Varejo</th>
+        ${loteFornecedores.map((f) => `
+          <th class="col-forn" style="width: calc((100% - 350px) / ${loteFornecedores.length});">
+            ${f.nome}
+          </th>
+        `).join("")}
+      </tr>
+      <tr>
+        ${loteObrasParticipantes.map((o) => `
+          <th class="col-obra" style="font-size: 9px;">${o.nome}</th>
+        `).join("")}
+        ${loteFornecedores.map(() => `
+          <th class="col-forn" style="font-size: 9px;">Unit. Lote</th>
+        `).join("")}
+      </tr>
+    </thead>
+    <tbody>
+      ${resumoComprasColetivas.itensCalculados.map((it) => `
+        <tr>
+          <td><strong>${it.descricao}</strong></td>
+          <td class="text-center">${it.unidade}</td>
+          ${loteObrasParticipantes.map((o) => `
+            <td class="text-center">${it.demandasPorObra[o.id] || 0}</td>
+          `).join("")}
+          <td class="text-center" style="font-weight: 800; background: #fef9c3;">${it.qtdTotalItem}</td>
+          <td class="text-right" style="color: #991b1b;">${formatBRL(it.precoReferenciaVarejo)}</td>
+          ${loteFornecedores.map((f) => {
+            const p = it.precosFornecedores[f.id] || 0;
+            return `<td class="text-right" style="font-weight: 700;">${p > 0 ? formatBRL(p) : "-"}</td>`;
+          }).join("")}
+        </tr>
+      `).join("")}
+    </tbody>
+    <tfoot>
+      <tr class="linha-total">
+        <td colspan="${2 + loteObrasParticipantes.length}" style="text-align: right; padding: 8px;">
+          VALOR TOTAL CORPORATIVO DO LOTE:
+        </td>
+        <td class="text-center">-</td>
+        <td class="text-right" style="background: #7f1d1d; color: #ffffff;">
+          ${formatBRL(resumoComprasColetivas.custoTotalVarejo)}
+        </td>
+        ${resumoComprasColetivas.fornecedoresCalculados.map((f) => `
+          <td class="text-right" style="${vencedor?.id === f.id ? "background: #065f46; color: #ffffff; font-size: 11px;" : ""}">
+            ${formatBRL(f.valorTotal)}
+            ${vencedor?.id === f.id ? '<div style="font-size: 8px; color: #86efac;">🏆 1º LUGAR</div>' : ""}
+          </td>
+        `).join("")}
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="signatures">
+    <div class="sign-line">
+      <strong>${settings.userName || "Comprador Responsável"}</strong><br>
+      Gerência de Suprimentos Corporativos
+    </div>
+    <div class="sign-line">
+      <strong>Engenharia Geral de Obras</strong><br>
+      Fiscalização e Validação Técnica
+    </div>
+    <div class="sign-line">
+      <strong>Diretoria Executiva / CFO</strong><br>
+      Aprovação e Autorização de Desembolso
+    </div>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.focus();
+        window.print();
+      }, 250);
+    };
+  </script>
+</body>
+</html>`;
+    imprimirDocumentoHtml(html);
+  };
+
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErroLogin(null);
@@ -7641,7 +8443,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             <button
               type="button"
               onClick={() => {
-                if (modoCotacoes === "concreteiras") {
+                if (modoCotacoes === "compras_coletivas") {
+                  handleExportarColetivasExcel();
+                } else if (modoCotacoes === "concreteiras") {
                   handleExportarConcreteirasExcel();
                 } else if (modoCotacoes === "comparativo_rapido" || modoCotacoes === "painel_cotacoes") {
                   handleExportarComparativoRapidoExcel();
@@ -7658,7 +8462,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             <button
               type="button"
               onClick={() => {
-                if (modoCotacoes === "concreteiras") {
+                if (modoCotacoes === "compras_coletivas") {
+                  handleGerarColetivasPDF();
+                } else if (modoCotacoes === "concreteiras") {
                   handleGerarConcreteirasPDF();
                 } else if (modoCotacoes === "comparativo_rapido" || modoCotacoes === "painel_cotacoes") {
                   handleGerarComparativoRapidoPDF();
@@ -9915,6 +10721,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setModoCotacoes("compras_coletivas")}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+                      modoCotacoes === "compras_coletivas"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    }`}
+                  >
+                    <span>ðŸ“¦</span> Compras Coletivas (Ganho de Escala)
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setModoCotacoes("concreteiras")}
                     className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
                       modoCotacoes === "concreteiras"
@@ -11523,6 +12340,561 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                 </td>
                               );
                             })}
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* MODO 5: CENTRAL DE COMPRAS COLETIVAS (AGRUPAMENTO MULTIOBRA PARA GANHO DE ESCALA) */}
+              {modoCotacoes === "compras_coletivas" && (
+                <div className="space-y-6">
+                  {/* Barra Superior Executiva de Compras Coletivas */}
+                  <div className="bg-slate-900 border border-slate-800 text-white rounded-xl p-4 shadow-md flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-4 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-amber-400 text-2xl">📦</span>
+                        <div>
+                          <div className="text-sm font-bold text-white flex items-center gap-2">
+                            <span>Central de Compras Coletivas & Sourcing Corporativo</span>
+                            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                              Ganho de Escala Multiobra
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400">
+                            Unifique requisições de múltiplos canteiros para negociar preço de indústria/atacado e desmembrar OCs em 1 clique
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handlePuxarDemandasDeSCsAbertas}
+                        className="px-3 py-1.5 rounded-lg bg-sky-900/60 hover:bg-sky-800/80 border border-sky-700/80 text-sky-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Varrer requisições de compras abertas nos canteiros e puxar insumos comuns para este lote"
+                      >
+                        <span>⚡</span> Puxar Demandas de SCs
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAdicionarItemColetivo}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Adicionar mais um insumo ao lote corporativo"
+                      >
+                        <span>➕</span> Novo Insumo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAdicionarFornecedorColetivo}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Adicionar fornecedor atacadista ou indústria para cotação lado a lado"
+                      >
+                        <span>🏭</span> + Atacadista
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSalvarLoteColetivo}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Salvar alterações no banco de dados e nuvem"
+                      >
+                        <span>💾</span> Salvar Lote
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDesmembrarEEmitirOCs}
+                        className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center gap-1.5 shadow-md transition"
+                        title="Desmembrar o lote e emitir automaticamente as Ordens de Compra oficiais para cada obra participante"
+                      >
+                        <span>🚀</span> Desmembrar e Emitir OCs por Obra
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Informações do Lote Corporativo e KPIs de Escala */}
+                  <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex-1 min-w-[280px]">
+                        <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                          Título do Lote de Negociação Corporativa:
+                        </label>
+                        <input
+                          type="text"
+                          value={loteColetivoTitulo}
+                          onChange={(e) => setLoteColetivoTitulo(e.target.value)}
+                          placeholder="Ex: Lote Corporativo de Aço e Cimento..."
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900"
+                        />
+                      </div>
+
+                      {/* Seletor rápido para incluir mais uma obra existente no lote */}
+                      <div className="flex items-center gap-2">
+                        {obras.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-slate-600">Incluir Obra no Lote:</span>
+                            <select
+                              onChange={(e) => {
+                                if (!e.target.value) return;
+                                const o = obras.find((ob) => ob.id === e.target.value);
+                                if (o) handleAdicionarObraAoLote(o.id, o.nome);
+                                e.target.value = "";
+                              }}
+                              className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:outline-none cursor-pointer"
+                            >
+                              <option value="">Selecionar obra para adicionar...</option>
+                              {obras
+                                .filter((o) => !loteObrasParticipantes.some((p) => p.id === o.id))
+                                .map((o) => (
+                                  <option key={o.id} value={o.id}>
+                                    + {o.nome}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Cards de Métricas e Saving Corporativo de Escala */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 shadow-xs">
+                        <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wide flex items-center justify-between">
+                          <span>🏆 Melhor Atacadista (Vencedor)</span>
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-900 text-[10px] font-black">
+                            1º Lugar
+                          </span>
+                        </div>
+                        <div className="text-base font-black text-emerald-950 mt-1 truncate" title={resumoComprasColetivas.vencedor?.nome}>
+                          {resumoComprasColetivas.vencedor?.nome || "A definir cotação"}
+                        </div>
+                        <div className="text-xs text-emerald-700 font-semibold mt-0.5">
+                          Lote: <strong>{formatBRL(resumoComprasColetivas.vencedor?.valorTotal || 0)}</strong>
+                        </div>
+                      </div>
+
+                      <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 shadow-xs">
+                        <div className="text-[11px] font-bold text-sky-800 uppercase tracking-wide">
+                          💡 Economia Corporativa (Saving)
+                        </div>
+                        <div className="text-xl font-black text-sky-950 mt-1">
+                          {formatBRL(resumoComprasColetivas.vencedor?.savingEmRelacaoAoVarejo || 0)}
+                        </div>
+                        <div className="text-xs text-sky-700 font-semibold mt-0.5">
+                          Economia de <strong>{(resumoComprasColetivas.vencedor?.percentualSaving || 0).toFixed(1)}%</strong> vs Varejo
+                        </div>
+                      </div>
+
+                      <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 shadow-xs">
+                        <div className="text-[11px] font-bold text-rose-800 uppercase tracking-wide">
+                          🛒 Custo Base Balcão (Sem Escala)
+                        </div>
+                        <div className="text-lg font-black text-rose-950 mt-1">
+                          {formatBRL(resumoComprasColetivas.custoTotalVarejo)}
+                        </div>
+                        <div className="text-xs text-rose-700 font-semibold mt-0.5">
+                          Se cada obra comprasse picado no balcão
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-xs">
+                        <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
+                          🏢 Obras & Insumos no Lote
+                        </div>
+                        <div className="text-lg font-black text-slate-900 mt-1">
+                          {loteObrasParticipantes.length} Obras | {loteItens.length} Insumos
+                        </div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {loteFornecedores.length} fornecedores equalizados
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cards de Rateio Individual por Empreendimento */}
+                  <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+                    <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sky-600">📊</span>
+                        <span>Rateio por Empreendimento (Com Preço Negociado de Atacado):</span>
+                      </div>
+                      <span className="text-[11px] text-slate-500 font-normal">
+                        Cada obra paga apenas o que consome, usufruindo do desconto corporativo
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {resumoComprasColetivas.rateioPorObra.map((r) => (
+                        <div
+                          key={r.obraId}
+                          className="bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-lg p-3 transition"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-extrabold text-xs text-slate-900">
+                              🏢 {r.obraNome}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-500">
+                              {r.totalItensObra} insumo(s)
+                            </span>
+                          </div>
+                          <div className="text-base font-black text-slate-900 mt-1">
+                            {formatBRL(r.subtotalNegociadoObra)}
+                          </div>
+                          <div className="text-[11px] text-emerald-700 font-bold mt-0.5 flex items-center justify-between">
+                            <span>Economia gerada:</span>
+                            <span>{formatBRL(r.savingObra)} ({r.percSavingObra.toFixed(1)}%)</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* TABELA CORPORATIVA: DEMANDAS POR OBRA, VOLUME CONSOLIDADO E EQUALIZAÇÃO DE FORNECEDORES */}
+                  <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left border-collapse min-w-[1000px]">
+                        <thead>
+                          {/* LINHA 1 DE CABEÇALHO */}
+                          <tr className="bg-slate-900 text-white border-b border-slate-800 font-bold">
+                            <th
+                              rowSpan={2}
+                              className="py-3 px-3 text-left border-r-2 border-slate-700 bg-slate-800 align-middle min-w-[200px]"
+                            >
+                              INSUMO / ESPECIFICAÇÃO
+                            </th>
+                            <th
+                              rowSpan={2}
+                              className="py-3 px-2 text-center border-r border-slate-700 bg-slate-800 align-middle w-12"
+                            >
+                              UND
+                            </th>
+                            <th
+                              colSpan={loteObrasParticipantes.length}
+                              className="py-2 px-2 text-center border-r-2 border-slate-700 bg-sky-950 text-sky-200 font-black tracking-wider text-[11px]"
+                            >
+                              DEMANDAS PROGRAMADAS POR OBRA
+                            </th>
+                            <th
+                              rowSpan={2}
+                              className="py-3 px-2 text-center border-r border-slate-700 bg-amber-500/20 text-amber-300 font-black align-middle text-xs min-w-[70px]"
+                            >
+                              VOLUME<br />TOTAL
+                            </th>
+                            <th
+                              rowSpan={2}
+                              className="py-3 px-2 text-right border-r-2 border-slate-700 bg-rose-500/20 text-rose-300 font-bold align-middle text-xs min-w-[85px]"
+                            >
+                              REF. VAREJO<br />(UN.)
+                            </th>
+                            {loteFornecedores.map((f) => (
+                              <th
+                                key={f.id}
+                                className="py-2.5 px-3 text-center border-r border-slate-700 bg-slate-900 font-extrabold text-xs min-w-[160px]"
+                              >
+                                <div className="flex items-center justify-between gap-1">
+                                  <input
+                                    type="text"
+                                    value={f.nome}
+                                    onChange={(e) => handleAtualizarNomeFornecedorColetivo(f.id, e.target.value)}
+                                    placeholder="Nome Atacadista"
+                                    className="bg-slate-800 border border-slate-700 hover:border-slate-500 focus:border-amber-400 text-white font-black text-center text-xs w-full outline-none uppercase py-1 px-1.5 rounded"
+                                    title="Editar nome do fornecedor atacadista"
+                                  />
+                                  {loteFornecedores.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoverFornecedorColetivo(f.id)}
+                                      className="text-slate-400 hover:text-rose-400 text-xs px-1 font-bold"
+                                      title="Remover este fornecedor"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="flex items-center justify-center gap-1 mt-1 text-[10px] font-normal text-slate-300">
+                                  <input
+                                    type="text"
+                                    value={f.contato}
+                                    onChange={(e) => handleAtualizarContatoFornecedorColetivo(f.id, e.target.value)}
+                                    placeholder="Contato..."
+                                    className="bg-slate-800/80 border border-slate-700 hover:border-slate-500 text-slate-300 text-[10px] text-center w-24 outline-none py-0.5 rounded"
+                                  />
+                                </div>
+                              </th>
+                            ))}
+                            <th
+                              rowSpan={2}
+                              className="py-3 px-2 text-center bg-slate-800 align-middle w-10 text-slate-400"
+                            >
+                              Ação
+                            </th>
+                          </tr>
+
+                          {/* LINHA 2 DE CABEÇALHO */}
+                          <tr className="bg-slate-100 text-slate-700 border-b-2 border-slate-300 font-black text-[11px]">
+                            {loteObrasParticipantes.map((o) => (
+                              <th
+                                key={o.id}
+                                className="py-2 px-2 text-center border-r border-slate-300 bg-sky-50 text-sky-950 font-bold min-w-[70px]"
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  <span className="truncate max-w-[80px]" title={o.nome}>
+                                    {o.nome}
+                                  </span>
+                                  {loteObrasParticipantes.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoverObraDoLote(o.id)}
+                                      className="text-slate-400 hover:text-rose-500 text-[10px]"
+                                      title="Remover esta obra do lote"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+                              </th>
+                            ))}
+                            {loteFornecedores.map((f) => (
+                              <th
+                                key={`sub-${f.id}`}
+                                className="py-2 px-2 text-center border-r border-slate-300 bg-emerald-50 text-emerald-950 font-bold"
+                              >
+                                PREÇO LOTE (UN.)
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+
+                        <tbody className="divide-y divide-slate-200">
+                          {resumoComprasColetivas.itensCalculados.map((it) => (
+                            <tr key={it.id} className="hover:bg-slate-50/70 transition-colors">
+                              {/* Descrição do Insumo */}
+                              <td className="py-2 px-3 border-r-2 border-slate-300">
+                                <input
+                                  type="text"
+                                  value={it.descricao}
+                                  onChange={(e) => handleAtualizarDescricaoItemColetivo(it.id, e.target.value)}
+                                  placeholder="Descrição do insumo..."
+                                  className="w-full bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 focus:bg-white text-xs font-bold text-slate-900 px-2 py-1 rounded outline-none"
+                                />
+                              </td>
+
+                              {/* Unidade */}
+                              <td className="py-2 px-1 text-center border-r border-slate-300">
+                                <input
+                                  type="text"
+                                  value={it.unidade}
+                                  onChange={(e) => handleAtualizarUndItemColetivo(it.id, e.target.value)}
+                                  className="w-8 text-center font-bold text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 outline-none text-slate-600"
+                                />
+                              </td>
+
+                              {/* Demandas por Obra (Colunas editáveis de cada empreendimento) */}
+                              {loteObrasParticipantes.map((obra) => {
+                                const qtd = it.demandasPorObra[obra.id] || 0;
+                                return (
+                                  <td
+                                    key={`${it.id}-${obra.id}`}
+                                    className="py-2 px-1.5 text-center border-r border-slate-300 bg-sky-50/20"
+                                  >
+                                    <input
+                                      type="number"
+                                      step="1"
+                                      min="0"
+                                      value={qtd === 0 ? "" : qtd}
+                                      onChange={(e) =>
+                                        handleAtualizarDemandaItem(
+                                          it.id,
+                                          obra.id,
+                                          parseFloat(e.target.value) || 0
+                                        )
+                                      }
+                                      placeholder="0"
+                                      className="w-16 text-center font-bold text-xs bg-white border border-slate-200 hover:border-sky-400 focus:border-sky-600 rounded py-1 px-1 outline-none text-slate-900"
+                                      title={`Quantidade necessária para ${obra.nome}`}
+                                    />
+                                  </td>
+                                );
+                              })}
+
+                              {/* Volume Total Consolidado */}
+                              <td className="py-2 px-2 text-center border-r border-slate-300 bg-amber-50 font-black text-amber-950 text-xs">
+                                {it.qtdTotalItem}
+                              </td>
+
+                              {/* Preço de Referência Varejo */}
+                              <td className="py-2 px-2 text-right border-r-2 border-slate-300 bg-rose-50/40">
+                                <div className="flex items-center justify-end gap-1">
+                                  <span className="text-[10px] text-slate-400">R$</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={it.precoReferenciaVarejo === 0 ? "" : it.precoReferenciaVarejo}
+                                    onChange={(e) =>
+                                      handleAtualizarPrecoReferencia(
+                                        it.id,
+                                        parseFloat(e.target.value) || 0
+                                      )
+                                    }
+                                    placeholder="0,00"
+                                    className="w-18 text-right font-semibold text-xs bg-white border border-rose-200 hover:border-rose-400 focus:border-slate-900 rounded py-1 px-1.5 outline-none text-rose-900"
+                                    title="Preço unitário de balcão/varejo para cálculo do saving de escala"
+                                  />
+                                </div>
+                              </td>
+
+                              {/* Preços Unitários Negociados por Fornecedor Atacadista */}
+                              {loteFornecedores.map((f) => {
+                                const preco = it.precosFornecedores[f.id] || 0;
+                                return (
+                                  <td
+                                    key={`${it.id}-${f.id}`}
+                                    className="py-2 px-3 text-right border-r border-slate-300"
+                                  >
+                                    <div className="flex items-center justify-end gap-1">
+                                      <span className="text-[10px] text-slate-400 font-bold">R$</span>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={preco === 0 ? "" : preco}
+                                        onChange={(e) =>
+                                          handleAtualizarPrecoFornecedorColetivo(
+                                            it.id,
+                                            f.id,
+                                            parseFloat(e.target.value) || 0
+                                          )
+                                        }
+                                        placeholder="0,00"
+                                        className="w-20 text-right font-bold text-xs bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-emerald-600 focus:bg-white rounded py-1 px-1.5 outline-none text-slate-900"
+                                        title={`Preço unitário em lote para ${f.nome}`}
+                                      />
+                                    </div>
+                                  </td>
+                                );
+                              })}
+
+                              {/* Ação Remover Item */}
+                              <td className="py-2 px-1 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoverItemColetivo(it.id)}
+                                  className="text-slate-300 hover:text-rose-500 font-bold text-xs px-1"
+                                  title="Remover este item do lote"
+                                >
+                                  ✕
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+
+                        {/* RODAPÉ EXECUTIVO DE TOTAIS */}
+                        <tfoot>
+                          {/* Linha Condições Comerciais e Frete */}
+                          <tr className="bg-slate-100 text-slate-700 text-xs font-semibold border-t-2 border-slate-300">
+                            <td
+                              colSpan={2 + loteObrasParticipantes.length + 2}
+                              className="py-2 px-3 text-right border-r-2 border-slate-300 text-[11px]"
+                            >
+                              Condições Comerciais & Frete do Lote:
+                            </td>
+                            {loteFornecedores.map((f) => (
+                              <td key={`cond-${f.id}`} className="py-2 px-2 border-r border-slate-300">
+                                <div className="space-y-1 text-[10px]">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-slate-500">Prazo:</span>
+                                    <input
+                                      type="text"
+                                      value={f.condicaoPagamento}
+                                      onChange={(e) =>
+                                        handleAtualizarCondicaoFornecedorColetivo(f.id, e.target.value)
+                                      }
+                                      placeholder="Ex: 30 DDL"
+                                      className="bg-white border border-slate-200 text-center text-[10px] w-20 py-0.5 rounded outline-none"
+                                    />
+                                  </div>
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-slate-500">Frete:</span>
+                                    <div className="flex items-center gap-1">
+                                      <select
+                                        value={f.tipoFrete}
+                                        onChange={(e) =>
+                                          handleAtualizarFreteFornecedorColetivo(
+                                            f.id,
+                                            e.target.value as "CIF" | "FOB",
+                                            f.valorFreteTotal
+                                          )
+                                        }
+                                        className="bg-white border border-slate-200 text-[10px] py-0.5 rounded outline-none"
+                                      >
+                                        <option value="CIF">CIF</option>
+                                        <option value="FOB">FOB</option>
+                                      </select>
+                                      {f.tipoFrete === "FOB" && (
+                                        <input
+                                          type="number"
+                                          value={f.valorFreteTotal === 0 ? "" : f.valorFreteTotal}
+                                          onChange={(e) =>
+                                            handleAtualizarFreteFornecedorColetivo(
+                                              f.id,
+                                              f.tipoFrete,
+                                              parseFloat(e.target.value) || 0
+                                            )
+                                          }
+                                          placeholder="R$"
+                                          className="w-12 text-right bg-white border border-slate-200 text-[10px] py-0.5 px-1 rounded outline-none"
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                            ))}
+                            <td className="bg-slate-100"></td>
+                          </tr>
+
+                          {/* Linha Total Geral do Lote */}
+                          <tr className="bg-slate-900 text-white font-black text-xs">
+                            <td
+                              colSpan={2 + loteObrasParticipantes.length}
+                              className="py-3 px-3 text-right border-r-2 border-slate-700 uppercase tracking-wider text-xs"
+                            >
+                              VALOR TOTAL CONSOLIDADO:
+                            </td>
+                            <td className="py-3 px-2 text-center border-r border-slate-700 bg-amber-500/10 text-amber-300">
+                              -
+                            </td>
+                            <td className="py-3 px-2 text-right border-r-2 border-slate-700 bg-rose-950/60 text-rose-300 tabular-nums">
+                              {formatBRL(resumoComprasColetivas.custoTotalVarejo)}
+                            </td>
+                            {resumoComprasColetivas.fornecedoresCalculados.map((f) => {
+                              const isVencedor = resumoComprasColetivas.vencedor?.id === f.id;
+                              return (
+                                <td
+                                  key={`total-${f.id}`}
+                                  className={`py-3 px-3 text-right border-r border-slate-800 ${
+                                    isVencedor
+                                      ? "bg-emerald-900/90 text-emerald-300 ring-2 ring-emerald-400 inset-0"
+                                      : ""
+                                  }`}
+                                >
+                                  <div className="text-sm font-black tabular-nums">
+                                    {formatBRL(f.valorTotal)}
+                                  </div>
+                                  {isVencedor && (
+                                    <div className="text-[10px] text-emerald-400 font-extrabold flex items-center justify-end gap-1 mt-0.5">
+                                      <span>🏆 1º LUGAR</span>
+                                      <span>(-{f.percentualSaving.toFixed(1)}%)</span>
+                                    </div>
+                                  )}
+                                </td>
+                              );
+                            })}
+                            <td className="bg-slate-900"></td>
                           </tr>
                         </tfoot>
                       </table>
