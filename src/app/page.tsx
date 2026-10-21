@@ -388,6 +388,33 @@ export interface ProcessoCotacao {
   numeroOcEmitida?: string;
 }
 
+export interface SlumpOpcaoConcreto {
+  id: string;
+  descricao: string;
+  unidade: string;
+}
+
+export interface ConcreteiraCotada {
+  id: string;
+  nome: string;
+  contatoNome: string;
+  telefone?: string;
+  precosSlumps: Record<string, number>;
+  precoBomba: number;
+}
+
+export interface DadosCotacaoConcreto {
+  obraId: string;
+  obraNome: string;
+  elemento: string;
+  volumeM3: number;
+  volumeBombaM3: number;
+  slumpSelecionadoId: string;
+  incluirBombaNoTotal: boolean;
+  slumps: SlumpOpcaoConcreto[];
+  concreteiras: ConcreteiraCotada[];
+}
+
 
 interface ColaboradorMapeado {
   id: string;
@@ -1469,7 +1496,7 @@ export default function HomePage() {
 
   // Estados do Comparativo de Preços (3 Orçamentos) e Gestão Multi-Cotações
   const [modoCotacoes, setModoCotacoes] = useState<
-    "comparativo_rapido" | "solicitacoes_obra" | "painel_cotacoes"
+    "comparativo_rapido" | "solicitacoes_obra" | "painel_cotacoes" | "concreteiras"
   >("comparativo_rapido");
   const [processosCotacoes, setProcessosCotacoes] = useState<ProcessoCotacao[]>(
     []
@@ -1521,6 +1548,56 @@ export default function HomePage() {
   >([]);
   const [itemAjustarEstoqueModal, setItemAjustarEstoqueModal] =
     useState<ItemEstoque | null>(null);
+
+  // -----------------------------------------------------------------------
+  // ESTADOS DO MÓDULO ESPECIALIZADO DE CONCRETEIRAS (USINADO & BOMBA)
+  // -----------------------------------------------------------------------
+  const [concretoObraId, setConcretoObraId] = useState<string>("");
+  const [concretoElemento, setConcretoElemento] = useState<string>("Laje / Estrutura");
+  const [concretoVolumeM3, setConcretoVolumeM3] = useState<number>(63);
+  const [concretoVolumeBombaM3, setConcretoVolumeBombaM3] = useState<number>(63);
+  const [concretoSlumpSelecionadoId, setConcretoSlumpSelecionadoId] = useState<string>("slump-2");
+  const [concretoIncluirBombaNoTotal, setConcretoIncluirBombaNoTotal] = useState<boolean>(true);
+
+  const [concretoSlumps, setConcretoSlumps] = useState<SlumpOpcaoConcreto[]>([
+    { id: "slump-1", descricao: "Concreto 12+-20 40mpa", unidade: "m³" },
+    { id: "slump-2", descricao: "Concreto 14+-20 40mpa", unidade: "m³" },
+  ]);
+
+  const [concreteiras, setConcreteiras] = useState<ConcreteiraCotada[]>([
+    {
+      id: "conc-1",
+      nome: "SUPERTEX",
+      contatoNome: "Edinaldo",
+      telefone: "",
+      precosSlumps: { "slump-1": 543, "slump-2": 558 },
+      precoBomba: 77,
+    },
+    {
+      id: "conc-2",
+      nome: "MAXMOHR",
+      contatoNome: "Gabriel",
+      telefone: "",
+      precosSlumps: { "slump-1": 540, "slump-2": 550 },
+      precoBomba: 40,
+    },
+    {
+      id: "conc-3",
+      nome: "CONCREBRAS",
+      contatoNome: "Camila",
+      telefone: "",
+      precosSlumps: { "slump-1": 527, "slump-2": 537 },
+      precoBomba: 40,
+    },
+    {
+      id: "conc-4",
+      nome: "SUPERBETOM",
+      contatoNome: "Fabricio",
+      telefone: "",
+      precosSlumps: { "slump-1": 527.63, "slump-2": 537.07 },
+      precoBomba: 40,
+    },
+  ]);
 
   /* ----------------------------------------------------------------------- */
   /* SINCRONIZAÇÃO AUTOMÁTICA DE INSUMOS DO COMPARATIVO COM O ALMOXARIFADO    */
@@ -6045,6 +6122,520 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   /* AUTENTICAÇÃO E HANDLERS DE INTEGRAÇÃO CANTEIRO <-> COMPRAS              */
   /* ----------------------------------------------------------------------- */
 
+  /* ----------------------------------------------------------------------- */
+  /* CÁLCULOS E HANDLERS DO MÓDULO DE CONCRETEIRAS (USINADO & BOMBA)         */
+  /* ----------------------------------------------------------------------- */
+  const resumoConcreteiras = useMemo(() => {
+    const slumpEscolhido =
+      concretoSlumps.find((s) => s.id === concretoSlumpSelecionadoId) ||
+      concretoSlumps[0];
+    const vol = Number(concretoVolumeM3) || 0;
+    const volBomba = Number(concretoVolumeBombaM3) || 0;
+
+    const calculados = concreteiras.map((c) => {
+      const precoConcreto = Number(c.precosSlumps[slumpEscolhido?.id]) || 0;
+      const precoBomba = Number(c.precoBomba) || 0;
+      const somaUnitariaM3 = precoConcreto + precoBomba;
+
+      const subtotalConcreto = vol * precoConcreto;
+      const subtotalBomba = volBomba * precoBomba;
+      const valorTotal =
+        subtotalConcreto + (concretoIncluirBombaNoTotal ? subtotalBomba : 0);
+
+      return {
+        ...c,
+        precoConcreto,
+        precoBomba,
+        somaUnitariaM3,
+        subtotalConcreto,
+        subtotalBomba,
+        valorTotal,
+      };
+    });
+
+    const validos = calculados.filter(
+      (c) => c.valorTotal > 0 && c.nome && c.nome.trim() !== ""
+    );
+    let vencedor: (typeof calculados)[0] | null = null;
+    let saving = 0;
+    let maior = 0;
+
+    if (validos.length > 0) {
+      const ordenados = [...validos].sort((a, b) => a.valorTotal - b.valorTotal);
+      vencedor = ordenados[0];
+      maior = ordenados[ordenados.length - 1].valorTotal;
+      saving = Math.max(0, maior - vencedor.valorTotal);
+    }
+
+    return {
+      slumpEscolhido,
+      calculados,
+      vencedor,
+      saving,
+      maior,
+    };
+  }, [
+    concreteiras,
+    concretoSlumps,
+    concretoSlumpSelecionadoId,
+    concretoVolumeM3,
+    concretoVolumeBombaM3,
+    concretoIncluirBombaNoTotal,
+  ]);
+
+  const handleAtualizarPrecoSlump = (concreteiraId: string, slumpId: string, valor: number) => {
+    setConcreteiras((prev) =>
+      prev.map((c) =>
+        c.id === concreteiraId
+          ? { ...c, precosSlumps: { ...c.precosSlumps, [slumpId]: valor } }
+          : c
+      )
+    );
+  };
+
+  const handleAtualizarPrecoBomba = (concreteiraId: string, valor: number) => {
+    setConcreteiras((prev) =>
+      prev.map((c) => (c.id === concreteiraId ? { ...c, precoBomba: valor } : c))
+    );
+  };
+
+  const handleAtualizarNomeConcreteira = (concreteiraId: string, nome: string) => {
+    setConcreteiras((prev) =>
+      prev.map((c) => (c.id === concreteiraId ? { ...c, nome } : c))
+    );
+  };
+
+  const handleAtualizarContatoConcreteira = (concreteiraId: string, contatoNome: string) => {
+    setConcreteiras((prev) =>
+      prev.map((c) => (c.id === concreteiraId ? { ...c, contatoNome } : c))
+    );
+  };
+
+  const handleAtualizarDescricaoSlump = (slumpId: string, descricao: string) => {
+    setConcretoSlumps((prev) =>
+      prev.map((s) => (s.id === slumpId ? { ...s, descricao } : s))
+    );
+  };
+
+  const handleAdicionarSlumpConcreto = () => {
+    const novoId = `slump-${Date.now()}`;
+    setConcretoSlumps((prev) => [
+      ...prev,
+      { id: novoId, descricao: `Concreto FCK 40 Slump ${prev.length + 1}`, unidade: "m³" },
+    ]);
+    dispararAviso("Novo traço de concreto adicionado à tabela.");
+  };
+
+  const handleRemoverSlumpConcreto = (slumpId: string) => {
+    if (concretoSlumps.length <= 1) {
+      dispararAviso("Mantenha ao menos um traço de concreto na cotação.");
+      return;
+    }
+    setConcretoSlumps((prev) => prev.filter((s) => s.id !== slumpId));
+    if (concretoSlumpSelecionadoId === slumpId) {
+      const restante = concretoSlumps.filter((s) => s.id !== slumpId);
+      if (restante.length > 0) setConcretoSlumpSelecionadoId(restante[0].id);
+    }
+  };
+
+  const handleAdicionarConcreteira = () => {
+    const novoId = `conc-${Date.now()}`;
+    setConcreteiras((prev) => [
+      ...prev,
+      {
+        id: novoId,
+        nome: `CONCRETEIRA ${prev.length + 1}`,
+        contatoNome: "Vendedor",
+        telefone: "",
+        precosSlumps: {},
+        precoBomba: 40,
+      },
+    ]);
+    dispararAviso("Nova coluna de concreteira adicionada!");
+  };
+
+  const handleRemoverConcreteira = (concreteiraId: string) => {
+    if (concreteiras.length <= 2) {
+      dispararAviso("Mantenha ao menos 2 concreteiras para equalização.");
+      return;
+    }
+    setConcreteiras((prev) => prev.filter((c) => c.id !== concreteiraId));
+  };
+
+  const handleSalvarCotacaoConcreto = () => {
+    const obraSel = obras.find((o) => o.id === concretoObraId) || obras[0];
+    const dadosSalvar: DadosCotacaoConcreto = {
+      obraId: concretoObraId,
+      obraNome: obraSel?.nome || "Galileu",
+      elemento: concretoElemento,
+      volumeM3: concretoVolumeM3,
+      volumeBombaM3: concretoVolumeBombaM3,
+      slumpSelecionadoId: concretoSlumpSelecionadoId,
+      incluirBombaNoTotal: concretoIncluirBombaNoTotal,
+      slumps: concretoSlumps,
+      concreteiras,
+    };
+    try {
+      window.localStorage.setItem(
+        "JCBAUER_COTACAO_CONCRETO_PERSISTIDA",
+        JSON.stringify(dadosSalvar)
+      );
+      salvarChaveSupabase("JCBAUER_COTACAO_CONCRETO_PERSISTIDA", dadosSalvar).catch(() => {});
+      dispararAviso("Cotação de concreteiras salva com sucesso na nuvem e local!");
+    } catch {
+      dispararAviso("Erro ao salvar dados de concreteiras.");
+    }
+  };
+
+  const handleLimparCotacaoConcreto = () => {
+    setConcretoVolumeM3(63);
+    setConcretoVolumeBombaM3(63);
+    setConcretoElemento("Laje / Estrutura");
+    dispararAviso("Campos redefinidos para os valores padrão de cotação.");
+  };
+
+  const handleEmitirOrdemConcreteira = (concreteiraId: string) => {
+    const concreteira = concreteiras.find((c) => c.id === concreteiraId);
+    if (!concreteira) {
+      dispararAviso("Concreteira não encontrada.");
+      return;
+    }
+
+    const slumpEscolhido =
+      concretoSlumps.find((s) => s.id === concretoSlumpSelecionadoId) ||
+      concretoSlumps[0];
+    const precoConcreto = Number(concreteira.precosSlumps[slumpEscolhido?.id]) || 0;
+    const precoBomba = Number(concreteira.precoBomba) || 0;
+    const vol = Number(concretoVolumeM3) || 0;
+    const volBomba = Number(concretoVolumeBombaM3) || 0;
+
+    const subtotalConcreto = vol * precoConcreto;
+    const subtotalBomba = volBomba * precoBomba;
+    const total = subtotalConcreto + (concretoIncluirBombaNoTotal ? subtotalBomba : 0);
+
+    const obraSel = obras.find((o) => o.id === concretoObraId) || obras[0];
+    const anoAtual = new Date().getFullYear();
+    const numeroOc = `OC-${anoAtual}-${String(ordens.length + 1).padStart(4, "0")}`;
+
+    const itensOc = [
+      {
+        codigo: "MAT-CONC-01",
+        descricao: slumpEscolhido ? `${slumpEscolhido.descricao} (Aplicação: ${concretoElemento || "Estrutura"})` : "Concreto Usinado FCK 40",
+        unidade: "m³",
+        quantidade: vol,
+        precoUnitario: precoConcreto,
+        subtotal: subtotalConcreto,
+      },
+    ];
+
+    if (concretoIncluirBombaNoTotal && precoBomba > 0) {
+      itensOc.push({
+        codigo: "SRV-BOMBA-01",
+        descricao: `Serviço de Bombeamento de Concreto (${concretoElemento || "Estrutura"})`,
+        unidade: "m³",
+        quantidade: volBomba,
+        precoUnitario: precoBomba,
+        subtotal: subtotalBomba,
+      });
+    }
+
+    const novaOc: OrdemCompra = {
+      id: `oc-conc-${Date.now()}`,
+      numeroOc,
+      scId: "",
+      scCodigo: obraSel ? `CONCR-${obraSel.nome.substring(0, 4).toUpperCase()}` : "CONCR",
+      obraId: concretoObraId || (obraSel ? obraSel.id : "obra-1"),
+      obraNome: obraSel ? obraSel.nome : "Galileu",
+      obraEndereco: obraSel?.endereco || "Itapema/SC",
+      obraEngenheiro: obraSel?.engenheiro || "Engenharia JC Bauer",
+      categoria: "Concreto Usinado & Bomba",
+      fornecedorNome: concreteira.nome,
+      fornecedorRazao: concreteira.nome,
+      fornecedorCnpj: "",
+      vendedorNome: concreteira.contatoNome || "Comercial",
+      whatsapp: concreteira.telefone || "",
+      chavePix: "",
+      dataEmissao: new Date().toISOString().split("T")[0],
+      dataPrevistaEntrega: new Date().toISOString().split("T")[0],
+      prazoPagamento: "28 DDL",
+      tipoFrete: "CIF",
+      freteValor: 0,
+      descontoValor: 0,
+      valorTotal: total,
+      savingGerado: resumoConcreteiras.saving,
+      alcadaAprovacao: "Comprador Autorizado",
+      status: "Emitida",
+      itens: itensOc,
+    };
+
+    const novasOrdens = [novaOc, ...ordens];
+    setOrdens(novasOrdens);
+    try {
+      window.localStorage.setItem(ORDENS_STORAGE_KEY, JSON.stringify(novasOrdens));
+    } catch {}
+    salvarChaveSupabase(ORDENS_STORAGE_KEY, novasOrdens).catch(() => {});
+    dispararAviso(
+      `Ordem de Compra ${novaOc.numeroOc} gerada com sucesso para ${concreteira.nome} (${formatBRL(total)})!`
+    );
+    setActiveTab("ordens");
+  };
+
+  const handleExportarConcreteirasExcel = () => {
+    const obraSel = obras.find((o) => o.id === concretoObraId) || obras[0];
+    const obraNome = obraSel ? obraSel.nome : "Galileu";
+    const slumpAtivo = resumoConcreteiras.slumpEscolhido;
+
+    let html = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">
+        <style>
+          table { border-collapse: collapse; font-family: Calibri, Arial, sans-serif; }
+          th, td { border: 1px solid #000000; padding: 6px 10px; font-size: 11pt; }
+          .header-main { background-color: #0f172a; color: #ffffff; font-weight: bold; font-size: 14pt; text-align: center; }
+          .header-sub { background-color: #f1f5f9; font-weight: bold; }
+          .col-concreteira { background-color: #d1fae5; color: #065f46; font-weight: bold; text-align: center; }
+          .linha-azul { background-color: #bae6fd; color: #0369a1; font-weight: bold; }
+          .linha-total { background-color: #0f172a; color: #ffffff; font-weight: bold; font-size: 12pt; }
+          .num { text-align: right; }
+          .center { text-align: center; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <tr>
+            <th colspan="${3 + concreteiras.length}" class="header-main">
+              JC BAUER - QUADRO COMPARATIVO DE CONCRETEIRAS (CONCRETO & BOMBA)
+            </th>
+          </tr>
+          <tr>
+            <td colspan="${3 + concreteiras.length}" style="background-color: #f8fafc; font-size: 10pt;">
+              <b>Empreendimento:</b> ${obraNome} | <b>Elemento:</b> ${concretoElemento || "Estrutura"} | <b>Volume:</b> ${concretoVolumeM3} m³ | <b>Bomba:</b> ${concretoVolumeBombaM3} m³ | <b>Data:</b> ${new Date().toLocaleDateString("pt-BR")}
+            </td>
+          </tr>
+          <tr>
+            <th rowspan="2" class="header-sub" style="vertical-align: middle; text-align: center;">${obraNome}</th>
+            <th colspan="2" class="header-sub" style="text-align: center;">ESPECIFICAÇÕES</th>
+            ${concreteiras.map((c) => `<th class="col-concreteira">${c.nome}<br><span style="font-size: 9pt; font-weight: normal;">Nome: ${c.contatoNome || "N/I"}</span></th>`).join("")}
+          </tr>
+          <tr>
+            <th class="header-sub center">QUANT:</th>
+            <th class="header-sub center">UND:</th>
+            ${concreteiras.map(() => `<th style="background-color: #dcfce7; color: #065f46; text-align: center; font-weight: bold;">VALOR UN / M:</th>`).join("")}
+          </tr>
+          ${concretoSlumps.map((slump) => {
+            const isSel = slump.id === slumpAtivo?.id;
+            return `
+              <tr style="${isSel ? "background-color: #f0fdf4; font-weight: bold;" : ""}">
+                <td>${slump.descricao} ${isSel ? "(SELECIONADO)" : ""}</td>
+                <td class="center">${isSel ? concretoVolumeM3 : "-"}</td>
+                <td class="center">${slump.unidade || "m³"}</td>
+                ${concreteiras.map((c) => {
+                  const p = c.precosSlumps[slump.id] || 0;
+                  return `<td class="num">${p > 0 ? "R$ " + p.toFixed(2).replace(".", ",") : "-"}</td>`;
+                }).join("")}
+              </tr>
+            `;
+          }).join("")}
+          <tr>
+            <td>Bomba</td>
+            <td class="center">${concretoVolumeBombaM3}</td>
+            <td class="center">m³</td>
+            ${concreteiras.map((c) => {
+              const p = c.precoBomba || 0;
+              return `<td class="num">${p > 0 ? "R$ " + p.toFixed(2).replace(".", ",") : "-"}</td>`;
+            }).join("")}
+          </tr>
+          <tr class="linha-azul">
+            <td colspan="3">VALOR UN / M: (${slumpAtivo?.descricao || "Concreto"} + Bomba)</td>
+            ${resumoConcreteiras.calculados.map((c) => `
+              <td class="num">${"R$ " + c.somaUnitariaM3.toFixed(2).replace(".", ",")}</td>
+            `).join("")}
+          </tr>
+          <tr class="linha-total">
+            <td colspan="3" style="color: #ffffff; background-color: #0f172a;">VALOR TOTAL: (${concretoVolumeM3} m³)</td>
+            ${resumoConcreteiras.calculados.map((c) => `
+              <td class="num" style="color: #ffffff; background-color: #0f172a;">${"R$ " + c.valorTotal.toFixed(2).replace(".", ",")}</td>
+            `).join("")}
+          </tr>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob(["\ufeff", html], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `comparativo_concreteiras_${obraNome.toLowerCase().replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    dispararAviso("Planilha Excel de concreteiras gerada com sucesso!");
+  };
+
+  const handleGerarConcreteirasPDF = () => {
+    const obraSel = obras.find((o) => o.id === concretoObraId) || obras[0];
+    const obraNome = obraSel ? obraSel.nome : "Galileu";
+    const slumpAtivo = resumoConcreteiras.slumpEscolhido;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Quadro Comparativo de Concreteiras - JC Bauer</title>
+  <style>
+    @page { size: landscape; margin: 10mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1e293b; margin: 0; padding: 15px; font-size: 11px; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
+    .brand { font-size: 18px; font-weight: 900; color: #0f172a; letter-spacing: -0.5px; }
+    .brand-tag { font-size: 9px; font-weight: 700; color: #059669; text-transform: uppercase; background: #ecfdf5; padding: 2px 6px; border-radius: 4px; border: 1px solid #a7f3d0; margin-left: 6px; }
+    .title { font-size: 14px; font-weight: 800; color: #334155; margin-top: 3px; }
+    .meta-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-size: 10.5px; }
+    .meta-box strong { color: #0f172a; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 10.5px; }
+    th { background: #f1f5f9; font-weight: 700; color: #334155; }
+    .col-header { background: #dcfce7; color: #065f46; font-weight: 800; text-align: center; }
+    .linha-azul { background: #bae6fd !important; font-weight: 800; color: #0369a1; }
+    .linha-total { background: #0f172a !important; color: #ffffff !important; font-weight: 900; font-size: 12px; }
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .kpi-row { display: grid; grid-template-columns: repeat(${concreteiras.length}, 1fr); gap: 10px; margin-bottom: 14px; }
+    .kpi-card { border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; background: #ffffff; }
+    .kpi-card.vencedor { border: 2px solid #10b981; background: #f0fdf4; }
+    .kpi-title { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #64748b; }
+    .kpi-card.vencedor .kpi-title { color: #059669; }
+    .kpi-name { font-size: 13px; font-weight: 800; color: #0f172a; margin: 2px 0; }
+    .kpi-val { font-size: 14px; font-weight: 900; color: #0f172a; }
+    .kpi-card.vencedor .kpi-val { color: #047857; }
+    .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 25px; padding-top: 15px; }
+    .sign-line { border-top: 1px solid #94a3b8; text-align: center; font-size: 10px; color: #475569; padding-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">JC BAUER CONSTRUTORA & INCORPORADORA <span class="brand-tag">Usinado & Bomba</span></div>
+      <div class="title">MAPA COMPARATIVO DE COTAÇÃO DE CONCRETEIRAS</div>
+    </div>
+    <div style="text-align: right; font-size: 10px; color: #64748b;">
+      Emitido em: <strong>${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</strong><br>
+      Sistema ERP de Compras
+    </div>
+  </div>
+  <div class="meta-box">
+    <div>Empreendimento: <strong>${obraNome}</strong></div>
+    <div>Peça / Elemento: <strong>${concretoElemento || "Estrutura"}</strong></div>
+    <div>Volume Programado: <strong>${concretoVolumeM3} m³ (Bomba: ${concretoVolumeBombaM3} m³)</strong></div>
+    <div>Traço Selecionado: <strong>${slumpAtivo?.descricao || "Concreto FCK 40"}</strong></div>
+  </div>
+  <div class="kpi-row">
+    ${resumoConcreteiras.calculados.map((c) => {
+      const isV = resumoConcreteiras.vencedor?.id === c.id;
+      return `
+        <div class="kpi-card ${isV ? "vencedor" : ""}">
+          <div class="kpi-title">${isV ? "🏆 1º Lugar (Mais em Conta)" : "Orçamento"}</div>
+          <div class="kpi-name">${c.nome}</div>
+          <div class="kpi-val">${formatBRL(c.valorTotal)}</div>
+          <div style="font-size: 9px; color: #64748b; margin-top: 2px;">
+            Unit. c/ Bomba: <strong>${formatBRL(c.somaUnitariaM3)}/m³</strong> | Contato: ${c.contatoNome || "N/I"}
+          </div>
+        </div>
+      `;
+    }).join("")}
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th rowspan="2" style="background: #f1f5f9; text-align: center; vertical-align: middle; font-weight: 800; width: 140px;">
+          ${obraNome}
+        </th>
+        <th colspan="2" style="background: #f8fafc; text-align: center; font-weight: 700; width: 80px;">ESPECIFICAÇÕES</th>
+        ${concreteiras.map((c) => `
+          <th class="col-header" style="width: calc((100% - 220px) / ${concreteiras.length});">
+            ${c.nome}<br><span style="font-size: 9px; font-weight: normal; color: #065f46;">Nome: ${c.contatoNome || "N/I"}</span>
+          </th>
+        `).join("")}
+      </tr>
+      <tr>
+        <th style="background: #f1f5f9; text-align: center; font-size: 9px;">QUANT:</th>
+        <th style="background: #f1f5f9; text-align: center; font-size: 9px;">UND:</th>
+        ${concreteiras.map(() => `
+          <th style="background: #dcfce7; text-align: center; font-size: 9px; font-weight: 700; color: #064e3b;">VALOR UN / M:</th>
+        `).join("")}
+      </tr>
+    </thead>
+    <tbody>
+      ${concretoSlumps.map((slump) => {
+        const isSel = slump.id === slumpAtivo?.id;
+        return `
+          <tr style="${isSel ? "background: #f0fdf4; font-weight: 700;" : ""}">
+            <td>${slump.descricao} ${isSel ? '<span style="color: #166534; font-size: 9px;">✓ (Escolhido)</span>' : ""}</td>
+            <td class="text-center">${isSel ? concretoVolumeM3 : "-"}</td>
+            <td class="text-center">${slump.unidade || "m³"}</td>
+            ${concreteiras.map((c) => {
+              const p = c.precosSlumps[slump.id] || 0;
+              return `<td class="text-right">${p > 0 ? formatBRL(p) : "-"}</td>`;
+            }).join("")}
+          </tr>
+        `;
+      }).join("")}
+      <tr>
+        <td>Bomba (Serviço de Bombeamento)</td>
+        <td class="text-center">${concretoVolumeBombaM3}</td>
+        <td class="text-center">m³</td>
+        ${concreteiras.map((c) => `
+          <td class="text-right">${formatBRL(c.precoBomba || 0)}</td>
+        `).join("")}
+      </tr>
+      <tr class="linha-azul">
+        <td colspan="3">VALOR UN / M: (${slumpAtivo?.descricao || "Concreto"} + Bomba)</td>
+        ${resumoConcreteiras.calculados.map((c) => `
+          <td class="text-right" style="font-size: 11px;">${formatBRL(c.somaUnitariaM3)}</td>
+        `).join("")}
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr class="linha-total">
+        <td colspan="3" style="border-color: #0f172a; padding: 9px;">VALOR TOTAL DA CONCRETAGEM (${concretoVolumeM3} m³)</td>
+        ${resumoConcreteiras.calculados.map((c) => `
+          <td class="text-right" style="border-color: #0f172a; font-size: 12px; ${resumoConcreteiras.vencedor?.id === c.id ? "color: #4ade80;" : "color: #ffffff;"}">
+            ${formatBRL(c.valorTotal)}
+            ${resumoConcreteiras.vencedor?.id === c.id ? '<div style="font-size: 8px; color: #86efac; font-weight: normal;">🏆 1º LUGAR</div>' : ""}
+          </td>
+        `).join("")}
+      </tr>
+    </tfoot>
+  </table>
+  <div class="signatures">
+    <div class="sign-line">
+      <strong>${settings.userName || "Comprador Responsável"}</strong><br>
+      Comprador Responsável
+    </div>
+    <div class="sign-line">
+      <strong>${obraSel?.engenheiro || "Engenharia de Obras"}</strong><br>
+      Engenheiro Fiscal da Obra
+    </div>
+    <div class="sign-line">
+      <strong>Diretoria Executiva / CFO</strong><br>
+      Aprovação Financeira
+    </div>
+  </div>
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.focus();
+        window.print();
+      }, 250);
+    };
+  </script>
+</body>
+</html>`;
+    imprimirDocumentoHtml(html);
+  };
+
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErroLogin(null);
@@ -7021,7 +7612,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             <button
               type="button"
               onClick={() => {
-                if (modoCotacoes === "comparativo_rapido" || modoCotacoes === "painel_cotacoes") {
+                if (modoCotacoes === "concreteiras") {
+                  handleExportarConcreteirasExcel();
+                } else if (modoCotacoes === "comparativo_rapido" || modoCotacoes === "painel_cotacoes") {
                   handleExportarComparativoRapidoExcel();
                 } else if (scAtiva) {
                   exportarCotacaoExcel(scAtiva, obraScAtiva.nome);
@@ -7036,7 +7629,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             <button
               type="button"
               onClick={() => {
-                if (modoCotacoes === "comparativo_rapido" || modoCotacoes === "painel_cotacoes") {
+                if (modoCotacoes === "concreteiras") {
+                  handleGerarConcreteirasPDF();
+                } else if (modoCotacoes === "comparativo_rapido" || modoCotacoes === "painel_cotacoes") {
                   handleGerarComparativoRapidoPDF();
                 } else if (scAtiva) {
                   handleGeneratePDF();
@@ -9291,6 +9886,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setModoCotacoes("concreteiras")}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+                      modoCotacoes === "concreteiras"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    }`}
+                  >
+                    <span>ðŸ—ï¸</span> Concreteiras (Concreto & Bomba)
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setModoCotacoes("comparativo_rapido")}
                     className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
                       modoCotacoes === "comparativo_rapido"
@@ -10304,6 +10910,493 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                   </div>
                 </div>
               )}
+              {/* MODO 2: COMPARATIVO DE CONCRETEIRAS (CONCRETO USINADO & BOMBA - MODELO PLANILHA JC BAUER) */}
+              {modoCotacoes === "concreteiras" && (
+                <div className="space-y-6">
+                  {/* Barra Superior de Gestão da Cotação de Concreto */}
+                  <div className="bg-slate-900 border border-slate-800 text-white rounded-xl p-4 shadow-md flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-4 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-emerald-400 text-xl">🏗️</span>
+                        <div>
+                          <div className="text-sm font-bold text-white flex items-center gap-2">
+                            <span>Quadro de Equalização de Concreteiras</span>
+                            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              Usinado & Bomba
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400">
+                            Cálculo de volume real, seleção de slump/traço e bombeamento integrado
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleAdicionarSlumpConcreto}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Adicionar uma nova opção de traço/slump de concreto"
+                      >
+                        <span>➕</span> Novo Traço / Slump
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAdicionarConcreteira}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Adicionar uma nova concreteira para cotação lado a lado"
+                      >
+                        <span>🏢</span> + Concreteira
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSalvarCotacaoConcreto}
+                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+                        title="Salvar alterações no banco de dados e nuvem"
+                      >
+                        <span>💾</span> Salvar Cotação
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLimparCotacaoConcreto}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/40 text-rose-300 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Redefinir volumes padrão"
+                      >
+                        <span>↺</span> Redefinir Padrão
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Metadados da Concretagem: Obra, Peça/Elemento, Volume Concreto, Volume Bomba */}
+                  <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Empreendimento / Obra:
+                        </label>
+                        <select
+                          value={concretoObraId}
+                          onChange={(e) => setConcretoObraId(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
+                        >
+                          <option value="">Selecione a Obra...</option>
+                          {obras.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.nome}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Peça / Elemento Concretado:
+                        </label>
+                        <input
+                          type="text"
+                          value={concretoElemento}
+                          onChange={(e) => setConcretoElemento(e.target.value)}
+                          placeholder="Ex: Laje 3º Pavimento, Pilares..."
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-900"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Volume do Concreto (m³):
+                        </label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          value={concretoVolumeM3}
+                          onChange={(e) => setConcretoVolumeM3(parseFloat(e.target.value) || 0)}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900 text-right"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Volume Bomba (m³):
+                        </label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          value={concretoVolumeBombaM3}
+                          onChange={(e) => setConcretoVolumeBombaM3(parseFloat(e.target.value) || 0)}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900 text-right"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
+                      <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={concretoIncluirBombaNoTotal}
+                          onChange={(e) => setConcretoIncluirBombaNoTotal(e.target.checked)}
+                          className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                        />
+                        <span>Incluir Serviço de Bomba no Valor Total e no Preço Un./m³</span>
+                      </label>
+                      <span className="text-[11px] text-slate-500">
+                        * Apenas o traço de concreto selecionado aplica volume no cálculo total (evitando duplicar volume).
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Resumo e Indicadores do Melhor Fornecedor */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 shadow-xs">
+                      <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wide flex items-center justify-between">
+                        <span>🏆 Melhor Cotação (Vencedor)</span>
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-200/80 text-emerald-900 text-[10px]">
+                          1º Lugar
+                        </span>
+                      </div>
+                      <div className="text-lg font-black text-emerald-950 mt-1">
+                        {resumoConcreteiras.vencedor?.nome || "A Definir"}
+                      </div>
+                      <div className="text-xs text-emerald-700 font-semibold mt-0.5">
+                        Total: {formatBRL(resumoConcreteiras.vencedor?.valorTotal || 0)}
+                      </div>
+                    </div>
+
+                    <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 shadow-xs">
+                      <div className="text-[11px] font-bold text-sky-800 uppercase tracking-wide">
+                        💡 Saving em Relação ao Maior
+                      </div>
+                      <div className="text-lg font-black text-sky-950 mt-1">
+                        {formatBRL(resumoConcreteiras.saving)}
+                      </div>
+                      <div className="text-xs text-sky-700 font-semibold mt-0.5">
+                        Economia direta na concretagem
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-xs">
+                      <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
+                        📏 Traço Selecionado
+                      </div>
+                      <div className="text-sm font-bold text-slate-900 mt-1 truncate" title={resumoConcreteiras.slumpEscolhido?.descricao}>
+                        {resumoConcreteiras.slumpEscolhido?.descricao || "Nenhum selecionado"}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        Volume: <strong>{concretoVolumeM3} m³</strong>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-xs">
+                      <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
+                        🚚 Concreteiras Equalizadas
+                      </div>
+                      <div className="text-lg font-black text-slate-900 mt-1">
+                        {concreteiras.length} Fornecedores
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        Bomba programada: {concretoVolumeBombaM3} m³
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* TABELA COMPARATIVA DE CONCRETEIRAS (ESTRUTURA EXATA DA PLANILHA EXCEL) */}
+                  <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left border-collapse min-w-[850px]">
+                        <thead>
+                          {/* LINHA 1 DE CABEÇALHO */}
+                          <tr className="bg-slate-900 text-white border-b border-slate-800 font-bold">
+                            <th
+                              rowSpan={2}
+                              className="py-3 px-3 text-center border-r-2 border-slate-700 bg-slate-800 align-middle text-sm font-black w-48"
+                            >
+                              <div className="text-[10px] uppercase text-emerald-400 font-extrabold tracking-wider">
+                                OBRA:
+                              </div>
+                              <div className="text-white text-base">
+                                {obras.find((o) => o.id === concretoObraId)?.nome || "Galileu"}
+                              </div>
+                            </th>
+                            <th
+                              colSpan={2}
+                              className="py-2 px-3 text-center border-r-2 border-slate-700 bg-slate-800 uppercase tracking-wider text-[11px] w-28"
+                            >
+                              ESPECIFICAÇÕES
+                            </th>
+                            {concreteiras.map((c) => (
+                              <th
+                                key={c.id}
+                                className="py-2.5 px-3 text-center border-r border-slate-700 bg-slate-900 font-extrabold text-sm"
+                              >
+                                <div className="flex items-center justify-between gap-1">
+                                  <input
+                                    type="text"
+                                    value={c.nome}
+                                    onChange={(e) => handleAtualizarNomeConcreteira(c.id, e.target.value)}
+                                    className="bg-transparent border-b border-transparent hover:border-slate-500 focus:border-emerald-400 focus:bg-slate-800 text-white font-black text-center text-sm w-full outline-none uppercase"
+                                    title="Clique para editar o nome da concreteira"
+                                  />
+                                  {concreteiras.length > 2 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoverConcreteira(c.id)}
+                                      className="text-slate-500 hover:text-rose-400 text-xs px-1"
+                                      title="Remover esta concreteira"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="flex items-center justify-center gap-1 mt-0.5 text-[10px] font-normal text-slate-300">
+                                  <span>Nome:</span>
+                                  <input
+                                    type="text"
+                                    value={c.contatoNome}
+                                    onChange={(e) => handleAtualizarContatoConcreteira(c.id, e.target.value)}
+                                    placeholder="Contato..."
+                                    className="bg-transparent border-b border-transparent hover:border-slate-600 focus:border-emerald-400 text-slate-200 text-[10px] text-center w-24 outline-none"
+                                  />
+                                </div>
+                              </th>
+                            ))}
+                          </tr>
+
+                          {/* LINHA 2 DE CABEÇALHO */}
+                          <tr className="bg-slate-100 text-slate-700 border-b-2 border-slate-300 font-black text-[11px]">
+                            <th className="py-2 px-2 text-center border-r border-slate-300 w-16">
+                              QUANT:
+                            </th>
+                            <th className="py-2 px-2 text-center border-r-2 border-slate-400 w-12">
+                              UND:
+                            </th>
+                            {concreteiras.map((c) => (
+                              <th
+                                key={`sub-${c.id}`}
+                                className="py-2 px-2 text-center border-r border-slate-300 bg-emerald-50 text-emerald-950 font-black tracking-wide"
+                              >
+                                VALOR UN / M:
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+
+                        <tbody className="divide-y divide-slate-200">
+                          {/* LINHAS DE SLUMPS DE CONCRETO */}
+                          {concretoSlumps.map((slump) => {
+                            const isAtivo = slump.id === concretoSlumpSelecionadoId;
+                            return (
+                              <tr
+                                key={slump.id}
+                                className={`transition-colors ${
+                                  isAtivo
+                                    ? "bg-emerald-50/70 font-semibold text-slate-900"
+                                    : "bg-white hover:bg-slate-50/60 text-slate-700"
+                                }`}
+                              >
+                                <td className="py-2.5 px-3 border-r-2 border-slate-300">
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="radio"
+                                      name="slump_ativo"
+                                      checked={isAtivo}
+                                      onChange={() => setConcretoSlumpSelecionadoId(slump.id)}
+                                      className="text-emerald-600 focus:ring-emerald-500 cursor-pointer h-4 w-4"
+                                      title="Marcar este slump como o traço a ser executado"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={slump.descricao}
+                                      onChange={(e) => handleAtualizarDescricaoSlump(slump.id, e.target.value)}
+                                      className="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 text-xs font-semibold w-full outline-none"
+                                    />
+                                    {isAtivo && (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 shrink-0">
+                                        Ativo
+                                      </span>
+                                    )}
+                                    {concretoSlumps.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoverSlumpConcreto(slump.id)}
+                                        className="text-slate-300 hover:text-rose-500 text-xs px-1"
+                                        title="Remover este traço"
+                                      >
+                                        ✕
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-2 text-center border-r border-slate-300 font-bold">
+                                  {isAtivo ? (
+                                    <span className="text-emerald-950 font-black text-sm">
+                                      {concretoVolumeM3}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-300 font-normal">—</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-2 text-center border-r-2 border-slate-400 text-slate-500 font-medium">
+                                  {slump.unidade || "m³"}
+                                </td>
+                                {concreteiras.map((c) => {
+                                  const preco = c.precosSlumps[slump.id] || 0;
+                                  return (
+                                    <td
+                                      key={`${slump.id}-${c.id}`}
+                                      className="py-2 px-3 text-right border-r border-slate-300"
+                                    >
+                                      <div className="flex items-center justify-end gap-1">
+                                        <span className="text-[10px] text-slate-400">R$</span>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          value={preco === 0 ? "" : preco}
+                                          onChange={(e) =>
+                                            handleAtualizarPrecoSlump(
+                                              c.id,
+                                              slump.id,
+                                              parseFloat(e.target.value) || 0
+                                            )
+                                          }
+                                          placeholder="0,00"
+                                          className="w-24 text-right font-bold text-xs bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 rounded px-2 py-1 outline-none text-slate-900"
+                                        />
+                                      </div>
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
+
+                          {/* LINHA DE BOMBA */}
+                          <tr className="bg-amber-50/40 text-slate-900 font-medium border-t border-slate-300">
+                            <td className="py-2.5 px-3 border-r-2 border-slate-300 flex items-center gap-2">
+                              <span className="text-amber-600 font-bold">🚚</span>
+                              <span className="font-bold text-slate-900">Bomba</span>
+                              <span className="text-[10px] text-slate-500">(Serviço de Bombeamento)</span>
+                            </td>
+                            <td className="py-2.5 px-2 text-center border-r border-slate-300 font-black text-slate-900 text-sm">
+                              {concretoVolumeBombaM3}
+                            </td>
+                            <td className="py-2.5 px-2 text-center border-r-2 border-slate-400 text-slate-500 font-medium">
+                              m³
+                            </td>
+                            {concreteiras.map((c) => (
+                              <td
+                                key={`bomba-${c.id}`}
+                                className="py-2 px-3 text-right border-r border-slate-300 bg-amber-50/20"
+                              >
+                                <div className="flex items-center justify-end gap-1">
+                                  <span className="text-[10px] text-slate-400">R$</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={c.precoBomba === 0 ? "" : c.precoBomba}
+                                    onChange={(e) =>
+                                      handleAtualizarPrecoBomba(
+                                        c.id,
+                                        parseFloat(e.target.value) || 0
+                                      )
+                                    }
+                                    placeholder="0,00"
+                                    className="w-24 text-right font-bold text-xs bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 rounded px-2 py-1 outline-none text-slate-900"
+                                  />
+                                </div>
+                              </td>
+                            ))}
+                          </tr>
+
+                          {/* LINHA AZUL: VALOR UN / M: (CONCRETO ESCOLHIDO + BOMBA) */}
+                          <tr className="bg-sky-200/90 border-t-2 border-b-2 border-sky-600 font-black text-sky-950">
+                            <td colSpan={3} className="py-2.5 px-3 border-r-2 border-slate-900 text-right uppercase tracking-wider text-[11px]">
+                              VALOR UN / M: (
+                              {resumoConcreteiras.slumpEscolhido?.descricao || "Concreto"} + Bomba):
+                            </td>
+                            {resumoConcreteiras.calculados.map((c) => {
+                              const isMelhorUnit =
+                                resumoConcreteiras.vencedor?.id === c.id;
+                              return (
+                                <td
+                                  key={c.id}
+                                  className={`py-2.5 px-3 text-right border-r border-slate-800 text-sm ${
+                                    isMelhorUnit ? "bg-emerald-200 text-emerald-950 font-black" : ""
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-end gap-1">
+                                    {isMelhorUnit && <span>🏆</span>}
+                                    <span>{formatBRL(c.somaUnitariaM3)}</span>
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </tbody>
+
+                        {/* RODAPÉ: VALOR TOTAL FINAL */}
+                        <tfoot>
+                          <tr className="bg-slate-900 text-white font-black">
+                            <td
+                              colSpan={3}
+                              className="py-3 px-3 text-right border-r-2 border-slate-700 uppercase tracking-wider text-xs"
+                            >
+                              VALOR TOTAL: ({concretoVolumeM3} m³)
+                            </td>
+                            {resumoConcreteiras.calculados.map((c) => {
+                              const isVencedor = resumoConcreteiras.vencedor?.id === c.id;
+                              return (
+                                <td
+                                  key={c.id}
+                                  className={`py-3 px-3 text-right border-r border-slate-800 ${
+                                    isVencedor ? "bg-emerald-900/90 text-emerald-300 ring-2 ring-emerald-400 inset-0" : ""
+                                  }`}
+                                >
+                                  <div className="text-base font-black tabular-nums">
+                                    {formatBRL(c.valorTotal)}
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 font-normal mt-0.5">
+                                    Mat: {formatBRL(c.subtotalConcreto)} + Bomba: {formatBRL(c.subtotalBomba)}
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Linha de Ações: Botão Emitir OC para cada Concreteira */}
+                          <tr className="bg-slate-100">
+                            <td colSpan={3} className="py-2.5 px-3 border-r-2 border-slate-300 text-slate-600 text-right text-[11px] font-semibold">
+                              Ações Comerciais:
+                            </td>
+                            {resumoConcreteiras.calculados.map((c) => {
+                              const isVencedor = resumoConcreteiras.vencedor?.id === c.id;
+                              return (
+                                <td key={c.id} className="py-2.5 px-3 border-r border-slate-300 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEmitirOrdemConcreteira(c.id)}
+                                    className={`w-full py-1.5 px-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 shadow-2xs ${
+                                      isVencedor
+                                        ? "bg-emerald-700 hover:bg-emerald-800 text-white"
+                                        : "bg-slate-800 hover:bg-slate-700 text-slate-200"
+                                    }`}
+                                  >
+                                    <span>📄</span> Emitir OC
+                                  </button>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* MODO 3: PAINEL / CENTRAL DE COTAÇÕES SALVAS */}
               {modoCotacoes === "painel_cotacoes" && (() => {
                 const totalCotacoes = processosCotacoes.length;
