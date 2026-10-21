@@ -406,9 +406,13 @@ export interface ConcreteiraCotada {
 export interface DadosCotacaoConcreto {
   obraId: string;
   obraNome: string;
+  obraNomeCustom?: string;
   elemento: string;
   volumeM3: number;
   volumeBombaM3: number;
+  nomeBomba?: string;
+  descricaoBomba?: string;
+  undBomba?: string;
   slumpSelecionadoId: string;
   incluirBombaNoTotal: boolean;
   slumps: SlumpOpcaoConcreto[];
@@ -1553,6 +1557,10 @@ export default function HomePage() {
   // ESTADOS DO MÓDULO ESPECIALIZADO DE CONCRETEIRAS (USINADO & BOMBA)
   // -----------------------------------------------------------------------
   const [concretoObraId, setConcretoObraId] = useState<string>("");
+  const [concretoObraNomeCustom, setConcretoObraNomeCustom] = useState<string>("Galileu");
+  const [concretoNomeBomba, setConcretoNomeBomba] = useState<string>("Bomba");
+  const [concretoDescricaoBomba, setConcretoDescricaoBomba] = useState<string>("(Serviço de Bombeamento)");
+  const [concretoUndBomba, setConcretoUndBomba] = useState<string>("m³");
   const [concretoElemento, setConcretoElemento] = useState<string>("Laje / Estrutura");
   const [concretoVolumeM3, setConcretoVolumeM3] = useState<number>(63);
   const [concretoVolumeBombaM3, setConcretoVolumeBombaM3] = useState<number>(63);
@@ -6217,6 +6225,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     );
   };
 
+  const handleAtualizarUndSlump = (slumpId: string, unidade: string) => {
+    setConcretoSlumps((prev) =>
+      prev.map((s) => (s.id === slumpId ? { ...s, unidade } : s))
+    );
+  };
+
   const handleAdicionarSlumpConcreto = () => {
     const novoId = `slump-${Date.now()}`;
     setConcretoSlumps((prev) => [
@@ -6263,13 +6277,19 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   };
 
   const handleSalvarCotacaoConcreto = () => {
-    const obraSel = obras.find((o) => o.id === concretoObraId) || obras[0];
+    const obraSel = obras.find((o) => o.id === concretoObraId);
+    const obraNomeFinal = concretoObraNomeCustom || obraSel?.nome || "Galileu";
+
     const dadosSalvar: DadosCotacaoConcreto = {
       obraId: concretoObraId,
-      obraNome: obraSel?.nome || "Galileu",
+      obraNome: obraNomeFinal,
+      obraNomeCustom: concretoObraNomeCustom,
       elemento: concretoElemento,
       volumeM3: concretoVolumeM3,
       volumeBombaM3: concretoVolumeBombaM3,
+      nomeBomba: concretoNomeBomba,
+      descricaoBomba: concretoDescricaoBomba,
+      undBomba: concretoUndBomba,
       slumpSelecionadoId: concretoSlumpSelecionadoId,
       incluirBombaNoTotal: concretoIncluirBombaNoTotal,
       slumps: concretoSlumps,
@@ -6291,6 +6311,10 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     setConcretoVolumeM3(63);
     setConcretoVolumeBombaM3(63);
     setConcretoElemento("Laje / Estrutura");
+    setConcretoObraNomeCustom("Galileu");
+    setConcretoNomeBomba("Bomba");
+    setConcretoDescricaoBomba("(Serviço de Bombeamento)");
+    setConcretoUndBomba("m³");
     dispararAviso("Campos redefinidos para os valores padrão de cotação.");
   };
 
@@ -6313,7 +6337,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     const subtotalBomba = volBomba * precoBomba;
     const total = subtotalConcreto + (concretoIncluirBombaNoTotal ? subtotalBomba : 0);
 
-    const obraSel = obras.find((o) => o.id === concretoObraId) || obras[0];
+    const obraSel = obras.find((o) => o.id === concretoObraId);
+    const obraNomeFinal = concretoObraNomeCustom || obraSel?.nome || "Galileu";
     const anoAtual = new Date().getFullYear();
     const numeroOc = `OC-${anoAtual}-${String(ordens.length + 1).padStart(4, "0")}`;
 
@@ -6321,7 +6346,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       {
         codigo: "MAT-CONC-01",
         descricao: slumpEscolhido ? `${slumpEscolhido.descricao} (Aplicação: ${concretoElemento || "Estrutura"})` : "Concreto Usinado FCK 40",
-        unidade: "m³",
+        unidade: slumpEscolhido?.unidade || "m³",
         quantidade: vol,
         precoUnitario: precoConcreto,
         subtotal: subtotalConcreto,
@@ -6331,8 +6356,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     if (concretoIncluirBombaNoTotal && precoBomba > 0) {
       itensOc.push({
         codigo: "SRV-BOMBA-01",
-        descricao: `Serviço de Bombeamento de Concreto (${concretoElemento || "Estrutura"})`,
-        unidade: "m³",
+        descricao: `${concretoNomeBomba || "Serviço de Bombeamento de Concreto"} (${concretoElemento || "Estrutura"})`,
+        unidade: concretoUndBomba || "m³",
         quantidade: volBomba,
         precoUnitario: precoBomba,
         subtotal: subtotalBomba,
@@ -6343,9 +6368,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       id: `oc-conc-${Date.now()}`,
       numeroOc,
       scId: "",
-      scCodigo: obraSel ? `CONCR-${obraSel.nome.substring(0, 4).toUpperCase()}` : "CONCR",
+      scCodigo: obraNomeFinal ? `CONCR-${obraNomeFinal.substring(0, 4).toUpperCase()}` : "CONCR",
       obraId: concretoObraId || (obraSel ? obraSel.id : "obra-1"),
-      obraNome: obraSel ? obraSel.nome : "Galileu",
+      obraNome: obraNomeFinal,
       obraEndereco: obraSel?.endereco || "Itapema/SC",
       obraEngenheiro: obraSel?.engenheiro || "Engenharia JC Bauer",
       categoria: "Concreto Usinado & Bomba",
@@ -6381,9 +6406,11 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   };
 
   const handleExportarConcreteirasExcel = () => {
-    const obraSel = obras.find((o) => o.id === concretoObraId) || obras[0];
-    const obraNome = obraSel ? obraSel.nome : "Galileu";
+    const obraSel = obras.find((o) => o.id === concretoObraId);
+    const obraNomeFinal = concretoObraNomeCustom || obraSel?.nome || "Galileu";
     const slumpAtivo = resumoConcreteiras.slumpEscolhido;
+    const nomeBombaFinal = concretoNomeBomba || "Bomba";
+    const undBombaFinal = concretoUndBomba || "m³";
 
     let html = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -6410,11 +6437,11 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           </tr>
           <tr>
             <td colspan="${3 + concreteiras.length}" style="background-color: #f8fafc; font-size: 10pt;">
-              <b>Empreendimento:</b> ${obraNome} | <b>Elemento:</b> ${concretoElemento || "Estrutura"} | <b>Volume:</b> ${concretoVolumeM3} m³ | <b>Bomba:</b> ${concretoVolumeBombaM3} m³ | <b>Data:</b> ${new Date().toLocaleDateString("pt-BR")}
+              <b>Empreendimento:</b> ${obraNomeFinal} | <b>Elemento:</b> ${concretoElemento || "Estrutura"} | <b>Volume:</b> ${concretoVolumeM3} m³ | <b>Bomba:</b> ${concretoVolumeBombaM3} m³ | <b>Data:</b> ${new Date().toLocaleDateString("pt-BR")}
             </td>
           </tr>
           <tr>
-            <th rowspan="2" class="header-sub" style="vertical-align: middle; text-align: center;">${obraNome}</th>
+            <th rowspan="2" class="header-sub" style="vertical-align: middle; text-align: center;">${obraNomeFinal}</th>
             <th colspan="2" class="header-sub" style="text-align: center;">ESPECIFICAÇÕES</th>
             ${concreteiras.map((c) => `<th class="col-concreteira">${c.nome}<br><span style="font-size: 9pt; font-weight: normal;">Nome: ${c.contatoNome || "N/I"}</span></th>`).join("")}
           </tr>
@@ -6438,16 +6465,16 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             `;
           }).join("")}
           <tr>
-            <td>Bomba</td>
+            <td>${nomeBombaFinal}</td>
             <td class="center">${concretoVolumeBombaM3}</td>
-            <td class="center">m³</td>
+            <td class="center">${undBombaFinal}</td>
             ${concreteiras.map((c) => {
               const p = c.precoBomba || 0;
               return `<td class="num">${p > 0 ? "R$ " + p.toFixed(2).replace(".", ",") : "-"}</td>`;
             }).join("")}
           </tr>
           <tr class="linha-azul">
-            <td colspan="3">VALOR UN / M: (${slumpAtivo?.descricao || "Concreto"} + Bomba)</td>
+            <td colspan="3">VALOR UN / M: (${slumpAtivo?.descricao || "Concreto"} + ${nomeBombaFinal})</td>
             ${resumoConcreteiras.calculados.map((c) => `
               <td class="num">${"R$ " + c.somaUnitariaM3.toFixed(2).replace(".", ",")}</td>
             `).join("")}
@@ -6467,7 +6494,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `comparativo_concreteiras_${obraNome.toLowerCase().replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.xls`;
+    a.download = `comparativo_concreteiras_${obraNomeFinal.toLowerCase().replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.xls`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -6476,9 +6503,11 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   };
 
   const handleGerarConcreteirasPDF = () => {
-    const obraSel = obras.find((o) => o.id === concretoObraId) || obras[0];
-    const obraNome = obraSel ? obraSel.nome : "Galileu";
+    const obraSel = obras.find((o) => o.id === concretoObraId);
+    const obraNomeFinal = concretoObraNomeCustom || obraSel?.nome || "Galileu";
     const slumpAtivo = resumoConcreteiras.slumpEscolhido;
+    const nomeBombaFinal = concretoNomeBomba || "Bomba";
+    const undBombaFinal = concretoUndBomba || "m³";
 
     const html = `<!DOCTYPE html>
 <html>
@@ -6526,9 +6555,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     </div>
   </div>
   <div class="meta-box">
-    <div>Empreendimento: <strong>${obraNome}</strong></div>
+    <div>Empreendimento: <strong>${obraNomeFinal}</strong></div>
     <div>Peça / Elemento: <strong>${concretoElemento || "Estrutura"}</strong></div>
-    <div>Volume Programado: <strong>${concretoVolumeM3} m³ (Bomba: ${concretoVolumeBombaM3} m³)</strong></div>
+    <div>Volume Programado: <strong>${concretoVolumeM3} m³ (${nomeBombaFinal}: ${concretoVolumeBombaM3} ${undBombaFinal})</strong></div>
     <div>Traço Selecionado: <strong>${slumpAtivo?.descricao || "Concreto FCK 40"}</strong></div>
   </div>
   <div class="kpi-row">
@@ -6550,7 +6579,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     <thead>
       <tr>
         <th rowspan="2" style="background: #f1f5f9; text-align: center; vertical-align: middle; font-weight: 800; width: 140px;">
-          ${obraNome}
+          ${obraNomeFinal}
         </th>
         <th colspan="2" style="background: #f8fafc; text-align: center; font-weight: 700; width: 80px;">ESPECIFICAÇÕES</th>
         ${concreteiras.map((c) => `
@@ -6583,15 +6612,15 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         `;
       }).join("")}
       <tr>
-        <td>Bomba (Serviço de Bombeamento)</td>
+        <td>${nomeBombaFinal} ${concretoDescricaoBomba ? `<span style="font-size: 9px; color: #64748b;">${concretoDescricaoBomba}</span>` : ""}</td>
         <td class="text-center">${concretoVolumeBombaM3}</td>
-        <td class="text-center">m³</td>
+        <td class="text-center">${undBombaFinal}</td>
         ${concreteiras.map((c) => `
           <td class="text-right">${formatBRL(c.precoBomba || 0)}</td>
         `).join("")}
       </tr>
       <tr class="linha-azul">
-        <td colspan="3">VALOR UN / M: (${slumpAtivo?.descricao || "Concreto"} + Bomba)</td>
+        <td colspan="3">VALOR UN / M: (${slumpAtivo?.descricao || "Concreto"} + ${nomeBombaFinal})</td>
         ${resumoConcreteiras.calculados.map((c) => `
           <td class="text-right" style="font-size: 11px;">${formatBRL(c.somaUnitariaM3)}</td>
         `).join("")}
@@ -10926,7 +10955,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             </span>
                           </div>
                           <div className="text-[11px] text-slate-400">
-                            Cálculo de volume real, seleção de slump/traço e bombeamento integrado
+                            Cálculo de volume real, seleção de slump/traço e bombeamento integrado — 100% editável na tabela
                           </div>
                         </div>
                       </div>
@@ -10961,7 +10990,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                         type="button"
                         onClick={handleLimparCotacaoConcreto}
                         className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/40 text-rose-300 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition"
-                        title="Redefinir volumes padrão"
+                        title="Redefinir volumes e valores para o padrão inicial"
                       >
                         <span>↺</span> Redefinir Padrão
                       </button>
@@ -10975,18 +11004,37 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                         <label className="block text-xs font-bold text-slate-700 mb-1">
                           Empreendimento / Obra:
                         </label>
-                        <select
-                          value={concretoObraId}
-                          onChange={(e) => setConcretoObraId(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
-                        >
-                          <option value="">Selecione a Obra...</option>
-                          {obras.map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {o.nome}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="space-y-1">
+                          <input
+                            type="text"
+                            value={concretoObraNomeCustom}
+                            onChange={(e) => {
+                              setConcretoObraNomeCustom(e.target.value);
+                              const achada = obras.find(o => o.nome.toLowerCase() === e.target.value.toLowerCase());
+                              if (achada) setConcretoObraId(achada.id);
+                            }}
+                            placeholder="Digite o nome da Obra..."
+                            className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900"
+                          />
+                          {obras.length > 0 && (
+                            <select
+                              value={concretoObraId}
+                              onChange={(e) => {
+                                setConcretoObraId(e.target.value);
+                                const oSel = obras.find((o) => o.id === e.target.value);
+                                if (oSel) setConcretoObraNomeCustom(oSel.nome);
+                              }}
+                              className="w-full bg-slate-100 border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-600 focus:outline-none"
+                            >
+                              <option value="">(Ou selecione obra cadastrada...)</option>
+                              {obras.map((o) => (
+                                <option key={o.id} value={o.id}>
+                                  {o.nome}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
                       </div>
 
                       <div>
@@ -11004,15 +11052,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Volume do Concreto (m³):
+                          Volume Concreto (m³):
                         </label>
                         <input
                           type="number"
                           step="0.5"
                           min="0"
-                          value={concretoVolumeM3}
+                          value={concretoVolumeM3 === 0 ? "" : concretoVolumeM3}
                           onChange={(e) => setConcretoVolumeM3(parseFloat(e.target.value) || 0)}
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900 text-right"
+                          placeholder="0"
+                          className="w-full bg-emerald-50 border-2 border-emerald-300 rounded-lg px-3 py-2 text-xs font-black text-emerald-950 focus:outline-none focus:border-emerald-600 text-right"
+                          title="Também editável diretamente na tabela abaixo"
                         />
                       </div>
 
@@ -11024,9 +11074,11 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           type="number"
                           step="0.5"
                           min="0"
-                          value={concretoVolumeBombaM3}
+                          value={concretoVolumeBombaM3 === 0 ? "" : concretoVolumeBombaM3}
                           onChange={(e) => setConcretoVolumeBombaM3(parseFloat(e.target.value) || 0)}
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900 text-right"
+                          placeholder="0"
+                          className="w-full bg-amber-50 border-2 border-amber-300 rounded-lg px-3 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-amber-600 text-right"
+                          title="Também editável diretamente na tabela abaixo"
                         />
                       </div>
                     </div>
@@ -11041,8 +11093,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                         />
                         <span>Incluir Serviço de Bomba no Valor Total e no Preço Un./m³</span>
                       </label>
-                      <span className="text-[11px] text-slate-500">
-                        * Apenas o traço de concreto selecionado aplica volume no cálculo total (evitando duplicar volume).
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        💡 Dica: Todos os campos, nomes, volumes (QUANT) e valores são editáveis diretamente dentro das células da tabela.
                       </span>
                     </div>
                   </div>
@@ -11101,27 +11153,36 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                     </div>
                   </div>
 
-                  {/* TABELA COMPARATIVA DE CONCRETEIRAS (ESTRUTURA EXATA DA PLANILHA EXCEL) */}
+                  {/* TABELA COMPARATIVA DE CONCRETEIRAS (ESTRUTURA EXATA DA PLANILHA EXCEL - 100% EDITÁVEL) */}
                   <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
                     <div className="overflow-x-auto">
-                      <table className="w-full text-xs text-left border-collapse min-w-[850px]">
+                      <table className="w-full text-xs text-left border-collapse min-w-[900px]">
                         <thead>
                           {/* LINHA 1 DE CABEÇALHO */}
                           <tr className="bg-slate-900 text-white border-b border-slate-800 font-bold">
                             <th
                               rowSpan={2}
-                              className="py-3 px-3 text-center border-r-2 border-slate-700 bg-slate-800 align-middle text-sm font-black w-48"
+                              className="py-3 px-3 text-center border-r-2 border-slate-700 bg-slate-800 align-middle w-52"
                             >
-                              <div className="text-[10px] uppercase text-emerald-400 font-extrabold tracking-wider">
+                              <div className="text-[10px] uppercase text-emerald-400 font-extrabold tracking-wider mb-1">
                                 OBRA:
                               </div>
-                              <div className="text-white text-base">
-                                {obras.find((o) => o.id === concretoObraId)?.nome || "Galileu"}
-                              </div>
+                              <input
+                                type="text"
+                                value={concretoObraNomeCustom}
+                                onChange={(e) => {
+                                  setConcretoObraNomeCustom(e.target.value);
+                                  const enc = obras.find(o => o.nome.toLowerCase() === e.target.value.toLowerCase());
+                                  if (enc) setConcretoObraId(enc.id);
+                                }}
+                                placeholder="Nome da Obra..."
+                                className="w-full bg-slate-900/90 border border-slate-600 hover:border-slate-400 focus:border-emerald-400 text-white font-black text-center text-sm rounded px-2 py-1 outline-none transition uppercase"
+                                title="Editar nome da Obra diretamente aqui"
+                              />
                             </th>
                             <th
                               colSpan={2}
-                              className="py-2 px-3 text-center border-r-2 border-slate-700 bg-slate-800 uppercase tracking-wider text-[11px] w-28"
+                              className="py-2 px-3 text-center border-r-2 border-slate-700 bg-slate-800 uppercase tracking-wider text-[11px] w-32"
                             >
                               ESPECIFICAÇÕES
                             </th>
@@ -11135,28 +11196,30 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                     type="text"
                                     value={c.nome}
                                     onChange={(e) => handleAtualizarNomeConcreteira(c.id, e.target.value)}
-                                    className="bg-transparent border-b border-transparent hover:border-slate-500 focus:border-emerald-400 focus:bg-slate-800 text-white font-black text-center text-sm w-full outline-none uppercase"
-                                    title="Clique para editar o nome da concreteira"
+                                    placeholder="Concreteira"
+                                    className="bg-slate-800/90 border border-slate-700 hover:border-slate-500 focus:border-emerald-400 focus:bg-slate-950 text-white font-black text-center text-sm w-full outline-none uppercase py-1 px-1.5 rounded transition shadow-inner"
+                                    title="Editar nome da concreteira/fornecedor"
                                   />
                                   {concreteiras.length > 2 && (
                                     <button
                                       type="button"
                                       onClick={() => handleRemoverConcreteira(c.id)}
-                                      className="text-slate-500 hover:text-rose-400 text-xs px-1"
+                                      className="text-slate-400 hover:text-rose-400 text-xs px-1 font-bold"
                                       title="Remover esta concreteira"
                                     >
                                       ✕
                                     </button>
                                   )}
                                 </div>
-                                <div className="flex items-center justify-center gap-1 mt-0.5 text-[10px] font-normal text-slate-300">
-                                  <span>Nome:</span>
+                                <div className="flex items-center justify-center gap-1 mt-1 text-[11px] font-normal text-slate-300">
+                                  <span className="text-slate-400 text-[10px]">Nome:</span>
                                   <input
                                     type="text"
                                     value={c.contatoNome}
                                     onChange={(e) => handleAtualizarContatoConcreteira(c.id, e.target.value)}
                                     placeholder="Contato..."
-                                    className="bg-transparent border-b border-transparent hover:border-slate-600 focus:border-emerald-400 text-slate-200 text-[10px] text-center w-24 outline-none"
+                                    className="bg-slate-800/80 border border-slate-700 hover:border-slate-500 focus:border-emerald-400 text-slate-200 text-xs text-center w-28 outline-none py-0.5 px-1.5 rounded transition"
+                                    title="Editar nome do contato/vendedor"
                                   />
                                 </div>
                               </th>
@@ -11165,10 +11228,10 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
                           {/* LINHA 2 DE CABEÇALHO */}
                           <tr className="bg-slate-100 text-slate-700 border-b-2 border-slate-300 font-black text-[11px]">
-                            <th className="py-2 px-2 text-center border-r border-slate-300 w-16">
+                            <th className="py-2 px-2 text-center border-r border-slate-300 w-20">
                               QUANT:
                             </th>
-                            <th className="py-2 px-2 text-center border-r-2 border-slate-400 w-12">
+                            <th className="py-2 px-2 text-center border-r-2 border-slate-400 w-14">
                               UND:
                             </th>
                             {concreteiras.map((c) => (
@@ -11195,24 +11258,27 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                     : "bg-white hover:bg-slate-50/60 text-slate-700"
                                 }`}
                               >
-                                <td className="py-2.5 px-3 border-r-2 border-slate-300">
+                                {/* Descrição do Traço */}
+                                <td className="py-2 px-3 border-r-2 border-slate-300">
                                   <div className="flex items-center gap-2">
                                     <input
                                       type="radio"
                                       name="slump_ativo"
                                       checked={isAtivo}
                                       onChange={() => setConcretoSlumpSelecionadoId(slump.id)}
-                                      className="text-emerald-600 focus:ring-emerald-500 cursor-pointer h-4 w-4"
+                                      className="text-emerald-600 focus:ring-emerald-500 cursor-pointer h-4 w-4 shrink-0"
                                       title="Marcar este slump como o traço a ser executado"
                                     />
                                     <input
                                       type="text"
                                       value={slump.descricao}
                                       onChange={(e) => handleAtualizarDescricaoSlump(slump.id, e.target.value)}
-                                      className="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 text-xs font-semibold w-full outline-none"
+                                      placeholder="Ex: Concreto 14+-20 40mpa"
+                                      className="bg-slate-50/90 border border-slate-200 hover:border-slate-400 focus:border-slate-900 focus:bg-white text-xs font-bold text-slate-900 w-full outline-none px-2 py-1 rounded transition"
+                                      title="Editar descrição do traço de concreto"
                                     />
                                     {isAtivo && (
-                                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 shrink-0">
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0 border border-emerald-200">
                                         Ativo
                                       </span>
                                     )}
@@ -11220,7 +11286,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                       <button
                                         type="button"
                                         onClick={() => handleRemoverSlumpConcreto(slump.id)}
-                                        className="text-slate-300 hover:text-rose-500 text-xs px-1"
+                                        className="text-slate-300 hover:text-rose-500 text-xs px-1 font-bold"
                                         title="Remover este traço"
                                       >
                                         ✕
@@ -11228,18 +11294,46 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                     )}
                                   </div>
                                 </td>
-                                <td className="py-2.5 px-2 text-center border-r border-slate-300 font-bold">
-                                  {isAtivo ? (
-                                    <span className="text-emerald-950 font-black text-sm">
-                                      {concretoVolumeM3}
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-300 font-normal">—</span>
-                                  )}
+
+                                {/* QUANTIDADE (METROS CÚBICOS) - TOTALMENTE EDITÁVEL NA CÉLULA */}
+                                <td className="py-2 px-2 text-center border-r border-slate-300">
+                                  <input
+                                    type="number"
+                                    step="0.5"
+                                    min="0"
+                                    value={isAtivo ? (concretoVolumeM3 === 0 ? "" : concretoVolumeM3) : ""}
+                                    placeholder={isAtivo ? "0" : "—"}
+                                    onChange={(e) => {
+                                      const val = parseFloat(e.target.value) || 0;
+                                      setConcretoSlumpSelecionadoId(slump.id);
+                                      setConcretoVolumeM3(val);
+                                    }}
+                                    onFocus={() => {
+                                      if (!isAtivo) {
+                                        setConcretoSlumpSelecionadoId(slump.id);
+                                      }
+                                    }}
+                                    className={`w-18 text-center font-black text-xs py-1 px-1 rounded-md border-2 outline-none transition ${
+                                      isAtivo
+                                        ? "bg-emerald-50 border-emerald-400 text-emerald-950 ring-1 ring-emerald-300"
+                                        : "bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-400 focus:border-slate-900"
+                                    }`}
+                                    title={isAtivo ? "Volume em m³ para este traço (editável)" : "Clique ou digite para ativar este traço e definir seu volume"}
+                                  />
                                 </td>
-                                <td className="py-2.5 px-2 text-center border-r-2 border-slate-400 text-slate-500 font-medium">
-                                  {slump.unidade || "m³"}
+
+                                {/* UNIDADE */}
+                                <td className="py-2 px-1 text-center border-r-2 border-slate-400">
+                                  <input
+                                    type="text"
+                                    value={slump.unidade || "m³"}
+                                    onChange={(e) => handleAtualizarUndSlump(slump.id, e.target.value)}
+                                    className="w-10 text-center font-bold text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 outline-none text-slate-700 py-0.5"
+                                    title="Editar unidade de medida"
+                                  />
                                 </td>
+
+                                {/* PREÇOS UNITÁRIOS POR CONCRETEIRA */}
                                 {concreteiras.map((c) => {
                                   const preco = c.precosSlumps[slump.id] || 0;
                                   return (
@@ -11248,7 +11342,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                       className="py-2 px-3 text-right border-r border-slate-300"
                                     >
                                       <div className="flex items-center justify-end gap-1">
-                                        <span className="text-[10px] text-slate-400">R$</span>
+                                        <span className="text-[10px] text-slate-400 font-bold">R$</span>
                                         <input
                                           type="number"
                                           step="0.01"
@@ -11262,7 +11356,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                             )
                                           }
                                           placeholder="0,00"
-                                          className="w-24 text-right font-bold text-xs bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 rounded px-2 py-1 outline-none text-slate-900"
+                                          className="w-24 text-right font-bold text-xs bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 focus:bg-white rounded px-2 py-1 outline-none text-slate-900 transition"
+                                          title="Editar preço do concreto desta empresa"
                                         />
                                       </div>
                                     </td>
@@ -11274,24 +11369,62 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
                           {/* LINHA DE BOMBA */}
                           <tr className="bg-amber-50/40 text-slate-900 font-medium border-t border-slate-300">
-                            <td className="py-2.5 px-3 border-r-2 border-slate-300 flex items-center gap-2">
-                              <span className="text-amber-600 font-bold">🚚</span>
-                              <span className="font-bold text-slate-900">Bomba</span>
-                              <span className="text-[10px] text-slate-500">(Serviço de Bombeamento)</span>
+                            {/* Nome e descrição da Bomba */}
+                            <td className="py-2 px-3 border-r-2 border-slate-300">
+                              <div className="flex items-center gap-2">
+                                <span className="text-amber-600 font-bold">🚚</span>
+                                <input
+                                  type="text"
+                                  value={concretoNomeBomba}
+                                  onChange={(e) => setConcretoNomeBomba(e.target.value)}
+                                  placeholder="Bomba"
+                                  className="bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 rounded px-2 py-1 text-xs font-bold text-slate-900 outline-none w-24"
+                                  title="Editar nome do serviço de bomba"
+                                />
+                                <input
+                                  type="text"
+                                  value={concretoDescricaoBomba}
+                                  onChange={(e) => setConcretoDescricaoBomba(e.target.value)}
+                                  placeholder="(Serviço de Bombeamento)"
+                                  className="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 text-[11px] text-slate-500 outline-none flex-1 py-0.5"
+                                  title="Editar subtítulo da bomba"
+                                />
+                              </div>
                             </td>
-                            <td className="py-2.5 px-2 text-center border-r border-slate-300 font-black text-slate-900 text-sm">
-                              {concretoVolumeBombaM3}
+
+                            {/* QUANTIDADE DA BOMBA - TOTALMENTE EDITÁVEL NA CÉLULA */}
+                            <td className="py-2 px-2 text-center border-r border-slate-300">
+                              <input
+                                type="number"
+                                step="0.5"
+                                min="0"
+                                value={concretoVolumeBombaM3 === 0 ? "" : concretoVolumeBombaM3}
+                                onChange={(e) => setConcretoVolumeBombaM3(parseFloat(e.target.value) || 0)}
+                                placeholder="0"
+                                className="w-18 text-center font-black text-xs py-1 px-1 rounded-md bg-amber-50 border-2 border-amber-300 text-slate-900 ring-1 ring-amber-200 outline-none focus:border-slate-900"
+                                title="Volume bombeado em m³ (editável)"
+                              />
                             </td>
-                            <td className="py-2.5 px-2 text-center border-r-2 border-slate-400 text-slate-500 font-medium">
-                              m³
+
+                            {/* UNIDADE DA BOMBA */}
+                            <td className="py-2 px-1 text-center border-r-2 border-slate-400">
+                              <input
+                                type="text"
+                                value={concretoUndBomba}
+                                onChange={(e) => setConcretoUndBomba(e.target.value)}
+                                className="w-10 text-center font-bold text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 outline-none text-slate-700 py-0.5"
+                                title="Editar unidade da bomba"
+                              />
                             </td>
+
+                            {/* PREÇOS DA BOMBA POR CONCRETEIRA */}
                             {concreteiras.map((c) => (
                               <td
                                 key={`bomba-${c.id}`}
                                 className="py-2 px-3 text-right border-r border-slate-300 bg-amber-50/20"
                               >
                                 <div className="flex items-center justify-end gap-1">
-                                  <span className="text-[10px] text-slate-400">R$</span>
+                                  <span className="text-[10px] text-slate-400 font-bold">R$</span>
                                   <input
                                     type="number"
                                     step="0.01"
@@ -11304,7 +11437,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                       )
                                     }
                                     placeholder="0,00"
-                                    className="w-24 text-right font-bold text-xs bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 rounded px-2 py-1 outline-none text-slate-900"
+                                    className="w-24 text-right font-bold text-xs bg-slate-50 border border-slate-200 hover:border-slate-400 focus:border-slate-900 focus:bg-white rounded px-2 py-1 outline-none text-slate-900 transition"
+                                    title="Editar preço da bomba desta empresa"
                                   />
                                 </div>
                               </td>
@@ -11315,7 +11449,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           <tr className="bg-sky-200/90 border-t-2 border-b-2 border-sky-600 font-black text-sky-950">
                             <td colSpan={3} className="py-2.5 px-3 border-r-2 border-slate-900 text-right uppercase tracking-wider text-[11px]">
                               VALOR UN / M: (
-                              {resumoConcreteiras.slumpEscolhido?.descricao || "Concreto"} + Bomba):
+                              {resumoConcreteiras.slumpEscolhido?.descricao || "Concreto"} + {concretoNomeBomba || "Bomba"}):
                             </td>
                             {resumoConcreteiras.calculados.map((c) => {
                               const isMelhorUnit =
