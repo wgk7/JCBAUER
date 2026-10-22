@@ -1644,82 +1644,28 @@ export default function HomePage() {
   // -----------------------------------------------------------------------
   // ESTADOS DO MÓDULO DE COMPRAS COLETIVAS (AGRUPAMENTO MULTIOBRA)
   // -----------------------------------------------------------------------
-  const [loteColetivoTitulo, setLoteColetivoTitulo] = useState<string>(
-    "Lote Corporativo #01 - Insumos Estruturais Básicos (Aço, Cimento, Argamassa e Tubos)"
-  );
-  const [loteStatus, setLoteStatus] = useState<"Em Negociação" | "Aprovado" | "OCs Emitidas">("Em Negociação");
-  const [loteObrasParticipantes, setLoteObrasParticipantes] = useState<{ id: string; nome: string }[]>([
-    { id: "obra-1", nome: "Galileu" },
-    { id: "obra-2", nome: "Residencial Aurora" },
-    { id: "obra-3", nome: "Edifício Solar" },
-  ]);
-
-  const [loteItens, setLoteItens] = useState<ItemCompraColetiva[]>([
-    {
-      id: "it-col-1",
-      descricao: "Cimento CP-IV 32 RS (Sacos 50kg)",
-      categoria: "Alvenaria & Estrutura",
-      unidade: "sc",
-      demandasPorObra: { "obra-1": 200, "obra-2": 350, "obra-3": 450 },
-      precoReferenciaVarejo: 44.5,
-      precosFornecedores: { "forn-col-1": 34.9, "forn-col-2": 35.5, "forn-col-3": 36.2 },
-    },
-    {
-      id: "it-col-2",
-      descricao: "Barra de Aço CA-50 10.0mm 12m (Gerdau)",
-      categoria: "Aço & Armaduras",
-      unidade: "br",
-      demandasPorObra: { "obra-1": 80, "obra-2": 120, "obra-3": 150 },
-      precoReferenciaVarejo: 68.0,
-      precosFornecedores: { "forn-col-1": 52.4, "forn-col-2": 53.1, "forn-col-3": 55.0 },
-    },
-    {
-      id: "it-col-3",
-      descricao: "Argamassa AC-III Cinza 20kg (Portokoll)",
-      categoria: "Acabamentos & Revestimento",
-      unidade: "sc",
-      demandasPorObra: { "obra-1": 150, "obra-2": 200, "obra-3": 250 },
-      precoReferenciaVarejo: 38.9,
-      precosFornecedores: { "forn-col-1": 29.8, "forn-col-2": 31.0, "forn-col-3": 32.5 },
-    },
-    {
-      id: "it-col-4",
-      descricao: "Tubo PVC Esgoto Série Normal 100mm 6m (Tigre)",
-      categoria: "Hidrossanitário",
-      unidade: "br",
-      demandasPorObra: { "obra-1": 40, "obra-2": 60, "obra-3": 80 },
-      precoReferenciaVarejo: 74.0,
-      precosFornecedores: { "forn-col-1": 58.9, "forn-col-2": 61.5, "forn-col-3": 59.2 },
-    },
-  ]);
-
+  const [loteColetivoTitulo, setLoteColetivoTitulo] = useState<string>("");
+  const [loteStatus, setLoteStatus] = useState<"Em NegociaÃ§Ã£o" | "Aprovado" | "OCs Emitidas">("Em NegociaÃ§Ã£o");
+  const [loteObrasParticipantes, setLoteObrasParticipantes] = useState<{ id: string; nome: string }[]>([]);
+  const [loteItens, setLoteItens] = useState<ItemCompraColetiva[]>([]);
   const [loteFornecedores, setLoteFornecedores] = useState<FornecedorLoteColetivo[]>([
     {
       id: "forn-col-1",
-      nome: "VOTORAN DISTRIBUIÇÃO CORPORATIVA",
-      contato: "Carlos Eduardo",
-      telefone: "(47) 99881-2233",
-      condicaoPagamento: "28/42 DDL",
+      nome: "",
+      contato: "",
+      telefone: "",
+      condicaoPagamento: "28 DDL",
       tipoFrete: "CIF",
       valorFreteTotal: 0,
     },
     {
       id: "forn-col-2",
-      nome: "COMERCIAL ESPERANÇA ATACADISTA",
-      contato: "Mariana Silva",
-      telefone: "(47) 99772-3344",
+      nome: "",
+      contato: "",
+      telefone: "",
       condicaoPagamento: "30 DDL",
       tipoFrete: "CIF",
       valorFreteTotal: 0,
-    },
-    {
-      id: "forn-col-3",
-      nome: "DISTRIBUIDORA SANTA CATARINA DE MATERIAIS",
-      contato: "Roberto Mendes",
-      telefone: "(47) 99663-4455",
-      condicaoPagamento: "21 DDL",
-      tipoFrete: "FOB",
-      valorFreteTotal: 1200,
     },
   ]);
 
@@ -2304,6 +2250,54 @@ export default function HomePage() {
         setComparativoFornecedores(ativa.fornecedores);
         setComparativoItens(ativa.itens);
       }
+      // Carrega Lote de Compra Coletiva do localStorage
+      try {
+        const savedLote = window.localStorage.getItem("JCBAUER_LOTE_COMPRA_COLETIVA");
+        if (savedLote) {
+          const parsedLote = JSON.parse(savedLote);
+          const ehDemo =
+            parsedLote?.fornecedores?.some((f: any) => f?.nome?.includes("VOTORAN")) ||
+            parsedLote?.itens?.some((it: any) => it?.descricao?.includes("Cimento CP-IV 32 RS"));
+          if (ehDemo) {
+            window.localStorage.removeItem("JCBAUER_LOTE_COMPRA_COLETIVA");
+            setLoteColetivoTitulo("");
+            setLoteItens([]);
+            setLoteFornecedores([
+              { id: "forn-col-1", nome: "", contato: "", telefone: "", condicaoPagamento: "28 DDL", tipoFrete: "CIF", valorFreteTotal: 0 },
+              { id: "forn-col-2", nome: "", contato: "", telefone: "", condicaoPagamento: "30 DDL", tipoFrete: "CIF", valorFreteTotal: 0 },
+            ]);
+          } else if (parsedLote && typeof parsedLote === "object") {
+            if (parsedLote.titulo !== undefined) setLoteColetivoTitulo(parsedLote.titulo);
+            if (parsedLote.status) setLoteStatus(parsedLote.status);
+            if (Array.isArray(parsedLote.obrasParticipantes)) setLoteObrasParticipantes(parsedLote.obrasParticipantes);
+            if (Array.isArray(parsedLote.itens)) setLoteItens(parsedLote.itens);
+            if (Array.isArray(parsedLote.fornecedores) && parsedLote.fornecedores.length > 0) setLoteFornecedores(parsedLote.fornecedores);
+          }
+        }
+      } catch {}
+
+      // Carrega Cotacao de Concreteiras do localStorage
+      try {
+        const savedConc = window.localStorage.getItem("JCBAUER_COTACAO_CONCRETO_PERSISTIDA");
+        if (savedConc) {
+          const p = JSON.parse(savedConc);
+          if (p && typeof p === "object") {
+            if (p.obraId !== undefined) setConcretoObraId(p.obraId);
+            if (p.obraNomeCustom !== undefined) setConcretoObraNomeCustom(p.obraNomeCustom);
+            if (p.elemento !== undefined) setConcretoElemento(p.elemento);
+            if (p.volumeM3 !== undefined) setConcretoVolumeM3(p.volumeM3);
+            if (p.volumeBombaM3 !== undefined) setConcretoVolumeBombaM3(p.volumeBombaM3);
+            if (p.nomeBomba !== undefined) setConcretoNomeBomba(p.nomeBomba);
+            if (p.descricaoBomba !== undefined) setConcretoDescricaoBomba(p.descricaoBomba);
+            if (p.undBomba !== undefined) setConcretoUndBomba(p.undBomba);
+            if (p.slumpSelecionadoId !== undefined) setConcretoSlumpSelecionadoId(p.slumpSelecionadoId);
+            if (p.incluirBombaNoTotal !== undefined) setConcretoIncluirBombaNoTotal(p.incluirBombaNoTotal);
+            if (Array.isArray(p.slumps)) setConcretoSlumps(p.slumps);
+            if (Array.isArray(p.concreteiras)) setConcreteiras(p.concreteiras);
+          }
+        }
+      } catch {}
+
       const savedSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
       if (savedSession) {
         const parsedSession = JSON.parse(savedSession) as UsuarioSistema;
@@ -2336,6 +2330,38 @@ export default function HomePage() {
           const dadosNuvem = await carregarTudoSupabase();
           if (!ativo) return;
           if (dadosNuvem && Object.keys(dadosNuvem).length > 0) {
+            if (dadosNuvem["JCBAUER_LOTE_COMPRA_COLETIVA"]) {
+              const loteN = dadosNuvem["JCBAUER_LOTE_COMPRA_COLETIVA"];
+              const ehDemoN =
+                loteN?.fornecedores?.some((f: any) => f?.nome?.includes("VOTORAN")) ||
+                loteN?.itens?.some((it: any) => it?.descricao?.includes("Cimento CP-IV 32 RS"));
+              if (!ehDemoN && loteN && typeof loteN === "object") {
+                if (loteN.titulo !== undefined) setLoteColetivoTitulo(loteN.titulo);
+                if (loteN.status) setLoteStatus(loteN.status);
+                if (Array.isArray(loteN.obrasParticipantes)) setLoteObrasParticipantes(loteN.obrasParticipantes);
+                if (Array.isArray(loteN.itens)) setLoteItens(loteN.itens);
+                if (Array.isArray(loteN.fornecedores) && loteN.fornecedores.length > 0) setLoteFornecedores(loteN.fornecedores);
+                try { window.localStorage.setItem("JCBAUER_LOTE_COMPRA_COLETIVA", JSON.stringify(loteN)); } catch {}
+              }
+            }
+            if (dadosNuvem["JCBAUER_COTACAO_CONCRETO_PERSISTIDA"]) {
+              const p = dadosNuvem["JCBAUER_COTACAO_CONCRETO_PERSISTIDA"];
+              if (p && typeof p === "object") {
+                if (p.obraId !== undefined) setConcretoObraId(p.obraId);
+                if (p.obraNomeCustom !== undefined) setConcretoObraNomeCustom(p.obraNomeCustom);
+                if (p.elemento !== undefined) setConcretoElemento(p.elemento);
+                if (p.volumeM3 !== undefined) setConcretoVolumeM3(p.volumeM3);
+                if (p.volumeBombaM3 !== undefined) setConcretoVolumeBombaM3(p.volumeBombaM3);
+                if (p.nomeBomba !== undefined) setConcretoNomeBomba(p.nomeBomba);
+                if (p.descricaoBomba !== undefined) setConcretoDescricaoBomba(p.descricaoBomba);
+                if (p.undBomba !== undefined) setConcretoUndBomba(p.undBomba);
+                if (p.slumpSelecionadoId !== undefined) setConcretoSlumpSelecionadoId(p.slumpSelecionadoId);
+                if (p.incluirBombaNoTotal !== undefined) setConcretoIncluirBombaNoTotal(p.incluirBombaNoTotal);
+                if (Array.isArray(p.slumps)) setConcretoSlumps(p.slumps);
+                if (Array.isArray(p.concreteiras)) setConcreteiras(p.concreteiras);
+                try { window.localStorage.setItem("JCBAUER_COTACAO_CONCRETO_PERSISTIDA", JSON.stringify(p)); } catch {}
+              }
+            }
             if (dadosNuvem[FORNECEDORES_STORAGE_KEY]) {
               setFornecedores(dadosNuvem[FORNECEDORES_STORAGE_KEY]);
               try {
@@ -6952,18 +6978,18 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     const novoId = `it-col-${Date.now()}`;
     const demandasIniciais: Record<string, number> = {};
     loteObrasParticipantes.forEach((o) => {
-      demandasIniciais[o.id] = 100;
+      demandasIniciais[o.id] = 0;
     });
 
     setLoteItens((prev) => [
       ...prev,
       {
         id: novoId,
-        descricao: `Novo Insumo Corporativo #${prev.length + 1}`,
+        descricao: "",
         categoria: "Geral",
         unidade: "un",
         demandasPorObra: demandasIniciais,
-        precoReferenciaVarejo: 50,
+        precoReferenciaVarejo: 0,
         precosFornecedores: {},
       },
     ]);
@@ -6971,10 +6997,6 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   };
 
   const handleRemoverItemColetivo = (itemId: string) => {
-    if (loteItens.length <= 1) {
-      dispararAviso("Mantenha ao menos um item no lote de compra coletiva.");
-      return;
-    }
     setLoteItens((prev) => prev.filter((it) => it.id !== itemId));
     dispararAviso("Item removido do lote.");
   };
@@ -7004,8 +7026,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       ...prev,
       {
         id: novoId,
-        nome: `FORNECEDOR ATACADISTA ${prev.length + 1}`,
-        contato: "Gerente Comercial",
+        nome: "",
+        contato: "",
         telefone: "",
         condicaoPagamento: "28 DDL",
         tipoFrete: "CIF",
@@ -13438,7 +13460,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {resumoComprasColetivas.rateioPorObra.map((r) => (
+                      {resumoComprasColetivas.rateioPorObra.length === 0 ? (
+                        <div className="col-span-full text-center py-6 text-xs text-slate-500 bg-slate-50 rounded-lg border border-dashed border-slate-300">
+                          Nenhuma obra vinculada ao lote. Cadastre obras no sistema ou selecione-as no seletor acima para consolidar o rateio corporativo.
+                        </div>
+                      ) : (
+                        resumoComprasColetivas.rateioPorObra.map((r) => (
                         <div
                           key={r.obraId}
                           className="bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-lg p-3 transition"
@@ -13459,7 +13486,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             <span>{formatBRL(r.savingObra)} ({r.percSavingObra.toFixed(1)}%)</span>
                           </div>
                         </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   </div>
 
@@ -13483,7 +13511,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                               UND
                             </th>
                             <th
-                              colSpan={loteObrasParticipantes.length}
+                              colSpan={Math.max(1, loteObrasParticipantes.length)}
                               className="py-2 px-2 text-center border-r-2 border-slate-700 bg-sky-950 text-sky-200 font-black tracking-wider text-[11px]"
                             >
                               DEMANDAS PROGRAMADAS POR OBRA
@@ -13546,7 +13574,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
                           {/* LINHA 2 DE CABEÇALHO */}
                           <tr className="bg-slate-100 text-slate-700 border-b-2 border-slate-300 font-black text-[11px]">
-                            {loteObrasParticipantes.map((o) => (
+                            {loteObrasParticipantes.length === 0 ? (
+                              <th className="py-2 px-2 text-center border-r border-slate-300 bg-sky-50 text-slate-400 italic font-normal text-[10px]">
+                                Nenhuma obra
+                              </th>
+                            ) : (
+                              loteObrasParticipantes.map((o) => (
                               <th
                                 key={o.id}
                                 className="py-2 px-2 text-center border-r border-slate-300 bg-sky-50 text-sky-950 font-bold min-w-[70px]"
@@ -13567,7 +13600,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                   )}
                                 </div>
                               </th>
-                            ))}
+                              ))
+                            )}
                             {loteFornecedores.map((f) => (
                               <th
                                 key={`sub-${f.id}`}
@@ -13580,7 +13614,39 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                         </thead>
 
                         <tbody className="divide-y divide-slate-200">
-                          {resumoComprasColetivas.itensCalculados.map((it) => (
+                          {resumoComprasColetivas.itensCalculados.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={4 + Math.max(1, loteObrasParticipantes.length) + Math.max(1, loteFornecedores.length)}
+                                className="py-12 text-center text-slate-500 bg-slate-50/50"
+                              >
+                                <div className="max-w-md mx-auto space-y-3">
+                                  <div className="text-3xl">ðŸ“¦</div>
+                                  <div className="font-bold text-slate-800 text-sm">Nenhum insumo incluÃ­do neste lote</div>
+                                  <p className="text-xs text-slate-500">
+                                    Este lote estÃ¡ pronto para cotaÃ§Ã£o real. Adicione insumos manualmente ou puxe demandas abertas das suas obras.
+                                  </p>
+                                  <div className="flex items-center justify-center gap-2 pt-2">
+                                    <button
+                                      type="button"
+                                      onClick={handleAdicionarItemColetivo}
+                                      className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                                    >
+                                      <span>+</span> Adicionar Primeiro Insumo
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handlePuxarDemandasDeSCsAbertas}
+                                      className="px-3.5 py-1.5 rounded-lg bg-sky-700 hover:bg-sky-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                                    >
+                                      <span>âš¡</span> Puxar Demandas de SCs
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            resumoComprasColetivas.itensCalculados.map((it) => (
                             <tr key={it.id} className="hover:bg-slate-50/70 transition-colors">
                               {/* Descrição do Insumo */}
                               <td className="py-2 px-3 border-r-2 border-slate-300">
@@ -13701,7 +13767,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                 </button>
                               </td>
                             </tr>
-                          ))}
+                            ))
+                          )}
                         </tbody>
 
                         {/* RODAPÉ EXECUTIVO DE TOTAIS */}
@@ -13709,7 +13776,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           {/* Linha Condições Comerciais e Frete */}
                           <tr className="bg-slate-100 text-slate-700 text-xs font-semibold border-t-2 border-slate-300">
                             <td
-                              colSpan={2 + loteObrasParticipantes.length + 2}
+                              colSpan={2 + Math.max(1, loteObrasParticipantes.length) + 2}
                               className="py-2 px-3 text-right border-r-2 border-slate-300 text-[11px]"
                             >
                               Condições Comerciais & Frete do Lote:
@@ -13772,7 +13839,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           {/* Linha Total Geral do Lote */}
                           <tr className="bg-slate-900 text-white font-black text-xs">
                             <td
-                              colSpan={2 + loteObrasParticipantes.length}
+                              colSpan={2 + Math.max(1, loteObrasParticipantes.length)}
                               className="py-3 px-3 text-right border-r-2 border-slate-700 uppercase tracking-wider text-xs"
                             >
                               VALOR TOTAL CONSOLIDADO:
