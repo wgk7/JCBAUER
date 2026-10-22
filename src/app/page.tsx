@@ -1645,7 +1645,7 @@ export default function HomePage() {
   // ESTADOS DO MÓDULO DE COMPRAS COLETIVAS (AGRUPAMENTO MULTIOBRA)
   // -----------------------------------------------------------------------
   const [loteColetivoTitulo, setLoteColetivoTitulo] = useState<string>("");
-  const [loteStatus, setLoteStatus] = useState<"Em NegociaÃ§Ã£o" | "Aprovado" | "OCs Emitidas">("Em NegociaÃ§Ã£o");
+  const [loteStatus, setLoteStatus] = useState<"Em Negocia\u00E7\u00E3o" | "Aprovado" | "OCs Emitidas">("Em Negocia\u00E7\u00E3o");
   const [loteObrasParticipantes, setLoteObrasParticipantes] = useState<{ id: string; nome: string }[]>([]);
   const [loteItens, setLoteItens] = useState<ItemCompraColetiva[]>([]);
   const [loteFornecedores, setLoteFornecedores] = useState<FornecedorLoteColetivo[]>([
@@ -13621,10 +13621,10 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                 className="py-12 text-center text-slate-500 bg-slate-50/50"
                               >
                                 <div className="max-w-md mx-auto space-y-3">
-                                  <div className="text-3xl">ðŸ“¦</div>
-                                  <div className="font-bold text-slate-800 text-sm">Nenhum insumo incluÃ­do neste lote</div>
+                                  <svg className="w-10 h-10 mx-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                                  <div className="font-bold text-slate-800 text-sm">{"Nenhum insumo inclu\u00EDdo neste lote"}</div>
                                   <p className="text-xs text-slate-500">
-                                    Este lote estÃ¡ pronto para cotaÃ§Ã£o real. Adicione insumos manualmente ou puxe demandas abertas das suas obras.
+                                    {"Este lote est\u00E1 pronto para cota\u00E7\u00E3o real. Adicione insumos manualmente ou puxe demandas abertas das suas obras."}
                                   </p>
                                   <div className="flex items-center justify-center gap-2 pt-2">
                                     <button
@@ -13639,7 +13639,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                       onClick={handlePuxarDemandasDeSCsAbertas}
                                       className="px-3.5 py-1.5 rounded-lg bg-sky-700 hover:bg-sky-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
                                     >
-                                      <span>âš¡</span> Puxar Demandas de SCs
+                                      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                      <span>Puxar Demandas de SCs</span>
                                     </button>
                                   </div>
                                 </div>
