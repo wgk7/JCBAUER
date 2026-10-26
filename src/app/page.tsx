@@ -17920,7 +17920,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           obras={obras}
           onClose={() => setShowNovoUsuarioModal(false)}
           onSalvar={(novoUser) => {
-            setUsuarios((prev) => [...prev, novoUser]);
+            const novos = [...usuarios, novoUser];
+            setUsuarios(novos);
+            try {
+              window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(novos));
+            } catch {}
+            salvarChaveSupabase(USERS_STORAGE_KEY, novos).catch(() => {});
             setShowNovoUsuarioModal(false);
             dispararAviso(
               `Acesso criado para ${novoUser.nome} (${novoUser.cargo} — ${novoUser.obraNome})! Já disponível para Login.`
