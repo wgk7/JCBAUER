@@ -198,9 +198,12 @@ interface SolicitacaoCompra {
     | "Enviado / Aguardando Compras"
     | "Em Cotação"
     | "Aprovada"
+    | "Não Aprovada / Recusada"
     | "Comprada"
     | "Entregue na Obra";
   dataPrevistaEntrega?: string;
+  motivoRecusa?: string;
+  observacoesEntrega?: string;
   notaFiscalRecebida?: string;
   condicaoRecebimento?: string;
   recebidoPor?: string;
@@ -392,6 +395,9 @@ export interface ProcessoCotacao {
   obraId: string;
   obraNome: string;
   categoria: string;
+  solicitacaoOrigemId?: string;
+  solicitanteNome?: string;
+  urgencia?: UrgenciaPedido;
   status:
     | "Aguardando Fornecedores"
     | "Em Análise"
@@ -578,11 +584,18 @@ interface ItemEstoque {
   id: string;
   obraId: string; // "obra-1", "obra-2", "obra-3" ou "central"
   obraNome: string;
-  codigo: string;
+  codigo: string; // SKU
+  sku?: string;
   descricao: string;
   categoria: string;
   unidade: string;
   saldoAtual: number;
+  quantidadeAEntrar?: number; // Previsão de entrada de pedidos aprovados/comprados
+  previsaoEntrega?: string; // Data da próxima entrega prevista
+  dataUltimaEntrada?: string; // Quando que entrou pela última vez
+  quantidadeUltimaEntrada?: number;
+  notaFiscalUltimaEntrada?: string;
+  fornecedorUltimaEntrada?: string;
   estoqueMinimo: number;
   pontoReposicao: number;
   custoMedio: number; // Custo Médio Ponderado Unitário em R$
@@ -1503,6 +1516,30 @@ function gerarSkuInsumo(
   const proximo = maxSeq + 1;
   return `SKU-${prefixo}-${String(proximo).padStart(3, "0")}`;
 }
+
+function normalizarNomeInsumo(nome: string): string {
+  return (nome || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+}
+
+function encontrarInsumoDuplicado(
+  nome: string,
+  estoqueExistente: ItemEstoque[],
+  excluirId?: string
+): ItemEstoque | undefined {
+  const norm = normalizarNomeInsumo(nome);
+  if (!norm || norm.length < 2) return undefined;
+  return (estoqueExistente || []).find((it) => {
+    if (excluirId && it.id === excluirId) return false;
+    const itNorm = normalizarNomeInsumo(it.descricao);
+    return itNorm === norm;
+  });
+}
+
 export default function HomePage() {
   // Autenticação e Controle de Acesso (RBAC)
   const [usuarios, setUsuarios] = useState<UsuarioSistema[]>(USUARIOS_INICIAIS);
@@ -1571,6 +1608,10 @@ export default function HomePage() {
   const [buscaEstoque, setBuscaEstoque] = useState<string>("");
   const [showNovaMovimentacaoModal, setShowNovaMovimentacaoModal] =
     useState<boolean>(false);
+  const [showNovoMaterialEstoqueModal, setShowNovoMaterialEstoqueModal] =
+    useState<boolean>(false);
+  const [statusEntregaModalSc, setStatusEntregaModalSc] =
+    useState<SolicitacaoCompra | null>(null);
   const [showProgramarPuxadaModal, setShowProgramarPuxadaModal] =
     useState<boolean>(false);
   const [kardexModalItem, setKardexModalItem] = useState<ItemEstoque | null>(
@@ -7836,7 +7877,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     }
     setErroLogin(null);
     if (userFound.cargo !== "Administrador") {
-      setObraActiveTab("PainelDiario");
+      setObraActiveTab(
+        userFound.cargo === "Almoxarife" ? "NovoPedido" : "PainelDiario"
+      );
     }
   };
 
@@ -7858,7 +7901,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     }
     setErroLogin(null);
     if (userFound.cargo !== "Administrador") {
-      setObraActiveTab("PainelDiario");
+      setObraActiveTab(
+        userFound.cargo === "Almoxarife" ? "NovoPedido" : "PainelDiario"
+      );
     }
   };
 
@@ -8018,8 +8063,106 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     salvarChaveSupabase(SOLICITACOES_STORAGE_KEY, novasSc).catch(() => {});
     setSelectedScId(novaSc.id);
     setObraActiveTab("MeusPedidos");
+
+    // 1. Sincronização Inteligente com o Almoxarifado (SKUs Únicos e Anti-duplicação)
+    const obraObj = obras.find((o) => o.id === novaSc.obraId);
+    const obraNome = obraObj?.nome || "Canteiro de Obras";
+
+    setEstoque((prevEstoque) => {
+      let novoEstoque = [...prevEstoque];
+      novaSc.itens.forEach((itSc, idx) => {
+        const itemExistente = encontrarInsumoDuplicado(itSc.descricao, novoEstoque);
+        if (itemExistente) {
+          // Atualiza quantidade prevista a entrar e data de previsão no Almoxarifado
+          novoEstoque = novoEstoque.map((it) =>
+            it.id === itemExistente.id
+              ? {
+                  ...it,
+                  quantidadeAEntrar: (Number(it.quantidadeAEntrar) || 0) + Number(itSc.quantidade || 1),
+                  previsaoEntrega: novaSc.dataNecessaria || it.previsaoEntrega,
+                  ultimaMovimentacao: `Requisição ${novaSc.codigo} (+${itSc.quantidade} ${itSc.unidade})`,
+                }
+              : it
+          );
+        } else {
+          // Cadastra automaticamente o novo insumo com SKU único sequencial
+          const novoSku = gerarSkuInsumo(itSc.descricao, novaSc.categoria, novoEstoque);
+          novoEstoque.push({
+            id: `est-sc-${Date.now()}-${idx}`,
+            obraId: novaSc.obraId,
+            obraNome,
+            codigo: novoSku,
+            sku: novoSku,
+            descricao: itSc.descricao.trim(),
+            categoria: novaSc.categoria || "Geral",
+            unidade: itSc.unidade || "un",
+            saldoAtual: 0,
+            quantidadeAEntrar: Number(itSc.quantidade || 1),
+            previsaoEntrega: novaSc.dataNecessaria,
+            estoqueMinimo: Math.max(1, Math.round(Number(itSc.quantidade) * 0.2)),
+            pontoReposicao: Math.max(2, Math.round(Number(itSc.quantidade) * 0.3)),
+            custoMedio: 0,
+            localizacaoFisica: "Almoxarifado Principal",
+            ultimaMovimentacao: `Cadastrado via Requisição ${novaSc.codigo}`,
+          });
+        }
+      });
+      try {
+        window.localStorage.setItem(ESTOQUE_STORAGE_KEY, JSON.stringify(novoEstoque));
+      } catch {}
+      salvarChaveSupabase(ESTOQUE_STORAGE_KEY, novoEstoque).catch(() => {});
+      return novoEstoque;
+    });
+
+    // 2. Coloca automaticamente a demanda na Linha de Espera do Mapa de Cotação
+    const anoAtual = new Date().getFullYear();
+    const seqCot = processosCotacoes.length + 1;
+    const codigoCot = `COT-${anoAtual}-${String(seqCot).padStart(3, "0")}`;
+
+    const novaCotacao: ProcessoCotacao = {
+      id: `cot-sc-${novaSc.id}`,
+      codigo: codigoCot,
+      titulo: `Demanda de Canteiro: ${novaSc.codigo} - ${novaSc.categoria}`,
+      obraId: novaSc.obraId,
+      obraNome,
+      categoria: novaSc.categoria,
+      solicitacaoOrigemId: novaSc.id,
+      solicitanteNome: `${novaSc.solicitante} (${novaSc.solicitanteCargo || "Almoxarife"})`,
+      urgencia: novaSc.urgencia || "Normal",
+      status: "Aguardando Fornecedores",
+      dataCriacao: new Date().toLocaleDateString("pt-BR"),
+      dataAtualizacao:
+        new Date().toLocaleDateString("pt-BR") +
+        " " +
+        new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+      fornecedores: [
+        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
+        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
+        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
+      ],
+      itens: novaSc.itens.map((it, idx) => ({
+        id: `comp-it-${Date.now()}-${idx}`,
+        nome: it.descricao,
+        quantidade: Number(it.quantidade) || 1,
+        unidade: it.unidade || "un",
+        preco1: 0,
+        preco2: 0,
+        preco3: 0,
+      })),
+      observacoes: `Solicitação originada no Canteiro/Almoxarifado da obra ${obraNome}. Data necessária na obra: ${novaSc.dataNecessaria || "Imediato"}`,
+    };
+
+    setProcessosCotacoes((prev) => {
+      const novosProcessos = [novaCotacao, ...prev];
+      try {
+        window.localStorage.setItem(PROCESSOS_COTACOES_STORAGE_KEY, JSON.stringify(novosProcessos));
+      } catch {}
+      salvarChaveSupabase(PROCESSOS_COTACOES_STORAGE_KEY, novosProcessos).catch(() => {});
+      return novosProcessos;
+    });
+
     dispararAviso(
-      `Pedido ${novaSc.codigo} enviado com sucesso para o Setor de Compras!`
+      `Pedido ${novaSc.codigo} enviado com sucesso! Já está na Linha de Espera do Mapa de Cotação e os insumos foram pré-catalogados no Almoxarifado.`
     );
   };
 
@@ -8035,10 +8178,223 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       );
     } catch {}
     salvarChaveSupabase(SOLICITACOES_STORAGE_KEY, novasSc).catch(() => {});
+
+    // Sincroniza a data de entrega e status no almoxarifado
+    if (scAtualizada.dataPrevistaEntrega) {
+      setEstoque((prevEst) =>
+        prevEst.map((it) => {
+          const pertencia = scAtualizada.itens.some(
+            (itemSc) => normalizarNomeInsumo(itemSc.descricao) === normalizarNomeInsumo(it.descricao)
+          );
+          if (pertencia) {
+            return {
+              ...it,
+              previsaoEntrega: scAtualizada.dataPrevistaEntrega,
+            };
+          }
+          return it;
+        })
+      );
+    }
+
     setScEmEdicao(null);
     dispararAviso(
-      `Solicitação de Compra ${scAtualizada.codigo} atualizada com sucesso!`
+      `Solicitação de Compra ${scAtualizada.codigo} atualizada com sucesso! O Almoxarifado já recebeu a atualização.`
     );
+  };
+
+  // Atualização rápida de status e data de entrega pelo Comprador/Administrador
+  const handleAtualizarStatusEntregaSc = (
+    scId: string,
+    novoStatus: SolicitacaoCompra["status"],
+    dataEntrega?: string,
+    motivoRecusa?: string,
+    obs?: string
+  ) => {
+    let scModificada: SolicitacaoCompra | null = null;
+    const novasSc = solicitacoes.map((s) => {
+      if (s.id === scId) {
+        scModificada = {
+          ...s,
+          status: novoStatus,
+          dataPrevistaEntrega: dataEntrega !== undefined ? dataEntrega : s.dataPrevistaEntrega,
+          motivoRecusa: motivoRecusa !== undefined ? motivoRecusa : s.motivoRecusa,
+          observacoesEntrega: obs !== undefined ? obs : s.observacoesEntrega,
+        };
+        return scModificada;
+      }
+      return s;
+    });
+    setSolicitacoes(novasSc);
+    try {
+      window.localStorage.setItem(SOLICITACOES_STORAGE_KEY, JSON.stringify(novasSc));
+    } catch {}
+    salvarChaveSupabase(SOLICITACOES_STORAGE_KEY, novasSc).catch(() => {});
+
+    // Sincroniza a data de entrega no estoque / almoxarifado
+    if (scModificada && dataEntrega) {
+      setEstoque((prevEst) =>
+        prevEst.map((it) => {
+          const pertencia = (scModificada as SolicitacaoCompra).itens.some(
+            (itemSc) => normalizarNomeInsumo(itemSc.descricao) === normalizarNomeInsumo(it.descricao)
+          );
+          if (pertencia) {
+            return {
+              ...it,
+              previsaoEntrega: dataEntrega,
+            };
+          }
+          return it;
+        })
+      );
+    }
+
+    setStatusEntregaModalSc(null);
+    dispararAviso(
+      `Status do Pedido atualizado para "${novoStatus}"! A data de entrega e aprovação já estão disponíveis para o Almoxarifado.`
+    );
+  };
+
+  // Cadastro Manual de Novo Material no Almoxarifado com SKU Único e Anti-Duplicação
+  const handleCadastrarNovoItemEstoque = (novoItem: ItemEstoque) => {
+    const duplicado = encontrarInsumoDuplicado(novoItem.descricao, estoque);
+    if (duplicado) {
+      dispararAviso(
+        `Atenção: Já existe um material cadastrado com nome similar: "${duplicado.descricao}" (SKU: ${duplicado.codigo}). O cadastro não foi duplicado.`
+      );
+      return;
+    }
+
+    const novoEstoque = [novoItem, ...estoque];
+    setEstoque(novoEstoque);
+    try {
+      window.localStorage.setItem(ESTOQUE_STORAGE_KEY, JSON.stringify(novoEstoque));
+    } catch {}
+    salvarChaveSupabase(ESTOQUE_STORAGE_KEY, novoEstoque).catch(() => {});
+    setShowNovoMaterialEstoqueModal(false);
+    dispararAviso(`Material "${novoItem.descricao}" cadastrado com sucesso com SKU "${novoItem.codigo}"!`);
+  };
+
+  // Disparador de Relatório de Entregas & Chegadas no Almoxarifado (para impressão/prancheta)
+  const handleImprimirRelatorioEntregas = (
+    ordensParaRelatorio: OrdemCompra[],
+    obraNomeFiltro: string
+  ) => {
+    const hojeStr = new Date().toLocaleDateString("pt-BR");
+    const horaStr = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+    const ordensPendentes = ordensParaRelatorio
+      .filter((o) => o.status !== "Entregue na Obra (Confirmado pelo Almoxarifado)")
+      .sort((a, b) => (a.dataPrevistaEntrega || "").localeCompare(b.dataPrevistaEntrega || ""));
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>JC BAUER - Relatório de Previsão de Chegadas no Almoxarifado</title>
+  <style>
+    @page { size: A4 portrait; margin: 12mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; padding: 12px; font-size: 11px; }
+    .header { border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .logo-title { font-size: 18px; font-weight: 900; letter-spacing: -0.5px; color: #0f172a; }
+    .sub-title { font-size: 11px; color: #475569; font-weight: 600; text-transform: uppercase; margin-top: 2px; }
+    .badge { background: #0f172a; color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 800; }
+    .meta-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; margin-bottom: 14px; display: flex; justify-content: space-between; font-size: 11px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    th { background: #0f172a; color: #ffffff; padding: 7px 8px; text-align: left; font-size: 10px; text-transform: uppercase; border: 1px solid #0f172a; }
+    td { padding: 6px 8px; border: 1px solid #cbd5e1; font-size: 10.5px; vertical-align: top; }
+    tr:nth-child(even) { background: #f8fafc; }
+    .data-prevista { font-weight: 800; color: #0369a1; font-size: 11px; }
+    .item-list { margin: 0; padding-left: 14px; }
+    .footer { margin-top: 25px; border-top: 1px solid #cbd5e1; padding-top: 12px; display: flex; justify-content: space-between; font-size: 10px; color: #64748b; }
+    .signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 35px; }
+    .sig-line { border-top: 1px solid #0f172a; text-align: center; padding-top: 4px; font-size: 10px; font-weight: 700; }
+    @media print {
+      .no-print { display: none !important; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+    <div><strong>JC BAUER • Relatório de Chegadas de Materiais</strong> (Pronto para impressão)</div>
+    <div>
+      <button onclick="window.print()" style="background: #10b981; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; font-weight: 800; cursor: pointer; margin-right: 8px;">🖨️ Imprimir Agora</button>
+      <button onclick="window.close()" style="background: #475569; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 600; cursor: pointer;">Fechar</button>
+    </div>
+  </div>
+
+  <div class="header">
+    <div>
+      <div class="logo-title">JC BAUER EMPREENDIMENTOS</div>
+      <div class="sub-title">Relatório Operacional de Previsão de Entregas & Chegadas no Canteiro</div>
+    </div>
+    <div class="badge">ALMOXARIFADO DE OBRA</div>
+  </div>
+
+  <div class="meta-box">
+    <div><strong>Canteiro / Obra:</strong> ${obraNomeFiltro}</div>
+    <div><strong>Emitido em:</strong> ${hojeStr} às ${horaStr}</div>
+    <div><strong>Total de Cargas Previstas:</strong> ${ordensPendentes.length} entregas</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 15%;">Previsão Chegada</th>
+        <th style="width: 15%;">Nº Pedido / OC</th>
+        <th style="width: 25%;">Fornecedor & Contato</th>
+        <th style="width: 33%;">Materiais & Quantidades</th>
+        <th style="width: 12%; text-align: center;">Conferência</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${ordensPendentes.length === 0 ? `
+        <tr><td colspan="5" style="text-align: center; padding: 20px; color: #64748b;">Nenhuma carga com entrega pendente no momento para este canteiro.</td></tr>
+      ` : ordensPendentes.map((o) => `
+        <tr>
+          <td class="data-prevista">${o.dataPrevistaEntrega || o.dataEmissao || "A definir"}</td>
+          <td>
+            <strong>${o.numeroOc}</strong><br>
+            <span style="color: #64748b; font-size: 9.5px;">Req: ${o.scCodigo}</span>
+          </td>
+          <td>
+            <strong>${o.fornecedorNome}</strong><br>
+            <span style="color: #64748b; font-size: 9.5px;">Frete: ${o.tipoFrete} • Tel: ${o.whatsapp || "-"}</span>
+          </td>
+          <td>
+            <ul class="item-list">
+              ${o.itens.map((it) => `<li><strong>${it.quantidade} ${it.unidade}</strong> — ${it.descricao}</li>`).join("")}
+            </ul>
+          </td>
+          <td style="text-align: center; vertical-align: middle;">
+            <div style="width: 18px; height: 18px; border: 2px solid #0f172a; margin: 0 auto 4px auto; border-radius: 3px;"></div>
+            <span style="font-size: 8.5px; color: #64748b;">NF: ______</span>
+          </td>
+        </tr>
+      `).join("")}
+    </tbody>
+  </table>
+
+  <div class="signature-grid">
+    <div>
+      <div class="sig-line">Almoxarife Responsável (Conferência Física)</div>
+      <div style="text-align: center; font-size: 9px; color: #64748b; margin-top: 2px;">Assinatura & Data do Recebimento</div>
+    </div>
+    <div>
+      <div class="sig-line">Motorista / Transportadora (Entrega)</div>
+      <div style="text-align: center; font-size: 9px; color: #64748b; margin-top: 2px;">Nome Legível & Placa do Veículo</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>JC Bauer Construtora e Incorporadora • Sistema Integrado de Suprimentos & Almoxarifado</div>
+    <div>Página 1 de 1</div>
+  </div>
+</body>
+</html>`;
+
+    imprimirDocumentoHtml(html);
   };
 
   const handleExcluirSc = (scId: string, scCodigo: string) => {
@@ -8285,28 +8641,42 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                   saldoPos
                 : itemOc.precoUnitario;
 
+            const novaQtdAEntrar = Math.max(0, (Number(itemExistente.quantidadeAEntrar) || 0) - itemOc.quantidade);
+
             novoEstoque[itemIdx] = {
               ...itemExistente,
               saldoAtual: saldoPos,
+              quantidadeAEntrar: novaQtdAEntrar,
+              dataUltimaEntrada: dataHora,
+              quantidadeUltimaEntrada: itemOc.quantidade,
+              notaFiscalUltimaEntrada: notaFiscal,
+              fornecedorUltimaEntrada: ocAlvo.fornecedorNome,
               custoMedio: novoCusto,
-              ultimaMovimentacao: dataHora,
+              ultimaMovimentacao: `Recebimento NF ${notaFiscal} (+${itemOc.quantidade} ${itemOc.unidade})`,
             };
           } else {
+            const novoSku = gerarSkuInsumo(itemOc.descricao, ocAlvo.categoria || "Geral", novoEstoque);
             itemId = `est-auto-${Date.now()}-${idx}`;
             novoEstoque.push({
               id: itemId,
               obraId: ocAlvo.obraId,
               obraNome: ocAlvo.obraNome,
-              codigo: itemCodigo,
+              codigo: novoSku,
+              sku: novoSku,
               descricao: itemOc.descricao,
               categoria: ocAlvo.categoria || "Geral",
               unidade: itemOc.unidade,
               saldoAtual: itemOc.quantidade,
+              quantidadeAEntrar: 0,
+              dataUltimaEntrada: dataHora,
+              quantidadeUltimaEntrada: itemOc.quantidade,
+              notaFiscalUltimaEntrada: notaFiscal,
+              fornecedorUltimaEntrada: ocAlvo.fornecedorNome,
               estoqueMinimo: Math.max(1, Math.round(itemOc.quantidade * 0.2)),
               pontoReposicao: Math.max(1, Math.round(itemOc.quantidade * 0.3)),
               custoMedio: itemOc.precoUnitario,
               localizacaoFisica: "Almoxarifado Principal",
-              ultimaMovimentacao: dataHora,
+              ultimaMovimentacao: `Entrada física com NF ${notaFiscal}`,
             });
           }
 
@@ -9052,6 +9422,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         onSalvarDiarioObra={handleSalvarDiarioObra}
         onGerarOrdemCompraPDF={handleGerarOrdemCompraPDF}
         onGerarRomaneioRecebimentoPDF={handleGerarRomaneioRecebimentoPDF}
+        onImprimirRelatorioEntregas={handleImprimirRelatorioEntregas}
+        onCadastrarNovoItemEstoque={handleCadastrarNovoItemEstoque}
       />
     );
   }
@@ -9989,24 +10361,41 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             <td className="py-3.5 px-4 text-center whitespace-nowrap align-top">
                               <span
                                 className={`px-2.5 py-1 rounded-full text-xs font-semibold inline-block ${
-                                  sc.status === "Entregue na Obra"
+                                  sc.status === "Aprovada"
+                                    ? "bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold"
+                                    : sc.status === "Não Aprovada / Recusada"
+                                    ? "bg-red-100 text-red-900 border border-red-300 font-bold"
+                                    : sc.status === "Entregue na Obra"
                                     ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
                                     : sc.status === "Comprada"
                                     ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                                    : sc.status ===
-                                      "Enviado / Aguardando Compras"
-                                    ? "bg-amber-100 text-amber-900 border border-amber-300"
-                                    : "bg-blue-50 text-blue-800 border border-blue-200"
+                                    : sc.status === "Em Cotação"
+                                    ? "bg-blue-50 text-blue-800 border border-blue-200"
+                                    : "bg-amber-100 text-amber-900 border border-amber-300"
                                 }`}
                               >
-                                {sc.status === "Enviado / Aguardando Compras"
-                                  ? "🟡 Enviado / Aguardando Compras"
+                                {sc.status === "Aprovada"
+                                  ? "🟢 Aprovada"
+                                  : sc.status === "Não Aprovada / Recusada"
+                                  ? "🔴 Não Aprovada / Recusada"
+                                  : sc.status === "Enviado / Aguardando Compras"
+                                  ? "🟡 Aguardando Compras"
                                   : sc.status === "Em Cotação"
                                   ? "🔵 Em Cotação"
                                   : sc.status === "Comprada"
-                                  ? "🟢 Compra Aprovada"
+                                  ? "📦 Comprada"
                                   : "✅ Entregue na Obra"}
                               </span>
+                              {sc.dataPrevistaEntrega && (
+                                <div className="text-[11px] font-bold text-emerald-800 mt-1 flex items-center justify-center gap-1">
+                                  <span>📅</span> Chegada: {formatarDataBrasileira(sc.dataPrevistaEntrega)}
+                                </div>
+                              )}
+                              {sc.motivoRecusa && sc.status === "Não Aprovada / Recusada" && (
+                                <div className="text-[10px] text-red-700 font-medium mt-0.5 max-w-[150px] truncate mx-auto" title={sc.motivoRecusa}>
+                                  Motivo: {sc.motivoRecusa}
+                                </div>
+                              )}
                               {sc.notaFiscalRecebida && (
                                 <div className="text-xs text-emerald-800 font-semibold mt-1">
                                   NF: {sc.notaFiscalRecebida}
@@ -10015,7 +10404,16 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             </td>
 
                             <td className="py-3.5 px-4 text-right whitespace-nowrap align-top">
-                              <div className="flex items-center justify-end gap-2">
+                              <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => setStatusEntregaModalSc(sc)}
+                                  className="px-2.5 py-1.5 rounded-md bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 text-indigo-900 text-xs font-bold flex items-center gap-1 transition shadow-xs"
+                                  title="Definir data prevista de entrega e aprovação para o almoxarifado"
+                                >
+                                  <span>📅</span>
+                                  <span>Entrega</span>
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => setScMensagensModal(sc)}
@@ -11271,6 +11669,110 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           {/* ============================================================= */}
           {activeTab === "Cotacoes" && (
             <div>
+              {/* LINHA DE ESPERA DO MAPA DE COTAÇÃO (DEMANDAS DO ALMOXARIFADO & CANTEIROS) */}
+              {(() => {
+                const demandasLinhaEspera = processosCotacoes.filter(
+                  (p) => p.status === "Aguardando Fornecedores" || p.solicitacaoOrigemId
+                );
+                if (demandasLinhaEspera.length === 0) return null;
+
+                return (
+                  <div className="bg-gradient-to-r from-amber-50 via-white to-amber-50/40 border-2 border-amber-400/80 rounded-xl p-4 shadow-sm mb-6">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-3 w-3 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                        </span>
+                        <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                          <span>📥</span> Linha de Espera do Mapa de Cotação — Demandas do Almoxarifado
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-950 text-xs font-black">
+                          {demandasLinhaEspera.length} na fila
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-500 font-medium">
+                        Clique em <strong>"Equalizar nesta Cotação"</strong> para carregar os insumos e preencher os fornecedores
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {demandasLinhaEspera.slice(0, 6).map((proc) => {
+                        const isAtiva = cotacaoAtivaId === proc.id;
+                        return (
+                          <div
+                            key={proc.id}
+                            className={`p-3 rounded-lg border transition ${
+                              isAtiva
+                                ? "bg-slate-900 text-white border-slate-900 shadow-md"
+                                : "bg-white text-slate-900 border-amber-200 hover:border-amber-400"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-1 mb-1.5">
+                              <div>
+                                <span
+                                  className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                                    isAtiva ? "bg-amber-400 text-slate-950" : "bg-amber-100 text-amber-900"
+                                  }`}
+                                >
+                                  {proc.codigo}
+                                </span>
+                                <div className="font-bold text-xs mt-1 truncate max-w-[200px]">
+                                  {proc.titulo}
+                                </div>
+                              </div>
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                                  proc.urgencia === "Crítica - Obra Parada"
+                                    ? "bg-red-500 text-white"
+                                    : proc.urgencia === "Alta"
+                                    ? "bg-amber-500 text-white"
+                                    : isAtiva
+                                    ? "bg-slate-800 text-slate-300"
+                                    : "bg-slate-100 text-slate-700"
+                                }`}
+                              >
+                                {proc.urgencia || "Normal"}
+                              </span>
+                            </div>
+
+                            <div className={`text-[11px] mb-2 ${isAtiva ? "text-slate-300" : "text-slate-600"}`}>
+                              <div>🏗️ {proc.obraNome}</div>
+                              <div>👤 {proc.solicitanteNome || "Almoxarifado"} • {proc.itens.length} itens solicitados</div>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-200/40">
+                              <span className={`text-[10px] ${isAtiva ? "text-amber-300 font-bold" : "text-slate-500"}`}>
+                                {isAtiva ? "● Cotação Ativa no Mapa" : "Aguardando Cotação"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCotacaoAtivaId(proc.id);
+                                  setComparativoTitulo(proc.titulo);
+                                  setComparativoObraId(proc.obraId);
+                                  setComparativoCategoria(proc.categoria);
+                                  setComparativoItens(proc.itens);
+                                  setModoCotacoes("comparativo_rapido");
+                                  dispararAviso(`Cotação ${proc.codigo} carregada na mesa de equalização!`);
+                                }}
+                                className={`px-2.5 py-1 rounded text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                                  isAtiva
+                                    ? "bg-amber-400 hover:bg-amber-300 text-slate-950 font-black"
+                                    : "bg-slate-900 hover:bg-slate-800 text-white"
+                                }`}
+                              >
+                                <span>⚡</span>
+                                <span>{isAtiva ? "Equalizando Agora" : "Equalizar nesta Cotação"}</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
               {/* Barra de Seleção de Modo: Comparativo Rápido (3 Orçamentos) vs Cotações de Obra */}
               <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs mb-6 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
@@ -14974,6 +15476,15 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                     {/* Barra de Filtros de Estoque */}
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowNovoMaterialEstoqueModal(true)}
+                          className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-xs"
+                          title="Cadastrar novo insumo/matéria-prima no almoxarifado com SKU único padronizado"
+                        >
+                          <span>✨</span>
+                          <span>+ Cadastrar Material (SKU)</span>
+                        </button>
                         <input
                           type="text"
                           placeholder="Buscar código ou descrição do insumo..."
@@ -15008,10 +15519,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                       <table className="w-full text-sm border-collapse text-left">
                         <thead>
                           <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-700">
-                            <th className="py-3 px-4">Código / Insumo</th>
+                            <th className="py-3 px-4">Código SKU / Insumo</th>
                             <th className="py-3 px-4">Canteiro & Localização</th>
                             <th className="py-3 px-4 text-center">Nível de Estoque</th>
-                            <th className="py-3 px-4 text-right">Saldo Atual</th>
+                            <th className="py-3 px-4 text-right">Saldo Físico</th>
+                            <th className="py-3 px-4 text-center">Vai Entrar (Previsão)</th>
+                            <th className="py-3 px-4 text-center">Quando Entrou (Última)</th>
                             <th className="py-3 px-4 text-right">Custo Médio</th>
                             <th className="py-3 px-4 text-right">Valor Total</th>
                             <th className="py-3 px-4 text-center">Status</th>
@@ -15031,14 +15544,14 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             if (itensEst.length === 0) {
                               return (
                                 <tr>
-                                  <td colSpan={8} className="py-12 text-center">
+                                  <td colSpan={10} className="py-12 text-center">
                                     <div className="flex flex-col items-center justify-center text-slate-500">
                                       <span className="text-3xl mb-2">📦</span>
                                       <p className="font-semibold text-slate-700 text-sm">
                                         Nenhum item em estoque registrado
                                       </p>
                                       <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                                        Os itens em estoque serão atualizados automaticamente conforme ordens de compra forem recebidas no canteiro.
+                                        Cadastre insumos com SKU único ou aguarde o recebimento de ordens de compra no canteiro.
                                       </p>
                                     </div>
                                   </td>
@@ -15056,9 +15569,14 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                               return (
                                 <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                                   <td className="py-3 px-4">
-                                    <div className="font-semibold text-sm text-slate-900 leading-snug">{item.descricao}</div>
-                                    <div className="text-xs text-slate-500 font-mono mt-0.5">
-                                      {item.codigo} • {item.categoria}
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="px-2 py-0.5 rounded bg-slate-900 text-amber-300 font-mono text-[11px] font-bold">
+                                        {item.sku || item.codigo}
+                                      </span>
+                                      <div className="font-semibold text-sm text-slate-900 leading-snug">{item.descricao}</div>
+                                    </div>
+                                    <div className="text-xs text-slate-500 mt-0.5">
+                                      {item.categoria}
                                     </div>
                                   </td>
                                   <td className="py-3 px-4 text-xs">
@@ -15088,6 +15606,43 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                   <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums text-sm">
                                     <span>{item.saldoAtual.toLocaleString("pt-BR")}</span>{" "}
                                     <span className="text-xs font-normal text-slate-500">{item.unidade}</span>
+                                  </td>
+                                  <td className="py-3 px-4 text-center whitespace-nowrap">
+                                    {item.quantidadeAEntrar && item.quantidadeAEntrar > 0 ? (
+                                      <div className="space-y-0.5">
+                                        <span className="px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs font-bold inline-block">
+                                          + {item.quantidadeAEntrar} {item.unidade}
+                                        </span>
+                                        {item.previsaoEntrega && (
+                                          <div className="text-[10px] text-indigo-700 font-semibold">
+                                            📅 {formatarDataBrasileira(item.previsaoEntrega)}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-400 text-xs">—</span>
+                                    )}
+                                  </td>
+                                  <td className="py-3 px-4 text-center whitespace-nowrap">
+                                    {item.dataUltimaEntrada ? (
+                                      <div className="space-y-0.5">
+                                        <span className="text-xs font-semibold text-slate-800">
+                                          {formatarDataBrasileira(item.dataUltimaEntrada)}
+                                        </span>
+                                        {item.quantidadeUltimaEntrada && (
+                                          <div className="text-[10px] text-emerald-800 font-medium">
+                                            +{item.quantidadeUltimaEntrada} {item.unidade}
+                                          </div>
+                                        )}
+                                        {item.notaFiscalUltimaEntrada && (
+                                          <div className="text-[10px] text-slate-500 font-mono">
+                                            NF: {item.notaFiscalUltimaEntrada}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-400 text-xs">Sem entrada</span>
+                                    )}
                                   </td>
                                   <td className="py-3 px-4 text-right text-slate-700 whitespace-nowrap tabular-nums text-xs">
                                     {formatBRL(item.custoMedio)} / {item.unidade}
@@ -17851,6 +18406,26 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         />
       )}
 
+      {/* MODAL CADASTRAR NOVO MATERIAL NO ALMOXARIFADO COM SKU ÚNICO */}
+      {showNovoMaterialEstoqueModal && (
+        <ModalCadastrarNovoItemEstoque
+          obras={obras}
+          obraFiltro={obraFiltro}
+          estoque={estoque}
+          onClose={() => setShowNovoMaterialEstoqueModal(false)}
+          onSalvar={handleCadastrarNovoItemEstoque}
+        />
+      )}
+
+      {/* MODAL DEFINIR DATA DE ENTREGA & APROVAÇÃO (DIRETORIA / COMPRAS -> ALMOXARIFADO) */}
+      {statusEntregaModalSc && (
+        <ModalDefinirEntregaStatus
+          sc={statusEntregaModalSc}
+          onClose={() => setStatusEntregaModalSc(null)}
+          onSalvar={handleAtualizarStatusEntregaSc}
+        />
+      )}
+
       {/* MODAL NOVO CONTRATO DE SUBEMPREITADA */}
       {showNovoContratoModal && (
         <ModalNovoContrato
@@ -19285,6 +19860,8 @@ function VisaoRestritaObra({
   onSalvarDiarioObra,
   onGerarOrdemCompraPDF,
   onGerarRomaneioRecebimentoPDF,
+  onImprimirRelatorioEntregas,
+  onCadastrarNovoItemEstoque,
 }: {
   usuarioLogado: UsuarioSistema;
   companyName: string;
@@ -19315,11 +19892,18 @@ function VisaoRestritaObra({
   onSalvarDiarioObra?: (novoDiario: DiarioObraRegistro) => void;
   onGerarOrdemCompraPDF?: (oc: OrdemCompra) => void;
   onGerarRomaneioRecebimentoPDF?: (oc: OrdemCompra) => void;
+  onImprimirRelatorioEntregas?: (
+    ordensParaRelatorio: OrdemCompra[],
+    obraNomeFiltro: string
+  ) => void;
+  onCadastrarNovoItemEstoque?: (novoItem: ItemEstoque) => void;
 }) {
   // Estado local para modais do Canteiro
   const [novoBmModalContrato, setNovoBmModalContrato] =
     useState<ContratoSubempreitada | null>(null);
   const [scChatModal, setScChatModal] = useState<SolicitacaoCompra | null>(null);
+  const [showModalCadastrarEstoqueObra, setShowModalCadastrarEstoqueObra] =
+    useState<boolean>(false);
 
   // Estados locais para a Rotina Diária do Canteiro & Checklist
   const [baixaItemEstoqueId, setBaixaItemEstoqueId] = useState<string>("");
@@ -19519,8 +20103,15 @@ function VisaoRestritaObra({
           </div>
 
           <nav className="p-3 space-y-1">
-            {(
-              [
+            {(() => {
+              const itensAlmoxarife: { id: ObraTabId; label: string }[] = [
+                { id: "NovoPedido", label: "📝 Fazer Pedido de Material (para Orçamento)" },
+                { id: "MeusPedidos", label: "📋 Meus Pedidos & Status da Diretoria" },
+                { id: "Recebimento", label: "🚚 Previsão de Entregas & Chegadas ('Quando Vai Chegar')" },
+                { id: "Estoque", label: "🧱 Almoxarifado da Obra (SKUs)" },
+              ];
+
+              const itensPadrao: { id: ObraTabId; label: string }[] = [
                 {
                   id: "PainelDiario",
                   label: "📋 Rotina Diária & Checklist",
@@ -19543,9 +20134,15 @@ function VisaoRestritaObra({
                   id: "Logistica",
                   label: "🚚 Calendário de Cargas",
                 },
-              ] as { id: ObraTabId; label: string }[]
-            ).map((item) => {
-              const ativo = obraActiveTab === item.id;
+              ];
+
+              const itensFinais =
+                usuarioLogado.cargo === "Almoxarife"
+                  ? itensAlmoxarife
+                  : itensPadrao;
+
+              return itensFinais.map((item) => {
+                const ativo = obraActiveTab === item.id;
               return (
                 <button
                   key={item.id}
@@ -19601,7 +20198,8 @@ function VisaoRestritaObra({
                   )}
                 </button>
               );
-            })}
+            });
+            })()}
           </nav>
 
           {/* Aviso de Segurança RBAC */}
@@ -20379,6 +20977,13 @@ function VisaoRestritaObra({
                   <label className="text-xs font-semibold text-slate-700">
                     Itens Solicitados para o Canteiro ({itensGrade.length})
                   </label>
+                  <datalist id="materiais-almoxarifado-sugestoes">
+                    {estoque.map((est) => (
+                      <option key={est.id} value={est.descricao}>
+                        {est.sku || est.codigo} — {est.descricao} ({est.unidade})
+                      </option>
+                    ))}
+                  </datalist>
                   <button
                     type="button"
                     onClick={adicionarLinhaGrade}
@@ -20404,24 +21009,50 @@ function VisaoRestritaObra({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {itensGrade.map((linha) => (
+                      {itensGrade.map((linha) => {
+                        const estMatch = estoque.find(
+                          (it) => it.descricao.toLowerCase() === linha.descricao.trim().toLowerCase()
+                        );
+
+                        return (
                         <tr key={linha.id}>
                           <td className="p-2.5">
                             <input
                               required
+                              list="materiais-almoxarifado-sugestoes"
                               placeholder="Ex: Aço CA-50 Ø 12.5mm dobrado / Cimento CP-II"
                               value={linha.descricao}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const match = estoque.find(
+                                  (it) => it.descricao.toLowerCase() === val.trim().toLowerCase()
+                                );
                                 setItensGrade((prev) =>
                                   prev.map((r) =>
                                     r.id === linha.id
-                                      ? { ...r, descricao: e.target.value }
+                                      ? {
+                                          ...r,
+                                          descricao: val,
+                                          unidade: match ? match.unidade : r.unidade,
+                                        }
                                       : r
                                   )
-                                )
-                              }
+                                );
+                              }}
                               className="w-full bg-slate-50 border border-slate-300 rounded-md px-3 py-1.5 text-sm text-slate-900"
                             />
+                            {estMatch ? (
+                              <div className="text-[10px] text-emerald-800 font-bold mt-1 flex items-center gap-1">
+                                <span>✔️ SKU no Almoxarifado:</span>
+                                <span className="font-mono bg-emerald-100 text-emerald-900 px-1.5 py-0.2 rounded border border-emerald-300">
+                                  {estMatch.sku || estMatch.codigo}
+                                </span>
+                              </div>
+                            ) : linha.descricao.trim().length >= 3 ? (
+                              <div className="text-[10px] text-indigo-700 font-medium mt-1 flex items-center gap-1">
+                                <span>✨ Novo Insumo: SKU exclusivo será gerado sem duplicidade</span>
+                              </div>
+                            ) : null}
                           </td>
                           <td className="p-2.5">
                             <input
@@ -20495,7 +21126,8 @@ function VisaoRestritaObra({
                             </button>
                           </td>
                         </tr>
-                      ))}
+                      );
+                    })}
                     </tbody>
                   </table>
                 </div>
@@ -20615,24 +21247,65 @@ function VisaoRestritaObra({
                         </td>
 
                         <td className="py-3.5 px-4 text-center align-top whitespace-nowrap">
+                          {sc.status === "Aprovada" && (
+                            <div className="space-y-1">
+                              <span className="px-3 py-1 rounded-full bg-emerald-100 border border-emerald-400 text-emerald-950 text-xs font-bold inline-block shadow-xs">
+                                🟢 PEDIDO APROVADO PELA DIRETORIA
+                              </span>
+                              {sc.dataPrevistaEntrega ? (
+                                <div className="text-xs font-bold text-emerald-800">
+                                  📅 Chegada Prevista: {formatarDataBrasileira(sc.dataPrevistaEntrega)}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-slate-500">
+                                  Data de entrega em definição
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {sc.status === "Não Aprovada / Recusada" && (
+                            <div className="space-y-1">
+                              <span className="px-3 py-1 rounded-full bg-red-100 border border-red-400 text-red-950 text-xs font-bold inline-block shadow-xs">
+                                🔴 NÃO APROVADO / RECUSADO
+                              </span>
+                              {sc.motivoRecusa && (
+                                <div className="text-xs text-red-700 font-semibold max-w-[200px] truncate mx-auto" title={sc.motivoRecusa}>
+                                  Motivo: {sc.motivoRecusa}
+                                </div>
+                              )}
+                            </div>
+                          )}
                           {sc.status === "Enviado / Aguardando Compras" && (
-                            <span className="px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold inline-block">
-                              🟡 Enviado / Aguardando Compras
-                            </span>
+                            <div className="space-y-1">
+                              <span className="px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold inline-block">
+                                🟡 Enviado / Aguardando Avaliação
+                              </span>
+                              {sc.dataPrevistaEntrega && (
+                                <div className="text-xs text-slate-600 font-medium">
+                                  Data Prevista: {formatarDataBrasileira(sc.dataPrevistaEntrega)}
+                                </div>
+                              )}
+                            </div>
                           )}
                           {sc.status === "Em Cotação" && (
-                            <span className="px-3 py-1 rounded-full bg-blue-100 border border-blue-300 text-blue-900 text-xs font-bold inline-block">
-                              🔵 Em Cotação com Fornecedores
-                            </span>
+                            <div className="space-y-1">
+                              <span className="px-3 py-1 rounded-full bg-blue-100 border border-blue-300 text-blue-900 text-xs font-bold inline-block">
+                                🔵 Em Cotação com Fornecedores
+                              </span>
+                              {sc.dataPrevistaEntrega && (
+                                <div className="text-xs text-slate-600 font-medium">
+                                  Previsão: {formatarDataBrasileira(sc.dataPrevistaEntrega)}
+                                </div>
+                              )}
+                            </div>
                           )}
                           {sc.status === "Comprada" && (
                             <div className="space-y-1">
                               <span className="px-3 py-1 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold inline-block">
                                 🟢 Compra Aprovada / Pedido Emitido
                               </span>
-                              <div className="text-xs text-slate-600 font-medium">
-                                Previsão Entrega:{" "}
-                                {sc.dataPrevistaEntrega || "Em programação"}
+                              <div className="text-xs text-slate-700 font-bold">
+                                📅 Chegada: {sc.dataPrevistaEntrega ? formatarDataBrasileira(sc.dataPrevistaEntrega) : "Em programação"}
                               </div>
                             </div>
                           )}
@@ -20676,17 +21349,28 @@ function VisaoRestritaObra({
           {/* =============================================================== */}
           {obraActiveTab === "Recebimento" && (
             <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div className="px-5 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-bold text-slate-900">
-                    Recebimento de Materiais & Conferência de Nota Fiscal na
-                    Obra
+                    Previsão de Entregas & Chegadas no Almoxarifado (&ldquo;Quando Vai Chegar&rdquo;)
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Pedidos já comprados pelo Setor de Suprimentos que estão a
-                    caminho ou foram entregues no canteiro
+                    Pedidos aprovados e comprados pelo Setor de Suprimentos com data de entrega definida pela Diretoria
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onImprimirRelatorioEntregas) {
+                      onImprimirRelatorioEntregas(ordensDaObra, usuarioLogado.obraNome);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-2 shadow-xs transition"
+                  title="Gerar e imprimir relatório A4 de previsão de entregas ('Quando Vai Chegar') para o almoxarifado"
+                >
+                  <span>🖨️</span>
+                  <span>Tirar Relatório de Chegadas (&ldquo;Quando Vai Chegar&rdquo;)</span>
+                </button>
               </div>
 
               <table className="w-full text-sm border-collapse text-left">
@@ -21225,96 +21909,174 @@ function VisaoRestritaObra({
 
                 {/* Tabela do Almoxarifado do Canteiro */}
                 <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900">
-                        Inventário de Materiais Disponíveis no Canteiro
-                      </h3>
-                      <p className="text-xs text-slate-500">
-                        Acompanhe o saldo físico em tempo real para planejar as frentes de serviço sem risco de desabastecimento.
-                      </p>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">
+                          Inventário de Materiais Disponíveis no Canteiro (SKUs Únicos)
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Acompanhe o saldo físico em tempo real, materiais com previsão de chegada e datas das últimas entradas.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowModalCadastrarEstoqueObra(true)}
+                          className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                          title="Cadastrar novo insumo/matéria-prima no almoxarifado com SKU único padronizado"
+                        >
+                          <span>✨</span>
+                          <span>+ Cadastrar Material (SKU)</span>
+                        </button>
+                        <button
+                          onClick={() => setObraActiveTab("NovoPedido")}
+                          className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+                        >
+                          + Solicitar Reposição
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => setObraActiveTab("NovoPedido")}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold transition"
-                    >
-                      + Solicitar Reposição
-                    </button>
-                  </div>
 
-                  <div className="overflow-x-auto rounded-lg border border-slate-200">
-                    <table className="w-full text-sm border-collapse text-left">
-                      <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
-                          <th className="py-3 px-4">Código / Descrição</th>
-                          <th className="py-3 px-4">Localização Física</th>
-                          <th className="py-3 px-4 text-right">Saldo Físico</th>
-                          <th className="py-3 px-4 text-center">Nível Mínimo</th>
-                          <th className="py-3 px-4 text-center">Status</th>
-                          <th className="py-3 px-4 text-right">Ação</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {itensObra.map((it) => {
-                          const critico = it.saldoAtual <= it.estoqueMinimo;
-
-                          return (
-                            <tr key={it.id} className="hover:bg-slate-50 transition-colors">
-                              <td className="py-3 px-4">
-                                <div className="font-bold text-slate-900">{it.descricao}</div>
-                                <div className="text-xs text-slate-500 font-mono mt-0.5">
-                                  {it.codigo} • {it.categoria}
-                                </div>
-                              </td>
-                              <td className="py-3 px-4 text-xs text-slate-700">
-                                📍 {it.localizacaoFisica}
-                              </td>
-                              <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums">
-                                <span className="text-base">{it.saldoAtual}</span>{" "}
-                                <span className="text-xs font-normal text-slate-500">{it.unidade}</span>
-                              </td>
-                              <td className="py-3 px-4 text-center text-xs text-slate-600 whitespace-nowrap">
-                                Mín: {it.estoqueMinimo} {it.unidade}
-                              </td>
-                              <td className="py-3 px-4 text-center">
-                                {critico ? (
-                                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200 inline-block animate-pulse">
-                                    🚨 Repor Imediato
-                                  </span>
-                                ) : (
-                                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200 inline-block">
-                                    ✅ Disponível
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-3 px-4 text-right whitespace-nowrap">
-                                <button
-                                  onClick={() => {
-                                    setItensGrade([
-                                      {
-                                        id: `item-${Date.now()}`,
-                                        descricao: it.descricao,
-                                        quantidade: Math.max(it.pontoReposicao * 2 - it.saldoAtual, it.estoqueMinimo),
-                                        unidade: it.unidade,
-                                        observacaoObra: `Reposição de estoque de canteiro. Saldo atual: ${it.saldoAtual} ${it.unidade}`,
-                                      },
-                                    ]);
-                                    setObraActiveTab("NovoPedido");
-                                  }}
-                                  className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
-                                >
-                                  Requisitar
-                                </button>
+                    <div className="overflow-x-auto rounded-lg border border-slate-200">
+                      <table className="w-full text-sm border-collapse text-left">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
+                            <th className="py-3 px-4">Código SKU / Descrição</th>
+                            <th className="py-3 px-4">Localização Física</th>
+                            <th className="py-3 px-4 text-right">Saldo Físico</th>
+                            <th className="py-3 px-4 text-center">Vai Entrar (Previsão)</th>
+                            <th className="py-3 px-4 text-center">Quando Entrou (Última)</th>
+                            <th className="py-3 px-4 text-center">Nível Mínimo</th>
+                            <th className="py-3 px-4 text-center">Status</th>
+                            <th className="py-3 px-4 text-right">Ação</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {itensObra.length === 0 ? (
+                            <tr>
+                              <td colSpan={8} className="py-10 text-center text-slate-500 text-xs">
+                                Nenhum material cadastrado no almoxarifado deste canteiro. Clique em &ldquo;+ Cadastrar Material (SKU)&rdquo; acima para incluir a primeira matéria-prima.
                               </td>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                          ) : (
+                            itensObra.map((it) => {
+                            const critico = it.saldoAtual <= it.estoqueMinimo;
+
+                            return (
+                              <tr key={it.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="px-2 py-0.5 rounded bg-slate-900 text-amber-300 font-mono text-[11px] font-bold">
+                                      {it.sku || it.codigo}
+                                    </span>
+                                    <span className="font-bold text-slate-900">{it.descricao}</span>
+                                  </div>
+                                  <div className="text-xs text-slate-500 mt-0.5">
+                                    {it.categoria}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 text-xs text-slate-700">
+                                  📍 {it.localizacaoFisica}
+                                </td>
+                                <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums">
+                                  <span className="text-base">{it.saldoAtual}</span>{" "}
+                                  <span className="text-xs font-normal text-slate-500">{it.unidade}</span>
+                                </td>
+                                <td className="py-3 px-4 text-center whitespace-nowrap">
+                                  {it.quantidadeAEntrar && it.quantidadeAEntrar > 0 ? (
+                                    <div className="space-y-0.5">
+                                      <span className="px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs font-bold inline-block">
+                                        + {it.quantidadeAEntrar} {it.unidade}
+                                      </span>
+                                      {it.previsaoEntrega && (
+                                        <div className="text-[10px] text-indigo-700 font-semibold">
+                                          📅 {formatarDataBrasileira(it.previsaoEntrega)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 text-xs">—</span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-center whitespace-nowrap">
+                                  {it.dataUltimaEntrada ? (
+                                    <div className="space-y-0.5">
+                                      <span className="text-xs font-semibold text-slate-800">
+                                        {formatarDataBrasileira(it.dataUltimaEntrada)}
+                                      </span>
+                                      {it.quantidadeUltimaEntrada && (
+                                        <div className="text-[10px] text-emerald-800 font-medium">
+                                          +{it.quantidadeUltimaEntrada} {it.unidade}
+                                        </div>
+                                      )}
+                                      {it.notaFiscalUltimaEntrada && (
+                                        <div className="text-[10px] text-slate-500 font-mono">
+                                          NF: {it.notaFiscalUltimaEntrada}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 text-xs">Sem entrada</span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-center text-xs text-slate-600 whitespace-nowrap">
+                                  Mín: {it.estoqueMinimo} {it.unidade}
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  {critico ? (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200 inline-block animate-pulse">
+                                      🚨 Repor Imediato
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200 inline-block">
+                                      ✅ Disponível
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-right whitespace-nowrap">
+                                  <button
+                                    onClick={() => {
+                                      setItensGrade([
+                                        {
+                                          id: `item-${Date.now()}`,
+                                          descricao: it.descricao,
+                                          quantidade: Math.max(it.pontoReposicao * 2 - it.saldoAtual, it.estoqueMinimo),
+                                          unidade: it.unidade,
+                                          observacaoObra: `Reposição de estoque de canteiro. Saldo atual: ${it.saldoAtual} ${it.unidade}`,
+                                        },
+                                      ]);
+                                      setObraActiveTab("NovoPedido");
+                                    }}
+                                    className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+                                  >
+                                    Requisitar
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          }))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
+
+                  {/* MODAL CADASTRAR NOVO MATERIAL NO ALMOXARIFADO DO CANTEIRO */}
+                  {showModalCadastrarEstoqueObra && (
+                    <ModalCadastrarNovoItemEstoque
+                      obras={obras}
+                      obraFiltro={obraAlvoId}
+                      estoque={estoque}
+                      onClose={() => setShowModalCadastrarEstoqueObra(false)}
+                      onSalvar={(novoItem) => {
+                        if (onCadastrarNovoItemEstoque) {
+                          onCadastrarNovoItemEstoque(novoItem);
+                        }
+                        setShowModalCadastrarEstoqueObra(false);
+                      }}
+                    />
+                  )}
                 </div>
-              </div>
-            );
+              );
           })()}
         </main>
       </div>
@@ -22245,7 +23007,16 @@ function ModalEditarSolicitacao({
   const [solicitante, setSolicitante] = useState(sc.solicitante || "");
   const [urgencia, setUrgencia] = useState(sc.urgencia || "Normal");
   const [dataNecessaria, setDataNecessaria] = useState(sc.dataNecessaria || "");
-  const [status, setStatus] = useState(sc.status || "Enviado / Aguardando Compras");
+  const [status, setStatus] = useState<SolicitacaoCompra["status"]>(
+    sc.status || "Enviado / Aguardando Compras"
+  );
+  const [dataPrevistaEntrega, setDataPrevistaEntrega] = useState(
+    sc.dataPrevistaEntrega || ""
+  );
+  const [motivoRecusa, setMotivoRecusa] = useState(sc.motivoRecusa || "");
+  const [observacoesEntrega, setObservacoesEntrega] = useState(
+    sc.observacoesEntrega || ""
+  );
   const [itens, setItens] = useState(
     sc.itens && sc.itens.length > 0
       ? sc.itens.map((it) => ({ ...it }))
@@ -22295,6 +23066,9 @@ function ModalEditarSolicitacao({
       solicitante: solicitante.trim(),
       urgencia: urgencia as any,
       dataNecessaria: dataNecessaria.trim(),
+      dataPrevistaEntrega: dataPrevistaEntrega.trim() || undefined,
+      motivoRecusa: motivoRecusa.trim() || undefined,
+      observacoesEntrega: observacoesEntrega.trim() || undefined,
       status: status as any,
       itens: itens.map((it) => ({
         ...it,
@@ -22358,12 +23132,55 @@ function ModalEditarSolicitacao({
                 onChange={(e) => setStatus(e.target.value as any)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
               >
-                <option value="Enviado / Aguardando Compras">Enviado / Aguardando Compras</option>
-                <option value="Em Cotação">Em Cotação</option>
-                <option value="Comprada">Comprada</option>
-                <option value="Entregue na Obra">Entregue na Obra</option>
+                <option value="Aprovada">🟢 Aprovada</option>
+                <option value="Não Aprovada / Recusada">🔴 Não Aprovada / Recusada</option>
+                <option value="Enviado / Aguardando Compras">🟡 Enviado / Aguardando Compras</option>
+                <option value="Em Cotação">🔵 Em Cotação</option>
+                <option value="Comprada">📦 Comprada</option>
+                <option value="Entregue na Obra">✅ Entregue na Obra</option>
               </select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                📅 Data Prevista de Entrega no Canteiro (Almoxarifado)
+              </label>
+              <input
+                type="date"
+                value={dataPrevistaEntrega}
+                onChange={(e) => setDataPrevistaEntrega(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono font-semibold focus:outline-none focus:border-slate-900"
+              />
+            </div>
+            {status === "Não Aprovada / Recusada" ? (
+              <div>
+                <label className="block font-bold text-red-700 mb-1">
+                  Motivo da Recusa / Não Aprovação *
+                </label>
+                <input
+                  type="text"
+                  value={motivoRecusa}
+                  onChange={(e) => setMotivoRecusa(e.target.value)}
+                  placeholder="Ex: Já há estoque suficiente / Cotação muito alta"
+                  className="w-full bg-red-50 border border-red-300 rounded-lg px-3 py-2 text-red-950 font-medium focus:outline-none focus:border-red-600"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Observações de Entrega p/ Canteiro
+                </label>
+                <input
+                  type="text"
+                  value={observacoesEntrega}
+                  onChange={(e) => setObservacoesEntrega(e.target.value)}
+                  placeholder="Ex: Descarregar portão B com caminhão toco"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+                />
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -22737,6 +23554,468 @@ function ModalEditarItemEstoque({
   );
 }
 
+/* ========================================================================= */
+/* MODAL CADASTRAR NOVO MATERIAL NO ALMOXARIFADO COM SKU ÚNICO               */
+/* ========================================================================= */
+
+function ModalCadastrarNovoItemEstoque({
+  obras,
+  obraFiltro,
+  estoque,
+  onClose,
+  onSalvar,
+}: {
+  obras: Obra[];
+  obraFiltro?: string;
+  estoque: ItemEstoque[];
+  onClose: () => void;
+  onSalvar: (novoItem: ItemEstoque) => void;
+}) {
+  const [descricao, setDescricao] = useState("");
+  const [categoria, setCategoria] = useState<string>(CATEGORIAS_CONSTRUCAO[0]);
+  const [unidade, setUnidade] = useState("un");
+  const [obraId, setObraId] = useState(
+    obraFiltro && obraFiltro !== "ALL" ? obraFiltro : obras[0]?.id || "central"
+  );
+  const [saldoAtual, setSaldoAtual] = useState<number>(0);
+  const [estoqueMinimo, setEstoqueMinimo] = useState<number>(0);
+  const [pontoReposicao, setPontoReposicao] = useState<number>(0);
+  const [custoMedio, setCustoMedio] = useState<number>(0);
+  const [localizacaoFisica, setLocalizacaoFisica] = useState("Almoxarifado Principal");
+  const [skuManual, setSkuManual] = useState<string>("");
+  const [skuEditadoManualmente, setSkuEditadoManualmente] = useState(false);
+
+  // Auto-geração inteligente de SKU conforme categoria e descrição
+  const skuAuto = useMemo(() => {
+    return gerarSkuInsumo(categoria, descricao || "INSUMO", estoque);
+  }, [categoria, descricao, estoque]);
+
+  const skuFinal = skuEditadoManualmente && skuManual.trim() ? skuManual.trim() : skuAuto;
+
+  // Verificação em tempo real de duplicidade por normalização rigorosa
+  const insumoDuplicado = useMemo(() => {
+    if (!descricao.trim() || descricao.trim().length < 3) return null;
+    return encontrarInsumoDuplicado(descricao, estoque);
+  }, [descricao, estoque]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!descricao.trim()) return;
+
+    if (insumoDuplicado) {
+      alert(
+        `Bloqueio de Duplicidade: Já existe o insumo "${insumoDuplicado.descricao}" cadastrado com o SKU ${insumoDuplicado.sku || insumoDuplicado.codigo}. Não é permitido duplicar matérias-primas no sistema.`
+      );
+      return;
+    }
+
+    const obraAlvo = obras.find((o) => o.id === obraId);
+    const obraNome = obraId === "central" ? "Almoxarifado Central" : obraAlvo?.nome || "Canteiro";
+
+    const novoItem: ItemEstoque = {
+      id: `est-${Date.now()}`,
+      obraId,
+      obraNome,
+      categoria,
+      codigo: skuFinal.toUpperCase(),
+      sku: skuFinal.toUpperCase(),
+      descricao: descricao.trim(),
+      unidade: unidade.trim() || "un",
+      saldoAtual: Number(saldoAtual) || 0,
+      estoqueMinimo: Number(estoqueMinimo) || 0,
+      pontoReposicao: Number(pontoReposicao) || 0,
+      custoMedio: Number(custoMedio) || 0,
+      localizacaoFisica: localizacaoFisica.trim() || "Almoxarifado Geral",
+      quantidadeAEntrar: 0,
+      dataUltimaEntrada: Number(saldoAtual) > 0 ? new Date().toISOString().split("T")[0] : undefined,
+      quantidadeUltimaEntrada: Number(saldoAtual) > 0 ? Number(saldoAtual) : undefined,
+    };
+
+    onSalvar(novoItem);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden my-6">
+        <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">✨</span>
+            <div>
+              <h3 className="font-bold text-sm">Cadastrar Novo Material no Almoxarifado</h3>
+              <p className="text-xs text-slate-400">Padronização com SKU único e proteção contra produtos duplicados</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-white text-lg font-bold p-1 transition"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs max-h-[85vh] overflow-y-auto">
+          {/* Alerta de duplicidade em tempo real */}
+          {insumoDuplicado && (
+            <div className="p-3.5 bg-red-50 border border-red-300 rounded-lg text-red-800 space-y-1">
+              <div className="font-bold flex items-center gap-1.5 text-xs text-red-900">
+                <span>⛔</span> Item já existente no Almoxarifado!
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                O produto <strong>&ldquo;{insumoDuplicado.descricao}&rdquo;</strong> já está cadastrado no sistema com o SKU <strong>{insumoDuplicado.sku || insumoDuplicado.codigo}</strong> (Local: {insumoDuplicado.obraNome}). Para evitar duplicações, utilize o SKU existente ou edite a descrição.
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Nome / Descrição da Matéria-Prima *
+            </label>
+            <input
+              required
+              type="text"
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+              placeholder="Ex: Cimento CP-II-F-32 50kg / Joelho 90° PVC Soldável 25mm"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 font-semibold focus:outline-none focus:border-slate-900 text-sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                SKU Gerado Automaticamente *
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  required
+                  type="text"
+                  value={skuFinal}
+                  onChange={(e) => {
+                    setSkuManual(e.target.value.toUpperCase());
+                    setSkuEditadoManualmente(true);
+                  }}
+                  className="w-full bg-slate-100 border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-slate-900 uppercase"
+                />
+                {skuEditadoManualmente && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSkuEditadoManualmente(false);
+                      setSkuManual("");
+                    }}
+                    className="px-2 py-2 text-[10px] text-slate-600 bg-slate-200 hover:bg-slate-300 rounded font-semibold whitespace-nowrap"
+                    title="Restaurar SKU automático padrão"
+                  >
+                    Auto
+                  </button>
+                )}
+              </div>
+              <span className="text-[10px] text-slate-500 mt-0.5 block">
+                Prefixo baseado na categoria com contador sequencial exclusivo
+              </span>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Unidade de Medida *</label>
+              <select
+                value={unidade}
+                onChange={(e) => setUnidade(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+              >
+                <option value="un">un (Unidade / Peça)</option>
+                <option value="sc">sc (Saco 50kg / 20kg)</option>
+                <option value="m²">m² (Metro quadrado)</option>
+                <option value="m³">m³ (Metro cúbico)</option>
+                <option value="kg">kg (Quilograma)</option>
+                <option value="barra">barra (Barra 12m)</option>
+                <option value="m">m (Metro linear)</option>
+                <option value="lata">lata (Lata 18L / Galão 3.6L)</option>
+                <option value="pct">pct (Pacote / Caixa)</option>
+                <option value="vb">vb (Verba Global)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Categoria de Construção</label>
+              <select
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+              >
+                {CATEGORIAS_CONSTRUCAO.map((c, i) => (
+                  <option key={i} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Canteiro de Obras / Almoxarifado</label>
+              <select
+                value={obraId}
+                onChange={(e) => setObraId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+              >
+                <option value="central">Almoxarifado Central (Geral)</option>
+                {obras.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-200">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Saldo Físico Atual</label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={saldoAtual}
+                onChange={(e) => setSaldoAtual(parseFloat(e.target.value) || 0)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Estoque Mínimo</label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={estoqueMinimo}
+                onChange={(e) => setEstoqueMinimo(parseFloat(e.target.value) || 0)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Ponto Reposição</label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={pontoReposicao}
+                onChange={(e) => setPontoReposicao(parseFloat(e.target.value) || 0)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Custo Médio (R$)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={custoMedio}
+                onChange={(e) => setCustoMedio(parseFloat(e.target.value) || 0)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-slate-900"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Localização Física no Canteiro</label>
+            <input
+              type="text"
+              value={localizacaoFisica}
+              onChange={(e) => setLocalizacaoFisica(e.target.value)}
+              placeholder="Ex: Galpão A - Prateleira 3 / Pátio de Agregados / Baia 2"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+            />
+          </div>
+
+          <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+            <span className="text-[11px] text-slate-500">
+              * O item será integrado imediatamente ao mapa de cotação e almoxarifado.
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={Boolean(insumoDuplicado)}
+                className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold transition flex items-center gap-1.5 shadow-xs"
+              >
+                <span>💾</span>
+                <span>Cadastrar Material</span>
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* MODAL DEFINIR DATA DE ENTREGA & APROVAÇÃO (DIRETORIA / COMPRAS -> ALMOX.) */
+/* ========================================================================= */
+
+function ModalDefinirEntregaStatus({
+  sc,
+  onClose,
+  onSalvar,
+}: {
+  sc: SolicitacaoCompra;
+  onClose: () => void;
+  onSalvar: (
+    scId: string,
+    novoStatus: SolicitacaoCompra["status"],
+    dataEntrega: string,
+    motivoRecusa?: string,
+    observacoes?: string
+  ) => void;
+}) {
+  const [status, setStatus] = useState<SolicitacaoCompra["status"]>(
+    sc.status || "Enviado / Aguardando Compras"
+  );
+  const [dataEntrega, setDataEntrega] = useState<string>(sc.dataPrevistaEntrega || "");
+  const [motivoRecusa, setMotivoRecusa] = useState<string>(sc.motivoRecusa || "");
+  const [observacoes, setObservacoes] = useState<string>(sc.observacoesEntrega || "");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSalvar(sc.id, status, dataEntrega.trim(), motivoRecusa.trim(), observacoes.trim());
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-2xl max-w-xl w-full border border-slate-200 overflow-hidden my-6">
+        <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">📅</span>
+            <div>
+              <h3 className="font-bold text-sm">Definir Entrega & Aprovação — {sc.codigo}</h3>
+              <p className="text-xs text-slate-400">
+                Atualize a data prevista de chegada e status para o Almoxarifado da Obra
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-white text-lg font-bold p-1 transition"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+          {/* Card Resumo do Pedido */}
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-800">
+                Solicitante: {sc.solicitante} {sc.solicitanteCargo ? `(${sc.solicitanteCargo})` : ""}
+              </span>
+              <span className="text-slate-500 font-medium">Urgência: {sc.urgencia || "Normal"}</span>
+            </div>
+            <div className="text-[11px] text-slate-600">
+              <strong>Itens no Pedido:</strong>
+              <ul className="list-disc list-inside mt-1 space-y-0.5 text-slate-700">
+                {sc.itens.map((it) => (
+                  <li key={it.id}>
+                    {it.quantidade} {it.unidade} — {it.descricao}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Decisão de Aprovação do Pedido *
+            </label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as any)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-semibold focus:outline-none focus:border-slate-900"
+            >
+              <option value="Aprovada">🟢 Aprovada (Liberado para Compra / Entrega)</option>
+              <option value="Não Aprovada / Recusada">🔴 Não Aprovada / Recusada</option>
+              <option value="Em Cotação">🔵 Em Cotação com Fornecedores</option>
+              <option value="Comprada">📦 Comprada (Aguardando Transporte)</option>
+              <option value="Entregue na Obra">✅ Entregue na Obra</option>
+              <option value="Enviado / Aguardando Compras">🟡 Enviado / Aguardando Compras</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Data Prevista de Chegada no Canteiro (Almoxarifado)
+            </label>
+            <input
+              type="date"
+              value={dataEntrega}
+              onChange={(e) => setDataEntrega(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 font-semibold focus:outline-none focus:border-slate-900"
+            />
+            <span className="text-[11px] text-slate-500 mt-1 block">
+              O Almoxarife visualizará esta data instantaneamente no painel &ldquo;Quando Vai Chegar&rdquo; e nos relatórios de descarga.
+            </span>
+          </div>
+
+          {status === "Não Aprovada / Recusada" && (
+            <div>
+              <label className="block font-bold text-red-700 mb-1">
+                Motivo da Não Aprovação / Recusa *
+              </label>
+              <input
+                required
+                type="text"
+                value={motivoRecusa}
+                onChange={(e) => setMotivoRecusa(e.target.value)}
+                placeholder="Ex: Saldo em estoque suficiente / Cotação acima do teto orçamentário"
+                className="w-full bg-red-50 border border-red-300 rounded-lg px-3 py-2 text-red-950 font-medium focus:outline-none focus:border-red-600"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Instruções / Observações para o Canteiro
+            </label>
+            <textarea
+              rows={2}
+              value={observacoes}
+              onChange={(e) => setObservacoes(e.target.value)}
+              placeholder="Ex: Descarregar na baia 2. Motorista agendado para o período da manhã com caminhão toco."
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-slate-900"
+            />
+          </div>
+
+          <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold transition flex items-center gap-1.5 shadow-xs"
+            >
+              <span>💾</span>
+              <span>Salvar e Atualizar Almoxarifado</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 function ModalNovoContrato({
   obras,
