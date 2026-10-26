@@ -734,13 +734,13 @@ const USUARIOS_INICIAIS: UsuarioSistema[] = [
     status: "Ativo",
   },
   {
-    id: "usr-almoxarife-1",
-    nome: "Almoxarife da Obra",
+    id: "usr-almox-henrique",
+    nome: "Henrique",
     cargo: "Almoxarife",
     obraId: "ALL",
-    obraNome: "Canteiro de Obras (Almoxarifado)",
-    email: "almoxarifado@jcbauer.com.br",
-    senha: "123",
+    obraNome: "Todas as Obras (Central de Compras)",
+    email: "suprimentos@jcbauer.com",
+    senha: "obra123",
     status: "Ativo",
   },
 ];
@@ -2062,10 +2062,25 @@ export default function HomePage() {
               return u;
             });
           if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
-            const temAlmoxarife = parsedUsers.some((u) => u.cargo === "Almoxarife");
-            const listaFinal = temAlmoxarife
-              ? parsedUsers
-              : [...parsedUsers, USUARIOS_INICIAIS[1]];
+            let listaFinal = parsedUsers.map((u) => {
+              if (u.email === "suprimentos@jcbauer.com" || u.nome?.toLowerCase() === "henrique") {
+                return {
+                  ...u,
+                  id: u.id || "usr-almox-henrique",
+                  nome: "Henrique",
+                  cargo: "Almoxarife" as const,
+                  obraId: u.obraId || "ALL",
+                  obraNome: u.obraNome || "Todas as Obras (Central de Compras)",
+                  email: "suprimentos@jcbauer.com",
+                  senha: u.senha || "obra123",
+                  status: "Ativo" as const,
+                };
+              }
+              return u;
+            });
+            if (!listaFinal.some((u) => u.cargo === "Almoxarife")) {
+              listaFinal = [...listaFinal, USUARIOS_INICIAIS[1]];
+            }
             usuariosEfetivos = listaFinal;
             setUsuarios(listaFinal);
             window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(listaFinal));
@@ -7842,69 +7857,59 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     e.preventDefault();
     setErroLogin(null);
     const loginLimpo = loginInput.trim().toLowerCase();
-    const loginSemBr = loginLimpo.replace(/\.com\.br$/, ".com").replace(/\.com$/, "");
     const senhaLimpa = senhaInput.trim();
 
-    // 1. Busca flexível e inteligente nos usuários cadastrados
+    // 1. Busca rigorosa do usuário com base nas credenciais informadas
     let userFound = usuarios.find((u) => {
-      const uEmail = (u.email || "").trim().toLowerCase();
-      const uEmailSemBr = uEmail.replace(/\.com\.br$/, ".com").replace(/\.com$/, "");
-      const uNome = (u.nome || "").trim().toLowerCase();
-      const uUsuarioParte = uEmail.split("@")[0];
+      const emailCadastrado = (u.email || "").trim().toLowerCase();
+      const nomeCadastrado = (u.nome || "").trim().toLowerCase();
+      const senhaCadastrada = (u.senha || "").trim();
 
-      const matchEmail =
-        uEmail === loginLimpo ||
-        uEmailSemBr === loginSemBr ||
-        uUsuarioParte === loginLimpo;
-
-      const matchNome =
-        uNome === loginLimpo ||
-        (loginLimpo.length >= 4 && uNome.includes(loginLimpo));
-
-      const matchCargo =
-        u.cargo.toLowerCase() === loginLimpo ||
+      const matchLogin =
+        emailCadastrado === loginLimpo ||
+        nomeCadastrado === loginLimpo ||
+        (u.cargo === "Administrador" &&
+          (loginLimpo === "admin" || loginLimpo === "master")) ||
         (u.cargo === "Almoxarife" &&
-          (loginLimpo === "almoxarifado" ||
-            loginLimpo === "almoxarife" ||
-            loginLimpo === "obra"));
-
-      const matchLogin = matchEmail || matchNome || matchCargo;
+          (loginLimpo === "almoxarife" ||
+            loginLimpo === "almoxarifado" ||
+            loginLimpo === "henrique"));
 
       const matchSenha =
-        (u.senha || "").trim() === senhaLimpa ||
+        senhaCadastrada === senhaLimpa ||
         (u.cargo === "Administrador" &&
           (senhaLimpa === "123" || senhaLimpa === "admin" || senhaLimpa === "master")) ||
         (u.cargo === "Almoxarife" &&
-          (senhaLimpa === "123" || senhaLimpa === "obra123" || senhaLimpa === "almoxarifado"));
+          (senhaLimpa === "obra123" || senhaLimpa === "123"));
 
       return matchLogin && matchSenha;
     });
 
-    // 2. Fallback resiliente para Administrador Master (aceita .com e .com.br)
+    // 2. Se Henrique for digitado especificamente (conforme configurado: suprimentos@jcbauer.com e obra123)
     if (
       !userFound &&
-      (loginLimpo === "admin" ||
-        loginLimpo === "master" ||
-        loginLimpo === "suprimentos" ||
-        loginLimpo.includes("suprimentos@jcbauer") ||
-        loginLimpo.includes("welliton@jcbauer") ||
-        loginLimpo === "administrador") &&
-      (senhaLimpa === "123" || senhaLimpa === "admin" || senhaLimpa === "master")
+      (loginLimpo === "suprimentos@jcbauer.com" || loginLimpo === "henrique") &&
+      (senhaLimpa === "obra123" || senhaLimpa === "123")
     ) {
-      userFound = usuarios.find((u) => u.cargo === "Administrador") || USUARIOS_INICIAIS[0];
+      userFound =
+        usuarios.find(
+          (u) =>
+            u.email.toLowerCase() === "suprimentos@jcbauer.com" ||
+            u.nome.toLowerCase() === "henrique"
+        ) || USUARIOS_INICIAIS[1];
     }
 
-    // 3. Fallback resiliente para Almoxarife (aceita .com, .com.br, almoxarifado, obra)
+    // 3. Se Administrador for digitado especificamente (suprimentos@jcbauer.com.br ou admin e 123)
     if (
       !userFound &&
-      (loginLimpo === "almoxarife" ||
-        loginLimpo === "almoxarifado" ||
-        loginLimpo === "obra" ||
-        loginLimpo.includes("almoxarifado@jcbauer") ||
-        loginLimpo.includes("almoxarife@jcbauer")) &&
-      (senhaLimpa === "123" || senhaLimpa === "obra123" || senhaLimpa === "almoxarifado")
+      (loginLimpo === "suprimentos@jcbauer.com.br" ||
+        loginLimpo === "admin" ||
+        loginLimpo === "master" ||
+        loginLimpo === "welliton") &&
+      (senhaLimpa === "123" || senhaLimpa === "admin" || senhaLimpa === "master")
     ) {
-      userFound = usuarios.find((u) => u.cargo === "Almoxarife") || USUARIOS_INICIAIS[1];
+      userFound =
+        usuarios.find((u) => u.cargo === "Administrador") || USUARIOS_INICIAIS[0];
     }
 
     if (!userFound) {
@@ -19499,7 +19504,7 @@ function TelaLoginCorporativa({
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
                 <span>🧱</span>
-                <span>Acesso Almoxarifado da Obra</span>
+                <span>Acesso Almoxarifado: {almoxarifeUser.nome}</span>
               </span>
               <span className="text-[10px] font-semibold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">
                 Canteiro de Obras
@@ -19512,7 +19517,7 @@ function TelaLoginCorporativa({
               className="w-full py-2.5 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs"
             >
               <span>🔑</span>
-              <span>Entrar como Almoxarife (1 Clique)</span>
+              <span>Entrar como {almoxarifeUser.nome} (1 Clique)</span>
             </button>
 
             <div className="bg-white/80 border border-emerald-200 rounded-lg p-2 text-[11px] text-slate-700 flex items-center justify-between">
@@ -19539,7 +19544,7 @@ function TelaLoginCorporativa({
               type="text"
               value={loginInput}
               onChange={(e) => setLoginInput(e.target.value)}
-              placeholder="ex: almoxarifado@jcbauer.com.br ou admin"
+              placeholder={`ex: ${adminUser.email} ou ${almoxarifeUser.email}`}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
             />
           </div>
@@ -19553,7 +19558,7 @@ function TelaLoginCorporativa({
               type="password"
               value={senhaInput}
               onChange={(e) => setSenhaInput(e.target.value)}
-              placeholder="ex: 123"
+              placeholder="ex: 123 ou obra123"
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
             />
           </div>
@@ -19583,9 +19588,9 @@ function TelaLoginCorporativa({
                 setSenhaInput(almoxarifeUser.senha);
               }}
               className="py-2.5 px-3 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-semibold transition"
-              title="Preencher com os dados do Almoxarifado"
+              title={`Preencher com as credenciais de ${almoxarifeUser.nome}`}
             >
-              Almoxarife
+              {almoxarifeUser.nome}
             </button>
             <button
               type="submit"
