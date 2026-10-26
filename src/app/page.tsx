@@ -1416,8 +1416,9 @@ function gerarSkuInsumo(
   categoria: string,
   estoqueExistente: ItemEstoque[]
 ): string {
-  const n = (nome || "").toLowerCase().trim();
-  const c = (categoria || "").toLowerCase().trim();
+  const textoTotal = `${nome || ""} ${categoria || ""}`.toLowerCase().trim();
+  const n = textoTotal;
+  const c = textoTotal;
 
   let prefixo = "MAT";
 
@@ -2696,6 +2697,56 @@ export default function HomePage() {
     return () => {
       ativo = false;
     };
+  }, []);
+
+  // Sincronização em tempo real entre abas e janelas (Cross-Tab Storage Sync)
+  useEffect(() => {
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (!e.newValue) return;
+      try {
+        if (e.key === PROCESSOS_COTACOES_STORAGE_KEY) {
+          const novos = JSON.parse(e.newValue);
+          if (Array.isArray(novos) && novos.length > 0) {
+            setProcessosCotacoes(novos);
+            const primeira = novos[0];
+            if (primeira) {
+              setCotacaoAtivaId(primeira.id);
+              setComparativoTitulo(primeira.titulo);
+              setComparativoObraId(primeira.obraId || "");
+              setComparativoCategoria(primeira.categoria || "Revestimentos, Louças & Metais");
+              if (Array.isArray(primeira.fornecedores) && primeira.fornecedores.length >= 2) {
+                setComparativoFornecedores(primeira.fornecedores);
+              }
+              if (Array.isArray(primeira.itens) && primeira.itens.length > 0) {
+                setComparativoItens(primeira.itens);
+              }
+            }
+          }
+        } else if (e.key === COMPARATIVO_STORAGE_KEY) {
+          const comp = JSON.parse(e.newValue);
+          if (comp && typeof comp === "object") {
+            if (comp.titulo !== undefined) setComparativoTitulo(comp.titulo);
+            if (comp.obraId !== undefined) setComparativoObraId(comp.obraId);
+            if (comp.categoria !== undefined) setComparativoCategoria(comp.categoria);
+            if (Array.isArray(comp.fornecedores) && comp.fornecedores.length >= 2) setComparativoFornecedores(comp.fornecedores);
+            if (Array.isArray(comp.itens) && comp.itens.length > 0) setComparativoItens(comp.itens);
+          }
+        } else if (e.key === ESTOQUE_STORAGE_KEY) {
+          const est = JSON.parse(e.newValue);
+          if (Array.isArray(est)) {
+            setEstoque(est);
+          }
+        } else if (e.key === SOLICITACOES_STORAGE_KEY) {
+          const sol = JSON.parse(e.newValue);
+          if (Array.isArray(sol)) {
+            setSolicitacoes(sol);
+          }
+        }
+      } catch {}
+    };
+
+    window.addEventListener("storage", handleStorageEvent);
+    return () => window.removeEventListener("storage", handleStorageEvent);
   }, []);
 
   const handleTestarConexaoSupabase = async () => {
@@ -8199,10 +8250,39 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       return novoEstoque;
     });
 
-    // 2. Coloca automaticamente a demanda na Linha de Espera do Mapa de Cotação
+    // 2. Coloca automaticamente a demanda no Mapa de Cotação com todos os itens já carregados
     const anoAtual = new Date().getFullYear();
     const seqCot = processosCotacoes.length + 1;
     const codigoCot = `COT-${anoAtual}-${String(seqCot).padStart(3, "0")}`;
+
+    const itensCotacao: ItemComparativoRapido[] = novaSc.itens.map((it, idx) => ({
+      id: `comp-it-${Date.now()}-${idx}`,
+      nome: it.descricao.trim(),
+      quantidade: Number(it.quantidade) || 1,
+      unidade: it.unidade || "un",
+      preco1: 0,
+      preco2: 0,
+      preco3: 0,
+      precos: [0, 0, 0],
+    }));
+
+    const fornecedoresIniciais: FornecedorCotadoRapido[] =
+      Array.isArray(comparativoFornecedores) && comparativoFornecedores.length >= 2
+        ? comparativoFornecedores.map((f) => ({
+            nome: f.nome || "",
+            vendedor: f.vendedor || "",
+            telefone: f.telefone || "",
+            prazo: f.prazo || "",
+            condicao: f.condicao || "",
+            freteTipo: f.freteTipo || "CIF",
+            freteValor: 0,
+            descontoValor: 0,
+          }))
+        : [
+            { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
+            { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
+            { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
+          ];
 
     const novaCotacao: ProcessoCotacao = {
       id: `cot-sc-${novaSc.id}`,
@@ -8220,20 +8300,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         new Date().toLocaleDateString("pt-BR") +
         " " +
         new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-      fornecedores: [
-        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
-        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
-        { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
-      ],
-      itens: novaSc.itens.map((it, idx) => ({
-        id: `comp-it-${Date.now()}-${idx}`,
-        nome: it.descricao,
-        quantidade: Number(it.quantidade) || 1,
-        unidade: it.unidade || "un",
-        preco1: 0,
-        preco2: 0,
-        preco3: 0,
-      })),
+      fornecedores: fornecedoresIniciais,
+      itens: itensCotacao,
       observacoes: `Solicitação originada no Canteiro/Almoxarifado da obra ${obraNome}. Data necessária na obra: ${novaSc.dataNecessaria || "Imediato"}`,
     };
 
@@ -8246,8 +8314,29 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       return novosProcessos;
     });
 
+    // 3. Ativa Imediatamente no Mapa de Cotações para que o Administrador já veja a planilha preenchida
+    setCotacaoAtivaId(novaCotacao.id);
+    setComparativoTitulo(novaCotacao.titulo);
+    setComparativoObraId(novaCotacao.obraId);
+    setComparativoCategoria(novaCotacao.categoria);
+    setComparativoFornecedores(fornecedoresIniciais);
+    setComparativoItens(itensCotacao);
+    setModoCotacoes("comparativo_rapido");
+
+    const dadosComparativoSalvar = {
+      titulo: novaCotacao.titulo,
+      obraId: novaCotacao.obraId,
+      categoria: novaCotacao.categoria,
+      fornecedores: fornecedoresIniciais,
+      itens: itensCotacao,
+    };
+    try {
+      window.localStorage.setItem(COMPARATIVO_STORAGE_KEY, JSON.stringify(dadosComparativoSalvar));
+    } catch {}
+    salvarChaveSupabase(COMPARATIVO_STORAGE_KEY, dadosComparativoSalvar).catch(() => {});
+
     dispararAviso(
-      `Pedido ${novaSc.codigo} enviado com sucesso! Já está na Linha de Espera do Mapa de Cotação e os insumos foram pré-catalogados no Almoxarifado.`
+      `Pedido ${novaSc.codigo} enviado com sucesso! Já caiu no Almoxarifado e no Mapa de Cotação com todos os itens carregados para orçamento.`
     );
   };
 
@@ -11837,9 +11926,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                   setComparativoTitulo(proc.titulo);
                                   setComparativoObraId(proc.obraId);
                                   setComparativoCategoria(proc.categoria);
+                                  if (Array.isArray(proc.fornecedores) && proc.fornecedores.length >= 2) {
+                                    setComparativoFornecedores(proc.fornecedores);
+                                  }
                                   setComparativoItens(proc.itens);
                                   setModoCotacoes("comparativo_rapido");
-                                  dispararAviso(`Cotação ${proc.codigo} carregada na mesa de equalização!`);
+                                  dispararAviso(`Cotação ${proc.codigo} carregada na mesa de equalização com todos os ${proc.itens.length} itens!`);
                                 }}
                                 className={`px-2.5 py-1 rounded text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
                                   isAtiva
@@ -12640,31 +12732,68 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                         </thead>
 
                         <tbody className="divide-y divide-slate-200">
-                          {comparativoItens.length === 0 ? (
-                            <tr>
-                              <td
-                                colSpan={comparativoFornecedores.length + 3}
-                                className="py-12 text-center text-slate-500"
-                              >
-                                <div className="max-w-xs mx-auto space-y-3">
-                                  <span className="text-3xl block">📋</span>
-                                  <div className="text-xs font-semibold text-slate-700">
-                                    Nenhum item na cotação atual.
-                                  </div>
-                                  <p className="text-[11px] text-slate-500">
-                                    Clique no botão abaixo para adicionar insumos ou importe uma lista do Excel.
-                                  </p>
-                                  <button
-                                    type="button"
-                                    onClick={handleAdicionarItemComparativo}
-                                    className="px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-bold"
-                                  >
-                                    + Adicionar Primeiro Insumo
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ) : (
+                          {comparativoItens.length === 0 ? (() => {
+                            const pendenteAlmox = processosCotacoes.find(
+                              (p) => p.status === "Aguardando Fornecedores" && (p.itens || []).length > 0
+                            );
+                            return (
+                              <tr>
+                                <td
+                                  colSpan={comparativoFornecedores.length + 3}
+                                  className="py-12 text-center text-slate-500"
+                                >
+                                  {pendenteAlmox ? (
+                                    <div className="max-w-md mx-auto space-y-3 p-5 bg-amber-50/80 rounded-xl border-2 border-amber-300 text-slate-900 shadow-xs">
+                                      <span className="text-3xl block">📥</span>
+                                      <div className="text-sm font-extrabold text-amber-950">
+                                        Demanda do Almoxarifado pronta para Cotação: {pendenteAlmox.codigo}
+                                      </div>
+                                      <div className="text-xs text-slate-600">
+                                        🏗️ {pendenteAlmox.obraNome} • <strong>{pendenteAlmox.itens.length} insumos requisitados</strong>
+                                      </div>
+                                      <p className="text-[11px] text-slate-500">
+                                        Clique no botão abaixo para preencher automaticamente toda a planilha com estes itens, sem precisar digitar um por um:
+                                      </p>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setCotacaoAtivaId(pendenteAlmox.id);
+                                          setComparativoTitulo(pendenteAlmox.titulo);
+                                          setComparativoObraId(pendenteAlmox.obraId);
+                                          setComparativoCategoria(pendenteAlmox.categoria);
+                                          if (Array.isArray(pendenteAlmox.fornecedores) && pendenteAlmox.fornecedores.length >= 2) {
+                                            setComparativoFornecedores(pendenteAlmox.fornecedores);
+                                          }
+                                          setComparativoItens(pendenteAlmox.itens);
+                                          dispararAviso(`Carregados automaticamente ${pendenteAlmox.itens.length} itens do Almoxarifado!`);
+                                        }}
+                                        className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-xs transition cursor-pointer"
+                                      >
+                                        ⚡ Carregar {pendenteAlmox.itens.length} Itens do Almoxarifado no Mapa
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="max-w-xs mx-auto space-y-3">
+                                      <span className="text-3xl block">📋</span>
+                                      <div className="text-xs font-semibold text-slate-700">
+                                        Nenhum item na cotação atual.
+                                      </div>
+                                      <p className="text-[11px] text-slate-500">
+                                        Clique no botão abaixo para adicionar insumos ou importe uma lista do Excel.
+                                      </p>
+                                      <button
+                                        type="button"
+                                        onClick={handleAdicionarItemComparativo}
+                                        className="px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-bold"
+                                      >
+                                        + Adicionar Primeiro Insumo
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })() : (
                             resumoComparativo.itensCalculados.map(
                               (it, itemIdx) => {
                                 return (
@@ -15558,6 +15687,127 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                 {/* Sub-Aba 1: SALDOS EM ESTOQUE */}
                 {subAbaEstoque === "saldos" && (
                   <div className="space-y-4">
+                    {/* PEDIDOS RECENTES DE COTAÇÃO DO ALMOXARIFADO */}
+                    {(() => {
+                      const pedidosPendentesAlmox = (solicitacoes || []).filter(
+                        (s) => s.origemCanteiro && s.status !== "Concluída"
+                      );
+                      if (pedidosPendentesAlmox.length === 0) return null;
+
+                      return (
+                        <div className="bg-gradient-to-r from-amber-50 via-white to-amber-50/50 border-2 border-amber-400 rounded-xl p-4 shadow-xs">
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="flex h-3 w-3 relative">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                              </span>
+                              <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-1.5">
+                                <span>📥</span> Pedidos de Materiais Solicitados pelo Canteiro / Almoxarifado
+                              </h4>
+                              <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-xs font-black">
+                                {pedidosPendentesAlmox.length} solicitação{pedidosPendentesAlmox.length > 1 ? "ões" : ""}
+                              </span>
+                            </div>
+                            <span className="text-xs text-slate-500 font-medium">
+                              Demandas já pré-catalogadas no Almoxarifado com quantidade a entrar e prontas no Mapa de Cotação
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {pedidosPendentesAlmox.slice(0, 6).map((sc) => {
+                              const nomeObra = obras.find((o) => o.id === sc.obraId)?.nome || "Canteiro Central";
+                              return (
+                                <div
+                                  key={sc.id}
+                                  className="p-3 bg-white rounded-lg border border-amber-200 hover:border-amber-400 shadow-2xs transition flex flex-col justify-between"
+                                >
+                                  <div>
+                                    <div className="flex items-center justify-between gap-1 mb-1">
+                                      <span className="font-mono text-[11px] font-bold text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded">
+                                        {sc.codigo}
+                                      </span>
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                                        {sc.status}
+                                      </span>
+                                    </div>
+                                    <div className="font-bold text-xs text-slate-900 truncate">
+                                      🏗️ {nomeObra}
+                                    </div>
+                                    <div className="text-[11px] text-slate-600 mt-0.5">
+                                      👤 {sc.solicitante} ({sc.solicitanteCargo || "Almoxarife"})
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 mt-1">
+                                      📅 Necessário até: <strong>{sc.dataNecessaria || "Imediato"}</strong>
+                                    </div>
+                                    <div className="mt-2 bg-slate-50 rounded p-2 text-xs border border-slate-200/80 space-y-0.5">
+                                      <span className="text-[10px] font-bold text-slate-500 uppercase block">Itens Solicitados:</span>
+                                      {(sc.itens || []).slice(0, 3).map((it, idx) => (
+                                        <div key={idx} className="text-slate-800 font-medium truncate flex justify-between">
+                                          <span>• {it.descricao}</span>
+                                          <span className="font-bold text-slate-900">{it.quantidade} {it.unidade}</span>
+                                        </div>
+                                      ))}
+                                      {(sc.itens || []).length > 3 && (
+                                        <div className="text-[10px] text-slate-500 italic">
+                                          + {(sc.itens || []).length - 3} outros itens...
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="pt-2.5 mt-2 border-t border-slate-100 flex items-center justify-between">
+                                    <span className="text-[10px] font-semibold text-slate-500">
+                                      {(sc.itens || []).length} itens no pedido
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const cotEncontrada = processosCotacoes.find(
+                                          (p) => p.solicitacaoOrigemId === sc.id
+                                        );
+                                        if (cotEncontrada) {
+                                          setCotacaoAtivaId(cotEncontrada.id);
+                                          setComparativoTitulo(cotEncontrada.titulo);
+                                          setComparativoObraId(cotEncontrada.obraId);
+                                          setComparativoCategoria(cotEncontrada.categoria);
+                                          if (Array.isArray(cotEncontrada.fornecedores) && cotEncontrada.fornecedores.length >= 2) {
+                                            setComparativoFornecedores(cotEncontrada.fornecedores);
+                                          }
+                                          setComparativoItens(cotEncontrada.itens);
+                                        } else {
+                                          const itensCot = (sc.itens || []).map((it, idx) => ({
+                                            id: `comp-it-${Date.now()}-${idx}`,
+                                            nome: it.descricao,
+                                            quantidade: Number(it.quantidade) || 1,
+                                            unidade: it.unidade || "un",
+                                            preco1: 0,
+                                            preco2: 0,
+                                            preco3: 0,
+                                            precos: [0, 0, 0],
+                                          }));
+                                          setComparativoTitulo(`Demanda de Canteiro: ${sc.codigo}`);
+                                          setComparativoObraId(sc.obraId);
+                                          setComparativoCategoria(sc.categoria);
+                                          setComparativoItens(itensCot);
+                                        }
+                                        setModoCotacoes("comparativo_rapido");
+                                        setActiveTab("Cotacoes");
+                                        dispararAviso(`Demanda ${sc.codigo} aberta no Mapa de Cotação com todos os itens carregados!`);
+                                      }}
+                                      className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
+                                    >
+                                      <span>⚡</span> Fazer Cotação no Mapa
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Barra de Filtros de Estoque */}
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex flex-wrap items-center gap-2">
@@ -15747,7 +15997,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                     {formatBRL(saldoAtualNum * custoMedioNum)}
                                   </td>
                                   <td className="py-3 px-4 text-center whitespace-nowrap">
-                                    {saldoAtualNum === 0 && estoqueMinimoNum === 0 ? (
+                                    {Number(item.quantidadeAEntrar || 0) > 0 ? (
+                                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1 shadow-xs animate-pulse">
+                                        <span>🟡</span>
+                                        <span>Em Cotação (+{item.quantidadeAEntrar} {item.unidade || "un"})</span>
+                                      </span>
+                                    ) : saldoAtualNum === 0 && estoqueMinimoNum === 0 ? (
                                       <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 inline-block">
                                         📦 Catalogado (Saldo 0)
                                       </span>
@@ -15767,6 +16022,35 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                   </td>
                                   <td className="py-3 px-4 text-right whitespace-nowrap">
                                     <div className="flex items-center justify-end gap-1.5">
+                                      {Number(item.quantidadeAEntrar || 0) > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const procRelacionado = processosCotacoes.find(
+                                              (p) =>
+                                                p.itens.some((it) => (it.nome || "").toLowerCase().trim() === (item.descricao || "").toLowerCase().trim()) ||
+                                                p.obraId === item.obraId
+                                            );
+                                            if (procRelacionado) {
+                                              setCotacaoAtivaId(procRelacionado.id);
+                                              setComparativoTitulo(procRelacionado.titulo);
+                                              setComparativoObraId(procRelacionado.obraId);
+                                              setComparativoCategoria(procRelacionado.categoria);
+                                              if (Array.isArray(procRelacionado.fornecedores) && procRelacionado.fornecedores.length >= 2) {
+                                                setComparativoFornecedores(procRelacionado.fornecedores);
+                                              }
+                                              setComparativoItens(procRelacionado.itens);
+                                            }
+                                            setActiveTab("Cotacoes");
+                                            setModoCotacoes("comparativo_rapido");
+                                            dispararAviso(`Abrindo Mapa de Cotação para ${item.descricao}...`);
+                                          }}
+                                          className="px-2 py-1 rounded-md bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition flex items-center gap-1 shadow-xs cursor-pointer"
+                                          title="Abrir diretamente no Mapa de Cotação"
+                                        >
+                                          <span>⚡</span> Cotar
+                                        </button>
+                                      )}
                                       <button
                                         type="button"
                                         onClick={() => setItemEditarEstoqueModal(item)}
