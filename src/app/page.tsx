@@ -244,6 +244,8 @@ interface OrdemCompra {
   chavePix: string;
   dataEmissao: string;
   dataPrevistaEntrega?: string;
+  janelaEntrega?: string;
+  veiculoEntrega?: string;
   prazoPagamento: string;
   tipoFrete: "CIF" | "FOB";
   freteValor: number;
@@ -347,6 +349,10 @@ interface ItemComparativoRapido {
   preco1: number;
   preco2: number;
   preco3: number;
+  preco4?: number;
+  preco5?: number;
+  preco6?: number;
+  precos?: number[];
 }
 
 interface FornecedorCotadoRapido {
@@ -359,6 +365,23 @@ interface FornecedorCotadoRapido {
   freteValor: number;
   descontoValor?: number;
 }
+
+export const getItemPreco = (
+  item: ItemComparativoRapido,
+  index: number
+): number => {
+  if (!item) return 0;
+  if (Array.isArray(item.precos) && item.precos[index] !== undefined) {
+    return Number(item.precos[index]) || 0;
+  }
+  if (index === 0) return Number(item.preco1) || 0;
+  if (index === 1) return Number(item.preco2) || 0;
+  if (index === 2) return Number(item.preco3) || 0;
+  if (index === 3) return Number(item.preco4) || 0;
+  if (index === 4) return Number(item.preco5) || 0;
+  if (index === 5) return Number(item.preco6) || 0;
+  return Number((item as any)[`preco${index + 1}`]) || 0;
+};
 
 
 export interface ProcessoCotacao {
@@ -376,11 +399,7 @@ export interface ProcessoCotacao {
     | "Cancelada";
   dataCriacao: string;
   dataAtualizacao: string;
-  fornecedores: [
-    FornecedorCotadoRapido,
-    FornecedorCotadoRapido,
-    FornecedorCotadoRapido
-  ];
+  fornecedores: FornecedorCotadoRapido[];
   itens: ItemComparativoRapido[];
   savingGerado?: number;
   menorValor?: number;
@@ -529,11 +548,14 @@ interface CargaItemLogistica {
   tipoVeiculo: string;
   tipoFrete: string;
   status: "Hoje" | "Agendado" | "Entregue" | "Atrasado";
+  dataEntregaISO?: string;
+  dataPrevistaTexto?: string;
 }
 
 interface DiaLogisticaSemana {
   diaSemana: string;
   dataLabel: string;
+  dataISO?: string;
   conflitoPortao: boolean;
   cargas: CargaItemLogistica[];
 }
@@ -1188,70 +1210,153 @@ function gerarNotificacoesDoSistema(
   return lista;
 }
 
+/* ----------------------------------------------------------------------- */
+/* CALENDÁRIO DE CARGAS: DATAS REAIS DE ENTREGA DAS ORDENS DE COMPRA       */
+/* ----------------------------------------------------------------------- */
+function dataLocalISO(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+function parseDataEntregaISO(valor?: string): string | null {
+  if (!valor) return null;
+  const v = String(valor).trim();
+  let m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  return null;
+}
+
+function formatarDataBR(iso: string): string {
+  const [a, m, d] = String(iso).split("-");
+  if (!a || !m || !d) return iso;
+  return `${d}/${m}/${a}`;
+}
+
+function segundaFeiraDaSemana(d: Date): Date {
+  const dow = d.getDay();
+  const desloc = dow === 0 ? -6 : 1 - dow;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + desloc);
+}
+
+function calcularOffsetSemana(iso: string): number {
+  const [a, m, d] = String(iso).split("-").map(Number);
+  if (!a || !m || !d) return 0;
+  const alvo = segundaFeiraDaSemana(new Date(a, m - 1, d));
+  const atual = segundaFeiraDaSemana(new Date());
+  return Math.round((alvo.getTime() - atual.getTime()) / (7 * 24 * 60 * 60 * 1000));
+}
+
+function ordemEntregue(o: OrdemCompra): boolean {
+  return (
+    o.status === "Entregue na Obra (Confirmado pelo Almoxarifado)" ||
+    o.status === "Entregue"
+  );
+}
+
+function montarCargaLogistica(
+  o: OrdemCompra,
+  dataISO: string | null,
+  hojeISO: string
+): CargaItemLogistica {
+  const entregue = ordemEntregue(o);
+  let status: CargaItemLogistica["status"] = "Agendado";
+  if (entregue) status = "Entregue";
+  else if (dataISO && dataISO === hojeISO) status = "Hoje";
+  else if (dataISO && dataISO < hojeISO) status = "Atrasado";
+
+  return {
+    id: `carga-${o.id}`,
+    ordemId: o.id,
+    numeroOc: o.numeroOc,
+    obraId: o.obraId,
+    obraNome: o.obraNome,
+    fornecedorNome: o.fornecedorNome,
+    insumoDescricao: (o?.itens || [])[0]?.descricao || o.categoria,
+    horarioJanela: o.janelaEntrega || "A definir",
+    tipoVeiculo: o.veiculoEntrega || "A definir",
+    tipoFrete: o.tipoFrete,
+    status,
+    dataEntregaISO: dataISO || undefined,
+    dataPrevistaTexto: o.dataPrevistaEntrega || undefined,
+  };
+}
+
 function agruparCargasLogistica(
   ordens: OrdemCompra[],
-  obraFiltro: string
+  obraFiltro: string,
+  semanaOffset: number = 0
 ): DiaLogisticaSemana[] {
-  const ordensAlvo = ordens.filter(
+  const ordensAlvo = (ordens || []).filter(
     (o) => obraFiltro === "ALL" || o.obraId === obraFiltro
   );
 
-  const diasInfo = [
-    { diaSemana: "Segunda-feira", dataLabel: "20/10/2026" },
-    { diaSemana: "Terça-feira", dataLabel: "21/10/2026" },
-    { diaSemana: "Quarta-feira", dataLabel: "22/10/2026" },
-    { diaSemana: "Quinta-feira", dataLabel: "23/10/2026" },
-    { diaSemana: "Sexta-feira", dataLabel: "24/10/2026" },
-    { diaSemana: "Sábado", dataLabel: "25/10/2026" },
+  const hoje = new Date();
+  const hojeISO = dataLocalISO(hoje);
+  const segundaBase = segundaFeiraDaSemana(hoje);
+  const segunda = new Date(
+    segundaBase.getFullYear(),
+    segundaBase.getMonth(),
+    segundaBase.getDate() + semanaOffset * 7
+  );
+
+  const nomesDias = [
+    "Segunda-feira",
+    "Terça-feira",
+    "Quarta-feira",
+    "Quinta-feira",
+    "Sexta-feira",
+    "Sábado",
+    "Domingo",
   ];
 
-  const janelas = [
-    "08:00 - 10:00",
-    "10:30 - 12:00",
-    "13:30 - 15:30",
-    "16:00 - 17:30",
-  ];
-  const veiculos = [
-    "Carreta Articulada (Vanderleia)",
-    "Caminhão Betoneira 8m³",
-    "Truck Baú Fechado",
-    "Carreta Prancha com Munck",
-  ];
+  return nomesDias
+    .map((nome, idx) => {
+      const dia = new Date(
+        segunda.getFullYear(),
+        segunda.getMonth(),
+        segunda.getDate() + idx
+      );
+      const iso = dataLocalISO(dia);
 
-  return diasInfo.map((d, dIdx) => {
-    const ordensDoDia = ordensAlvo.filter(
-      (_, idx) => idx % diasInfo.length === dIdx
-    );
+      const cargas = ordensAlvo
+        .filter((o) => parseDataEntregaISO(o.dataPrevistaEntrega) === iso)
+        .map((o) => montarCargaLogistica(o, iso, hojeISO))
+        .sort((a, b) => a.horarioJanela.localeCompare(b.horarioJanela));
 
-    const cargas: CargaItemLogistica[] = ordensDoDia.map((o, cIdx) => {
-      const entregue =
-        o.status === "Entregue na Obra (Confirmado pelo Almoxarifado)" ||
-        o.status === "Entregue";
+      const pendentes = cargas.filter((c) => c.status !== "Entregue").length;
 
       return {
-        id: `carga-${o.id}-${dIdx}-${cIdx}`,
-        ordemId: o.id,
-        numeroOc: o.numeroOc,
-        obraId: o.obraId,
-        obraNome: o.obraNome,
-        fornecedorNome: o.fornecedorNome,
-        insumoDescricao: (o?.itens || [])[0]?.descricao || o.categoria,
-        horarioJanela: janelas[cIdx % janelas.length],
-        tipoVeiculo: veiculos[(dIdx + cIdx) % veiculos.length],
-        tipoFrete: o.tipoFrete,
-        status: entregue ? "Entregue" : dIdx === 0 ? "Hoje" : "Agendado",
+        diaSemana: nome,
+        dataLabel: formatarDataBR(iso),
+        dataISO: iso,
+        conflitoPortao: pendentes >= 2,
+        cargas,
       };
-    });
+    })
+    .filter((d, idx) => idx < 6 || d.cargas.length > 0);
+}
 
-    const conflitoPortao = cargas.length >= 2;
-
-    return {
-      diaSemana: d.diaSemana,
-      dataLabel: d.dataLabel,
-      conflitoPortao,
-      cargas,
-    };
-  });
+/* Cargas não entregues sem data válida ou atrasadas fora da semana exibida */
+function listarCargasPendentesSemAgenda(
+  ordens: OrdemCompra[],
+  obraFiltro: string,
+  diasVisiveisISO: string[]
+): CargaItemLogistica[] {
+  const hojeISO = dataLocalISO(new Date());
+  return (ordens || [])
+    .filter(
+      (o) =>
+        (obraFiltro === "ALL" || o.obraId === obraFiltro) && !ordemEntregue(o)
+    )
+    .map((o) => ({ o, iso: parseDataEntregaISO(o.dataPrevistaEntrega) }))
+    .filter(
+      ({ iso }) => !iso || (iso < hojeISO && !diasVisiveisISO.includes(iso))
+    )
+    .map(({ o, iso }) => montarCargaLogistica(o, iso, hojeISO));
 }
 
 /* ========================================================================= */
@@ -1548,7 +1653,7 @@ export default function HomePage() {
   const [comparativoObraId, setComparativoObraId] = useState<string>("");
   const [comparativoCategoria, setComparativoCategoria] = useState<string>("");
   const [comparativoFornecedores, setComparativoFornecedores] = useState<
-    [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido]
+    FornecedorCotadoRapido[]
   >([
     {
       nome: "",
@@ -1701,9 +1806,11 @@ export default function HomePage() {
             obras.find((o) => o.id === comparativoObraId) || obras[0];
 
           // Determina o menor preço cotado caso preenchido
-          const precosValidos = [it.preco1, it.preco2, it.preco3].filter(
-            (p) => Number(p) > 0
-          );
+          const precosValidos = Array.isArray(it.precos)
+            ? it.precos.map(Number).filter((p) => p > 0)
+            : [it.preco1, it.preco2, it.preco3, it.preco4, it.preco5]
+                .map(Number)
+                .filter((p) => p > 0);
           const menorPrecoCotado =
             precosValidos.length > 0 ? Math.min(...precosValidos) : 0;
 
@@ -2174,9 +2281,9 @@ export default function HomePage() {
 
       if (!Array.isArray(listaProcessos) || listaProcessos.length === 0) {
         const anoAtual = new Date().getFullYear();
-        const fornMigrados: [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido] =
+        const fornMigrados: FornecedorCotadoRapido[] =
           Array.isArray(parsedComp?.fornecedores) &&
-          parsedComp.fornecedores.length === 3
+          parsedComp.fornecedores.length >= 2
             ? parsedComp.fornecedores
             : [
                 {
@@ -2955,39 +3062,18 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
       const atual = idx !== -1 ? prev[idx] : null;
       const obraSel = obras.find((o) => o.id === comparativoObraId);
 
-      const t1 = Math.max(
-        0,
-        comparativoItens.reduce(
-          (acc, it) => acc + (it.quantidade || 0) * (it.preco1 || 0),
-          0
-        ) +
-          (comparativoFornecedores[0]?.freteValor || 0) -
-          (comparativoFornecedores[0]?.descontoValor || 0)
-      );
-      const t2 = Math.max(
-        0,
-        comparativoItens.reduce(
-          (acc, it) => acc + (it.quantidade || 0) * (it.preco2 || 0),
-          0
-        ) +
-          (comparativoFornecedores[1]?.freteValor || 0) -
-          (comparativoFornecedores[1]?.descontoValor || 0)
-      );
-      const t3 = Math.max(
-        0,
-        comparativoItens.reduce(
-          (acc, it) => acc + (it.quantidade || 0) * (it.preco3 || 0),
-          0
-        ) +
-          (comparativoFornecedores[2]?.freteValor || 0) -
-          (comparativoFornecedores[2]?.descontoValor || 0)
-      );
-
-      const validos = [
-        { nome: comparativoFornecedores[0]?.nome, total: t1 },
-        { nome: comparativoFornecedores[1]?.nome, total: t2 },
-        { nome: comparativoFornecedores[2]?.nome, total: t3 },
-      ].filter((f) => f.total > 0 && f.nome && f.nome.trim() !== "");
+      const validos = (comparativoFornecedores || [])
+        .map((forn, fIdx) => {
+          const sub = comparativoItens.reduce((acc, it) => {
+            const p = getItemPreco(it, fIdx);
+            return acc + (it.quantidade || 0) * p;
+          }, 0);
+          const frete = forn?.freteValor || 0;
+          const desc = forn?.descontoValor || 0;
+          const tot = Math.max(0, sub + frete - desc);
+          return { nome: forn?.nome, total: tot, index: fIdx };
+        })
+        .filter((f) => f.total > 0 && f.nome && f.nome.trim() !== "");
 
       let menorVal = 0;
       let melhorNome = "";
@@ -3056,10 +3142,18 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
     [solicitacoes, ordens, contratos]
   );
 
-  // Cargas Logísticas Programadas para os Canteiros
+  // Cargas Logísticas Programadas para os Canteiros (datas reais das OCs)
+  const [semanaLogisticaOffset, setSemanaLogisticaOffset] = useState<number>(0);
+  const [cargaEmEdicao, setCargaEmEdicao] = useState<{
+    ordemId: string;
+    dataISO: string;
+    janela: string;
+    veiculo: string;
+  } | null>(null);
+  const [cargaArrastandoId, setCargaArrastandoId] = useState<string | null>(null);
   const cargasLogistica = useMemo(
-    () => agruparCargasLogistica(ordens, obraFiltro),
-    [ordens, obraFiltro]
+    () => agruparCargasLogistica(ordens, obraFiltro, semanaLogisticaOffset),
+    [ordens, obraFiltro, semanaLogisticaOffset]
   );
 
   // Curva ABC Dinâmica de todos os insumos (80% / 15% / 5%)
@@ -5096,49 +5190,24 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   /* ----------------------------------------------------------------------- */
 
   const resumoComparativo = useMemo(() => {
-    let subtotal1 = 0;
-    let subtotal2 = 0;
-    let subtotal3 = 0;
+    const numForns = Math.max(comparativoFornecedores.length, 2);
+    const subtotais = Array(numForns).fill(0);
     let totalCenarioOtimizado = 0;
 
-    const forn0 = comparativoFornecedores?.[0] ?? {
-      nome: "Fornecedor 1",
-      freteValor: 0,
-      freteTipo: "CIF" as const,
-      descontoValor: 0,
-    };
-    const forn1 = comparativoFornecedores?.[1] ?? {
-      nome: "Fornecedor 2",
-      freteValor: 0,
-      freteTipo: "CIF" as const,
-      descontoValor: 0,
-    };
-    const forn2 = comparativoFornecedores?.[2] ?? {
-      nome: "Fornecedor 3",
-      freteValor: 0,
-      freteTipo: "CIF" as const,
-      descontoValor: 0,
-    };
-
     const itensCalculados = (comparativoItens || []).map((item) => {
-      const p1 = Number(item.preco1) || 0;
-      const p2 = Number(item.preco2) || 0;
-      const p3 = Number(item.preco3) || 0;
       const qtd = Number(item.quantidade) || 0;
+      const precos = Array.from({ length: numForns }, (_, idx) =>
+        getItemPreco(item, idx)
+      );
+      const totais = precos.map((p) => p * qtd);
 
-      const tot1 = qtd * p1;
-      const tot2 = qtd * p2;
-      const tot3 = qtd * p3;
+      totais.forEach((tot, idx) => {
+        subtotais[idx] = (subtotais[idx] || 0) + tot;
+      });
 
-      subtotal1 += tot1;
-      subtotal2 += tot2;
-      subtotal3 += tot3;
-
-      const precosValidos = [
-        { index: 0, preco: p1, total: tot1 },
-        { index: 1, preco: p2, total: tot2 },
-        { index: 2, preco: p3, total: tot3 },
-      ].filter((p) => p.preco > 0);
+      const precosValidos = precos
+        .map((p, idx) => ({ index: idx, preco: p, total: totais[idx] }))
+        .filter((p) => p.preco > 0);
 
       const menorPreco =
         precosValidos.length > 0
@@ -5164,62 +5233,56 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         totalCenarioOtimizado += menorPreco * qtd;
       }
 
+      const vencedores = precos.map(
+        (p) => p > 0 && Math.abs(p - menorPreco) < 0.001
+      );
+
       return {
         ...item,
-        tot1,
-        tot2,
-        tot3,
+        precos,
+        totais,
+        vencedores,
         menorPreco,
         maiorPreco,
         savingItem,
         pctSaving,
-        vencedor1: p1 > 0 && Math.abs(p1 - menorPreco) < 0.001,
-        vencedor2: p2 > 0 && Math.abs(p2 - menorPreco) < 0.001,
-        vencedor3: p3 > 0 && Math.abs(p3 - menorPreco) < 0.001,
+        // Retrocompatibilidade
+        preco1: precos[0] ?? 0,
+        preco2: precos[1] ?? 0,
+        preco3: precos[2] ?? 0,
+        tot1: totais[0] ?? 0,
+        tot2: totais[1] ?? 0,
+        tot3: totais[2] ?? 0,
+        vencedor1: vencedores[0] ?? false,
+        vencedor2: vencedores[1] ?? false,
+        vencedor3: vencedores[2] ?? false,
       };
     });
 
-    const frete1 = Number(forn0.freteValor) || 0;
-    const frete2 = Number(forn1.freteValor) || 0;
-    const frete3 = Number(forn2.freteValor) || 0;
+    const fretes = comparativoFornecedores.map(
+      (f) => Number(f?.freteValor) || 0
+    );
+    const descontos = comparativoFornecedores.map(
+      (f) => Number(f?.descontoValor) || 0
+    );
 
-    const desc1 = Number(forn0.descontoValor) || 0;
-    const desc2 = Number(forn1.descontoValor) || 0;
-    const desc3 = Number(forn2.descontoValor) || 0;
+    const totais = subtotais.map((sub, idx) => {
+      const fr = fretes[idx] || 0;
+      const desc = descontos[idx] || 0;
+      return Math.max(0, sub + fr - desc);
+    });
 
-    const total1 = Math.max(0, subtotal1 + frete1 - desc1);
-    const total2 = Math.max(0, subtotal2 + frete2 - desc2);
-    const total3 = Math.max(0, subtotal3 + frete3 - desc3);
-
-    const totaisValidos = [
-      {
-        index: 0,
-        nome: forn0.nome || "Orçamento 1",
-        subtotal: subtotal1,
-        frete: frete1,
-        desconto: desc1,
-        total: total1,
-        forn: forn0,
-      },
-      {
-        index: 1,
-        nome: forn1.nome || "Orçamento 2",
-        subtotal: subtotal2,
-        frete: frete2,
-        desconto: desc2,
-        total: total2,
-        forn: forn1,
-      },
-      {
-        index: 2,
-        nome: forn2.nome || "Orçamento 3",
-        subtotal: subtotal3,
-        frete: frete3,
-        desconto: desc3,
-        total: total3,
-        forn: forn2,
-      },
-    ].filter((t) => t.total > 0 || t.subtotal > 0);
+    const totaisValidos = comparativoFornecedores
+      .map((forn, idx) => ({
+        index: idx,
+        nome: forn.nome || `Orçamento ${idx + 1}`,
+        subtotal: subtotais[idx] || 0,
+        frete: fretes[idx] || 0,
+        desconto: descontos[idx] || 0,
+        total: totais[idx] || 0,
+        forn,
+      }))
+      .filter((t) => t.total > 0 || t.subtotal > 0);
 
     const ranking = [...totaisValidos].sort((a, b) => a.total - b.total);
     const vencedorGeral = ranking[0] || null;
@@ -5238,27 +5301,34 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
     return {
       itensCalculados,
-      subtotal1,
-      subtotal2,
-      subtotal3,
-      frete1,
-      frete2,
-      frete3,
-      desc1,
-      desc2,
-      desc3,
-      total1,
-      total2,
-      total3,
+      subtotais,
+      fretes,
+      descontos,
+      totais,
       totalCenarioOtimizado,
       savingCenarioOtimizado,
       ranking,
       vencedorGeral,
       savingGlobal,
+      // Retrocompatibilidade
+      subtotal1: subtotais[0] ?? 0,
+      subtotal2: subtotais[1] ?? 0,
+      subtotal3: subtotais[2] ?? 0,
+      frete1: fretes[0] ?? 0,
+      frete2: fretes[1] ?? 0,
+      frete3: fretes[2] ?? 0,
+      desc1: descontos[0] ?? 0,
+      desc2: descontos[1] ?? 0,
+      desc3: descontos[2] ?? 0,
+      total1: totais[0] ?? 0,
+      total2: totais[1] ?? 0,
+      total3: totais[2] ?? 0,
     };
   }, [comparativoItens, comparativoFornecedores]);
 
   const handleAdicionarItemComparativo = () => {
+    const numForns = Math.max(comparativoFornecedores.length, 3);
+    const precosIniciais = Array(numForns).fill(0);
     const novoItem: ItemComparativoRapido = {
       id: `comp-item-${Date.now()}-${Math.random()
         .toString(36)
@@ -5269,6 +5339,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       preco1: 0,
       preco2: 0,
       preco3: 0,
+      preco4: 0,
+      preco5: 0,
+      precos: precosIniciais,
     };
     setComparativoItens((prev) => [...prev, novoItem]);
   };
@@ -5287,47 +5360,153 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     );
   };
 
+  const handleAtualizarPrecoItemComparativo = (
+    itemId: string,
+    fornIndex: number,
+    novoPreco: number
+  ) => {
+    setComparativoItens((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item;
+        const numForns = Math.max(comparativoFornecedores.length, fornIndex + 1, 3);
+        const precosAtuais = Array.isArray(item.precos)
+          ? [...item.precos]
+          : Array.from({ length: numForns }, (_, idx) => getItemPreco(item, idx));
+        while (precosAtuais.length <= fornIndex) {
+          precosAtuais.push(0);
+        }
+        precosAtuais[fornIndex] = novoPreco;
+
+        const atualizado: ItemComparativoRapido = {
+          ...item,
+          preco1: fornIndex === 0 ? novoPreco : (item.preco1 ?? precosAtuais[0] ?? 0),
+          preco2: fornIndex === 1 ? novoPreco : (item.preco2 ?? precosAtuais[1] ?? 0),
+          preco3: fornIndex === 2 ? novoPreco : (item.preco3 ?? precosAtuais[2] ?? 0),
+          preco4: fornIndex === 3 ? novoPreco : (item.preco4 ?? precosAtuais[3] ?? 0),
+          preco5: fornIndex === 4 ? novoPreco : (item.preco5 ?? precosAtuais[4] ?? 0),
+          preco6: fornIndex === 5 ? novoPreco : (item.preco6 ?? precosAtuais[5] ?? 0),
+          precos: precosAtuais,
+        };
+        return atualizado;
+      })
+    );
+  };
+
+  const handleAdicionarFornecedorComparativo = () => {
+    if (comparativoFornecedores.length >= 6) {
+      dispararAviso(
+        "Limite máximo de 6 fornecedores simultâneos na equalização atingido."
+      );
+      return;
+    }
+    const novoIdx = comparativoFornecedores.length;
+    const novoForn: FornecedorCotadoRapido = {
+      nome: `Fornecedor ${novoIdx + 1}`,
+      vendedor: "",
+      telefone: "",
+      prazo: "3 a 5 dias",
+      condicao: "28 dias",
+      freteTipo: "CIF",
+      freteValor: 0,
+      descontoValor: 0,
+    };
+    setComparativoFornecedores((prev) => [...prev, novoForn]);
+    setComparativoItens((prev) =>
+      prev.map((it) => {
+        const arr = Array.isArray(it.precos)
+          ? [...it.precos, 0]
+          : Array.from({ length: novoIdx + 1 }, (_, idx) =>
+              getItemPreco(it, idx)
+            );
+        return {
+          ...it,
+          precos: arr,
+        };
+      })
+    );
+    dispararAviso(
+      `Fornecedor ${novoIdx + 1} incluído no mapa de cotação! Agora você compara ${
+        novoIdx + 1
+      } orçamentos.`
+    );
+  };
+
+  const handleRemoverFornecedorComparativo = (indexParaRemover: number) => {
+    if (comparativoFornecedores.length <= 2) {
+      dispararAviso(
+        "Mantenha ao menos 2 fornecedores para equalização de propostas."
+      );
+      return;
+    }
+    const fornAlvo = comparativoFornecedores[indexParaRemover];
+    const nomeForn = fornAlvo?.nome || `Fornecedor ${indexParaRemover + 1}`;
+
+    if (
+      !window.confirm(
+        `Deseja realmente remover o "${nomeForn}" desta cotação? Os preços e dados deste fornecedor serão excluídos.`
+      )
+    ) {
+      return;
+    }
+
+    setComparativoFornecedores((prev) =>
+      prev.filter((_, i) => i !== indexParaRemover)
+    );
+    setComparativoItens((prev) =>
+      prev.map((it) => {
+        const precosOrig = Array.isArray(it.precos)
+          ? it.precos
+          : Array.from(
+              { length: comparativoFornecedores.length },
+              (_, idx) => getItemPreco(it, idx)
+            );
+        const novosPrecos = precosOrig.filter((_, i) => i !== indexParaRemover);
+        return {
+          ...it,
+          preco1: novosPrecos[0] || 0,
+          preco2: novosPrecos[1] || 0,
+          preco3: novosPrecos[2] || 0,
+          preco4: novosPrecos[3] || 0,
+          preco5: novosPrecos[4] || 0,
+          precos: novosPrecos,
+        };
+      })
+    );
+    dispararAviso(`Fornecedor "${nomeForn}" removido da equalização.`);
+  };
+
   const handleAtualizarFornecedorComparativo = (
-    index: 0 | 1 | 2,
+    index: number,
     campo: keyof FornecedorCotadoRapido,
     valor: string | number
   ) => {
     setComparativoFornecedores((prev) => {
-      const f0 = prev?.[0] || { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0, descontoValor: 0 };
-      const f1 = prev?.[1] || { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0, descontoValor: 0 };
-      const f2 = prev?.[2] || { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0, descontoValor: 0 };
-      const copia: [
-        FornecedorCotadoRapido,
-        FornecedorCotadoRapido,
-        FornecedorCotadoRapido
-      ] = [{ ...f0 }, { ...f1 }, { ...f2 }];
-      copia[index] = { ...copia[index], [campo]: valor };
+      const copia = [...prev];
+      if (copia[index]) {
+        copia[index] = { ...copia[index], [campo]: valor };
+      }
       return copia;
     });
   };
 
   const handleSelecionarFornecedorCrmComparativo = (
-    index: 0 | 1 | 2,
+    index: number,
     fornecedorId: string
   ) => {
     const achado = fornecedores.find((f) => f.id === fornecedorId);
     if (!achado) return;
     setComparativoFornecedores((prev) => {
-      const f0 = prev?.[0] || { nome: "Fornecedor 1", vendedor: "", telefone: "", prazo: "3 a 5 dias", condicao: "28 dias (Faturado)", freteTipo: "CIF" as const, freteValor: 0, descontoValor: 0 };
-      const f1 = prev?.[1] || { nome: "Fornecedor 2", vendedor: "", telefone: "", prazo: "5 a 7 dias", condicao: "30 dias", freteTipo: "CIF" as const, freteValor: 0, descontoValor: 0 };
-      const f2 = prev?.[2] || { nome: "Fornecedor 3", vendedor: "", telefone: "", prazo: "Pronta Entrega", condicao: "21 dias", freteTipo: "FOB" as const, freteValor: 0, descontoValor: 0 };
-      const copia: [
-        FornecedorCotadoRapido,
-        FornecedorCotadoRapido,
-        FornecedorCotadoRapido
-      ] = [{ ...f0 }, { ...f1 }, { ...f2 }];
-      copia[index] = {
-        ...copia[index],
-        nome: achado.empresa,
-        vendedor: achado.vendedor || copia[index].vendedor,
-        telefone: achado.telefone || achado.whatsapp || copia[index].telefone,
-        condicao: achado.condicaoPadrao || copia[index].condicao,
-      };
+      const copia = [...prev];
+      if (copia[index]) {
+        copia[index] = {
+          ...copia[index],
+          nome: achado.empresa,
+          vendedor: achado.vendedor || copia[index].vendedor,
+          telefone:
+            achado.telefone || achado.whatsapp || copia[index].telefone,
+          condicao: achado.condicaoPadrao || copia[index].condicao,
+        };
+      }
       return copia;
     });
     dispararAviso(
@@ -5335,14 +5514,10 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     );
   };
 
-  const handleEmitirOrdemComparativo = (fornIndex: 0 | 1 | 2) => {
+  const handleEmitirOrdemComparativo = (fornIndex: number) => {
     const forn = comparativoFornecedores[fornIndex];
-    const total =
-      fornIndex === 0
-        ? resumoComparativo.total1
-        : fornIndex === 1
-        ? resumoComparativo.total2
-        : resumoComparativo.total3;
+    if (!forn) return;
+    const total = resumoComparativo.totais?.[fornIndex] ?? 0;
 
     if (total <= 0) {
       dispararAviso(
@@ -5353,7 +5528,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
     const obraSel = obras.find((o) => o.id === comparativoObraId) || obras[0];
     const fornCrm = fornecedores.find(
-      (f) => f.empresa.toLowerCase() === forn.nome.toLowerCase()
+      (f) => f.empresa.toLowerCase() === (forn.nome || "").toLowerCase()
     );
 
     const proximaSeq = ordens.length + 1;
@@ -5391,12 +5566,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       alcadaAprovacao: "Comprador Autorizado",
       status: "Emitida",
       itens: comparativoItens.map((it, idx) => {
-        const unit =
-          fornIndex === 0
-            ? it.preco1
-            : fornIndex === 1
-            ? it.preco2
-            : it.preco3;
+        const unit = getItemPreco(it, fornIndex);
         return {
           codigo: `MAT-${idx + 1}`,
           descricao: it.nome || `Insumo #${idx + 1}`,
@@ -5671,38 +5841,23 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       status: "Rascunho",
       dataCriacao: new Date().toLocaleDateString("pt-BR"),
       dataAtualizacao: new Date().toLocaleDateString("pt-BR"),
-      fornecedores: [
-        {
-          nome: "",
-          vendedor: "",
-          telefone: "",
-          prazo: "",
-          condicao: "",
-          freteTipo: "CIF",
-          freteValor: 0,
-          descontoValor: 0,
-        },
-        {
-          nome: "",
-          vendedor: "",
-          telefone: "",
-          prazo: "",
-          condicao: "",
-          freteTipo: "CIF",
-          freteValor: 0,
-          descontoValor: 0,
-        },
-        {
-          nome: "",
-          vendedor: "",
-          telefone: "",
-          prazo: "",
-          condicao: "",
-          freteTipo: "CIF",
-          freteValor: 0,
-          descontoValor: 0,
-        },
-      ],
+      fornecedores: (origem.fornecedores && origem.fornecedores.length >= 2
+        ? origem.fornecedores
+        : [
+            { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0, descontoValor: 0 },
+            { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0, descontoValor: 0 },
+            { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF" as const, freteValor: 0, descontoValor: 0 },
+          ]
+      ).map((f) => ({
+        nome: f.nome || "",
+        vendedor: f.vendedor || "",
+        telefone: f.telefone || "",
+        prazo: f.prazo || "",
+        condicao: f.condicao || "",
+        freteTipo: f.freteTipo || "CIF",
+        freteValor: 0,
+        descontoValor: 0,
+      })),
       // Copia a lista de itens preservando quantidades e unidades, zerando preços cotados para nova negociação
       itens: (origem.itens || []).map((it, idx) => ({
         id: `item-dup-${Date.now()}-${idx}`,
@@ -5712,6 +5867,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         preco1: 0,
         preco2: 0,
         preco3: 0,
+        preco4: 0,
+        preco5: 0,
+        precos: Array(origem.fornecedores?.length || 3).fill(0),
       })),
     };
 
@@ -5884,6 +6042,20 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               .replace(",", ".")
               .trim()
           ) || 0;
+        const p4 =
+          Number(
+            String(vals[6] || "0")
+              .replace("R$", "")
+              .replace(",", ".")
+              .trim()
+          ) || 0;
+        const p5 =
+          Number(
+            String(vals[7] || "0")
+              .replace("R$", "")
+              .replace(",", ".")
+              .trim()
+          ) || 0;
 
         novos.push({
           id: `comp-upload-${Date.now()}-${idx}`,
@@ -5893,6 +6065,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           preco1: p1,
           preco2: p2,
           preco3: p3,
+          preco4: p4,
+          preco5: p5,
+          precos: [p1, p2, p3, p4, p5],
         });
       });
 
@@ -5916,93 +6091,107 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       (it) => it && it.nome && it.nome.trim() !== ""
     );
     if (!itensValidos || itensValidos.length === 0) {
-      dispararAviso("Adicione ao menos um insumo na cota\u00e7\u00e3o para exportar a planilha.");
+      dispararAviso(
+        "Adicione ao menos um insumo na cotação para exportar a planilha."
+      );
       return;
     }
-    const forn0 = comparativoFornecedores[0]?.nome || "Fornecedor 1";
-    const forn1 = comparativoFornecedores[1]?.nome || "Fornecedor 2";
-    const forn2 = comparativoFornecedores[2]?.nome || "Fornecedor 3";
 
-    const dadosPlanilha = resumoComparativo.itensCalculados.map((it, idx) => ({
-      Item: idx + 1,
-      Insumo: it.nome,
-      Quantidade: it.quantidade,
-      Unidade: it.unidade,
-      [`Preço Unit. (${forn0})`]: it.preco1,
-      [`Total (${forn0})`]: it.tot1,
-      [`Preço Unit. (${forn1})`]: it.preco2,
-      [`Total (${forn1})`]: it.tot2,
-      [`Preço Unit. (${forn2})`]: it.preco3,
-      [`Total (${forn2})`]: it.tot3,
-      "Menor Preço": it.menorPreco,
-      "Saving (R$)": it.savingItem,
-    }));
+    const dadosPlanilha = resumoComparativo.itensCalculados.map((it, idx) => {
+      const row: Record<string, any> = {
+        Item: idx + 1,
+        Insumo: it.nome,
+        Quantidade: it.quantidade,
+        Unidade: it.unidade,
+      };
 
-    dadosPlanilha.push({
+      comparativoFornecedores.forEach((forn, fIdx) => {
+        const fornNome = forn.nome || `Fornecedor ${fIdx + 1}`;
+        const p = getItemPreco(it, fIdx);
+        const tot = (it.quantidade || 0) * p;
+        row[`Preço Unit. (${fornNome})`] = p;
+        row[`Total (${fornNome})`] = tot;
+      });
+
+      row["Menor Preço"] = it.menorPreco;
+      row["Saving (R$)"] = it.savingItem;
+      return row;
+    });
+
+    // Linha Subtotal
+    const rowSubtotal: Record<string, any> = {
       Item: "",
       Insumo: "SUBTOTAL MATERIAIS",
       Quantidade: "",
       Unidade: "",
-      [`Preço Unit. (${forn0})`]: "",
-      [`Total (${forn0})`]: resumoComparativo.subtotal1,
-      [`Preço Unit. (${forn1})`]: "",
-      [`Total (${forn1})`]: resumoComparativo.subtotal2,
-      [`Preço Unit. (${forn2})`]: "",
-      [`Total (${forn2})`]: resumoComparativo.subtotal3,
-      "Menor Preço": "",
-      "Saving (R$)": "",
-    } as any);
+    };
+    comparativoFornecedores.forEach((forn, fIdx) => {
+      const fornNome = forn.nome || `Fornecedor ${fIdx + 1}`;
+      rowSubtotal[`Preço Unit. (${fornNome})`] = "";
+      rowSubtotal[`Total (${fornNome})`] =
+        resumoComparativo.subtotais?.[fIdx] ?? 0;
+    });
+    rowSubtotal["Menor Preço"] = "";
+    rowSubtotal["Saving (R$)"] = "";
+    dadosPlanilha.push(rowSubtotal);
 
-    dadosPlanilha.push({
+    // Linha Desconto
+    const rowDesc: Record<string, any> = {
       Item: "",
       Insumo: "DESCONTO COMERCIAL (R$)",
       Quantidade: "",
       Unidade: "",
-      [`Preço Unit. (${forn0})`]: "",
-      [`Total (${forn0})`]: -resumoComparativo.desc1,
-      [`Preço Unit. (${forn1})`]: "",
-      [`Total (${forn1})`]: -resumoComparativo.desc2,
-      [`Preço Unit. (${forn2})`]: "",
-      [`Total (${forn2})`]: -resumoComparativo.desc3,
-      "Menor Preço": "",
-      "Saving (R$)": "",
-    } as any);
+    };
+    comparativoFornecedores.forEach((forn, fIdx) => {
+      const fornNome = forn.nome || `Fornecedor ${fIdx + 1}`;
+      rowDesc[`Preço Unit. (${fornNome})`] = "";
+      rowDesc[`Total (${fornNome})`] = -(
+        resumoComparativo.descontos?.[fIdx] ?? 0
+      );
+    });
+    rowDesc["Menor Preço"] = "";
+    rowDesc["Saving (R$)"] = "";
+    dadosPlanilha.push(rowDesc);
 
-    dadosPlanilha.push({
+    // Linha Frete
+    const rowFrete: Record<string, any> = {
       Item: "",
       Insumo: "FRETE",
       Quantidade: "",
       Unidade: "",
-      [`Preço Unit. (${forn0})`]: "",
-      [`Total (${forn0})`]: resumoComparativo.frete1,
-      [`Preço Unit. (${forn1})`]: "",
-      [`Total (${forn1})`]: resumoComparativo.frete2,
-      [`Preço Unit. (${forn2})`]: "",
-      [`Total (${forn2})`]: resumoComparativo.frete3,
-      "Menor Preço": "",
-      "Saving (R$)": "",
-    } as any);
+    };
+    comparativoFornecedores.forEach((forn, fIdx) => {
+      const fornNome = forn.nome || `Fornecedor ${fIdx + 1}`;
+      rowFrete[`Preço Unit. (${fornNome})`] = "";
+      rowFrete[`Total (${fornNome})`] =
+        resumoComparativo.fretes?.[fIdx] ?? 0;
+    });
+    rowFrete["Menor Preço"] = "";
+    rowFrete["Saving (R$)"] = "";
+    dadosPlanilha.push(rowFrete);
 
-    dadosPlanilha.push({
+    // Linha Total Final
+    const rowTotal: Record<string, any> = {
       Item: "",
       Insumo: "VALOR TOTAL FINAL",
       Quantidade: "",
       Unidade: "",
-      [`Preço Unit. (${forn0})`]: "",
-      [`Total (${forn0})`]: resumoComparativo.total1,
-      [`Preço Unit. (${forn1})`]: "",
-      [`Total (${forn1})`]: resumoComparativo.total2,
-      [`Preço Unit. (${forn2})`]: "",
-      [`Total (${forn2})`]: resumoComparativo.total3,
-      "Menor Preço": "",
-      "Saving (R$)": resumoComparativo.savingGlobal,
-    } as any);
+    };
+    comparativoFornecedores.forEach((forn, fIdx) => {
+      const fornNome = forn.nome || `Fornecedor ${fIdx + 1}`;
+      rowTotal[`Preço Unit. (${fornNome})`] = "";
+      rowTotal[`Total (${fornNome})`] =
+        resumoComparativo.totais?.[fIdx] ?? 0;
+    });
+    rowTotal["Menor Preço"] = "";
+    rowTotal["Saving (R$)"] = resumoComparativo.savingGlobal;
+    dadosPlanilha.push(rowTotal);
 
     const ws = XLSX.utils.json_to_sheet(dadosPlanilha);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Comparativo 3 Orçamentos");
+    XLSX.utils.book_append_sheet(wb, ws, "Comparativo Equalização");
     const dataIso = new Date().toISOString().slice(0, 10);
-    const fileName = `JC_BAUER_Comparativo_3_Orcamentos_${dataIso}.xlsx`;
+    const fileName = `JC_BAUER_Equalizacao_Precos_${dataIso}.xlsx`;
     XLSX.writeFile(wb, fileName);
     dispararAviso("Planilha do comparativo exportada com sucesso!");
   };
@@ -6049,7 +6238,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       : (comparativoTitulo || "Cota\u00e7\u00e3o de Suprimentos");
     const obraIdAlvo = proc ? proc.obraId : comparativoObraId;
     const categoriaAlvo = proc ? proc.categoria : (comparativoCategoria || "Geral / Suprimentos");
-    const fornecedoresAlvo: [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido] =
+    const fornecedoresAlvo: FornecedorCotadoRapido[] =
       (proc ? proc.fornecedores : comparativoFornecedores) || [
         { nome: "Fornecedor 1", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
         { nome: "Fornecedor 2", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
@@ -6059,19 +6248,20 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     const obraSel = obras.find((o) => o.id === obraIdAlvo) || obras[0];
     const dataHoje = new Date().toLocaleDateString("pt-BR");
 
-    const subtotal1 = itensAlvo.reduce((acc, it) => acc + (it.quantidade || 0) * (it.preco1 || 0), 0);
-    const subtotal2 = itensAlvo.reduce((acc, it) => acc + (it.quantidade || 0) * (it.preco2 || 0), 0);
-    const subtotal3 = itensAlvo.reduce((acc, it) => acc + (it.quantidade || 0) * (it.preco3 || 0), 0);
+    const subtotais = fornecedoresAlvo.map((_, i) =>
+      itensAlvo.reduce((acc, it) => acc + (it.quantidade || 0) * getItemPreco(it, i), 0)
+    );
+    const totais = fornecedoresAlvo.map((f, i) =>
+      Math.max(0, (subtotais[i] || 0) + (f?.freteValor || 0) - (f?.descontoValor || 0))
+    );
 
-    const total1 = Math.max(0, subtotal1 + (fornecedoresAlvo[0]?.freteValor || 0) - (fornecedoresAlvo[0]?.descontoValor || 0));
-    const total2 = Math.max(0, subtotal2 + (fornecedoresAlvo[1]?.freteValor || 0) - (fornecedoresAlvo[1]?.descontoValor || 0));
-    const total3 = Math.max(0, subtotal3 + (fornecedoresAlvo[2]?.freteValor || 0) - (fornecedoresAlvo[2]?.descontoValor || 0));
-
-    const validos = [
-      { nome: fornecedoresAlvo[0]?.nome || "Fornecedor 1", total: total1, index: 0 },
-      { nome: fornecedoresAlvo[1]?.nome || "Fornecedor 2", total: total2, index: 1 },
-      { nome: fornecedoresAlvo[2]?.nome || "Fornecedor 3", total: total3, index: 2 },
-    ].filter((f) => f.total > 0 && f.nome && f.nome.trim() !== "");
+    const validos = fornecedoresAlvo
+      .map((f, i) => ({
+        nome: f.nome || `Fornecedor ${i + 1}`,
+        total: totais[i] || 0,
+        index: i,
+      }))
+      .filter((f) => f.total > 0 && f.nome && f.nome.trim() !== "");
 
     let vencedorGeral: { nome: string; total: number; index: number } | null = null;
     let savingGlobal = 0;
@@ -6084,27 +6274,27 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
     const itensCalculados = itensAlvo.map((it) => {
       const q = it.quantidade || 0;
-      const t1 = q * (it.preco1 || 0);
-      const t2 = q * (it.preco2 || 0);
-      const t3 = q * (it.preco3 || 0);
-      const precValidos = [it.preco1, it.preco2, it.preco3].filter((p) => Number(p) > 0);
+      const precos = fornecedoresAlvo.map((_, i) => getItemPreco(it, i));
+      const totaisItem = precos.map((p) => p * q);
+      const precValidos = precos.filter((p) => Number(p) > 0);
       const menorPreco = precValidos.length > 0 ? Math.min(...precValidos) : 0;
+      const vencedores = precos.map((p) => Number(p) > 0 && Math.abs(p - menorPreco) < 0.001);
       return {
         ...it,
-        tot1: t1,
-        tot2: t2,
-        tot3: t3,
-        vencedor1: Number(it.preco1) > 0 && it.preco1 === menorPreco,
-        vencedor2: Number(it.preco2) > 0 && it.preco2 === menorPreco,
-        vencedor3: Number(it.preco3) > 0 && it.preco3 === menorPreco,
+        precos,
+        totaisItem,
+        vencedores,
+        menorPreco,
       };
     });
+
+    const colWidthPerc = Math.max(10, Math.floor(58 / Math.max(fornecedoresAlvo.length, 1)));
 
     const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>JC BAUER — Quadro Comparativo de Preços (3 Orçamentos)</title>
+  <title>JC BAUER — Mapa de Equalização de Preços (${fornecedoresAlvo.length} Fornecedores)</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; color: #0f172a; padding: 24px; background: #ffffff; }
@@ -6115,13 +6305,13 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     .meta { font-size: 10px; color: #64748b; line-height: 1.4; text-align: right; }
     .info-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin-bottom: 16px; font-size: 10px; }
     .info-item strong { display: block; color: #0f172a; font-size: 11px; margin-top: 2px; }
-    .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
-    .kpi-card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 12px; }
+    .kpi-row { display: grid; grid-template-columns: repeat(${fornecedoresAlvo.length}, 1fr); gap: 10px; margin-bottom: 16px; }
+    .kpi-card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 10px; }
     .kpi-card.vencedor { border-color: #166534; background: #f0fdf4; }
-    .kpi-title { font-size: 10px; font-weight: 600; color: #64748b; text-transform: uppercase; }
+    .kpi-title { font-size: 9px; font-weight: 600; color: #64748b; text-transform: uppercase; }
     .kpi-card.vencedor .kpi-title { color: #166534; font-weight: 700; }
-    .kpi-name { font-size: 13px; font-weight: 800; color: #0f172a; margin: 2px 0; }
-    .kpi-val { font-size: 16px; font-weight: 900; color: #0f172a; }
+    .kpi-name { font-size: 12px; font-weight: 800; color: #0f172a; margin: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .kpi-val { font-size: 15px; font-weight: 900; color: #0f172a; }
     .kpi-card.vencedor .kpi-val { color: #166534; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10px; }
     th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
@@ -6137,7 +6327,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 <body>
   <div class="no-print">
     <div style="color: #ffffff; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-      <span>📄 Mapa Equalizado de Preços (3 Orçamentos)</span>
+      <span>📄 Mapa Equalizado de Preços (${fornecedoresAlvo.length} Fornecedores)</span>
       <span style="font-size: 11px; color: #94a3b8; font-weight: normal;">• Central de Suprimentos JC Bauer</span>
     </div>
     <div style="display: flex; gap: 10px; align-items: center;">
@@ -6154,7 +6344,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       <img src="${window.location.origin}/logo.png" alt="JC Bauer" style="height: 44px; width: auto; object-fit: contain;" onerror="this.style.display='none'" />
       <div>
         <div class="logo">${settings.companyName}</div>
-        <div class="title">Mapa de Equalização e Comparativo de 3 Orçamentos</div>
+        <div class="title">Mapa de Equalização e Comparativo de ${fornecedoresAlvo.length} Fornecedores</div>
       </div>
     </div>
     <div class="meta">
@@ -6172,7 +6362,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   </div>
   <div class="kpi-row">
     ${fornecedoresAlvo.map((f, i) => {
-        const tot = i === 0 ? total1 : i === 1 ? total2 : total3;
+        const tot = totais[i] || 0;
         const isVencedor = vencedorGeral?.index === i;
         return `
         <div class="kpi-card ${isVencedor ? 'vencedor' : ''}">
@@ -6189,11 +6379,11 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   <table>
     <thead>
       <tr>
-        <th style="width: 30%;">Insumo / Material</th>
+        <th style="width: ${100 - 12 - colWidthPerc * fornecedoresAlvo.length}%;">Insumo / Material</th>
         <th class="text-center" style="width: 12%;">Qtd & Unid</th>
-        <th class="text-right" style="width: 19%;">${fornecedoresAlvo?.[0]?.nome || "Fornecedor 1"}</th>
-        <th class="text-right" style="width: 19%;">${fornecedoresAlvo?.[1]?.nome || "Fornecedor 2"}</th>
-        <th class="text-right" style="width: 19%;">${fornecedoresAlvo?.[2]?.nome || "Fornecedor 3"}</th>
+        ${fornecedoresAlvo.map((f, i) => `
+          <th class="text-right" style="width: ${colWidthPerc}%;">${f.nome || `Fornecedor ${i + 1}`}</th>
+        `).join("")}
       </tr>
     </thead>
     <tbody>
@@ -6201,42 +6391,43 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         <tr>
           <td><strong>${it.nome}</strong></td>
           <td class="text-center">${it.quantidade} ${it.unidade}</td>
-          <td class="text-right ${it.vencedor1 ? 'winner-cell' : ''}">
-            ${formatBRL(it.preco1)} / un<br><span style="font-size: 9px; color: ${it.vencedor1 ? '#166534' : '#64748b'};">Total: ${formatBRL(it.tot1)}</span>
-          </td>
-          <td class="text-right ${it.vencedor2 ? 'winner-cell' : ''}">
-            ${formatBRL(it.preco2)} / un<br><span style="font-size: 9px; color: ${it.vencedor2 ? '#166534' : '#64748b'};">Total: ${formatBRL(it.tot2)}</span>
-          </td>
-          <td class="text-right ${it.vencedor3 ? 'winner-cell' : ''}">
-            ${formatBRL(it.preco3)} / un<br><span style="font-size: 9px; color: ${it.vencedor3 ? '#166534' : '#64748b'};">Total: ${formatBRL(it.tot3)}</span>
-          </td>
+          ${fornecedoresAlvo.map((_, i) => {
+            const p = it.precos[i] || 0;
+            const t = it.totaisItem[i] || 0;
+            const isVenc = it.vencedores[i];
+            return `
+              <td class="text-right ${isVenc ? 'winner-cell' : ''}">
+                ${formatBRL(p)} / un<br><span style="font-size: 9px; color: ${isVenc ? '#166534' : '#64748b'};">Total: ${formatBRL(t)}</span>
+              </td>
+            `;
+          }).join("")}
         </tr>
       `).join("")}
     </tbody>
     <tfoot>
       <tr style="background: #f8fafc; font-weight: 700;">
         <td colspan="2">Subtotal dos Materiais</td>
-        <td class="text-right">${formatBRL(subtotal1)}</td>
-        <td class="text-right">${formatBRL(subtotal2)}</td>
-        <td class="text-right">${formatBRL(subtotal3)}</td>
+        ${fornecedoresAlvo.map((_, i) => `
+          <td class="text-right">${formatBRL(subtotais[i] || 0)}</td>
+        `).join("")}
       </tr>
       <tr style="background: #f8fafc;">
         <td colspan="2">Desconto Comercial (R$)</td>
-        <td class="text-right" style="color: #16a34a;">-${formatBRL(fornecedoresAlvo?.[0]?.descontoValor || 0)}</td>
-        <td class="text-right" style="color: #16a34a;">-${formatBRL(fornecedoresAlvo?.[1]?.descontoValor || 0)}</td>
-        <td class="text-right" style="color: #16a34a;">-${formatBRL(fornecedoresAlvo?.[2]?.descontoValor || 0)}</td>
+        ${fornecedoresAlvo.map((f) => `
+          <td class="text-right" style="color: #16a34a;">-${formatBRL(f?.descontoValor || 0)}</td>
+        `).join("")}
       </tr>
       <tr style="background: #f8fafc;">
         <td colspan="2">Frete (CIF / FOB)</td>
-        <td class="text-right">${fornecedoresAlvo?.[0]?.freteTipo || "CIF"} (${formatBRL(fornecedoresAlvo?.[0]?.freteValor || 0)})</td>
-        <td class="text-right">${fornecedoresAlvo?.[1]?.freteTipo || "CIF"} (${formatBRL(fornecedoresAlvo?.[1]?.freteValor || 0)})</td>
-        <td class="text-right">${fornecedoresAlvo?.[2]?.freteTipo || "CIF"} (${formatBRL(fornecedoresAlvo?.[2]?.freteValor || 0)})</td>
+        ${fornecedoresAlvo.map((f) => `
+          <td class="text-right">${f?.freteTipo || "CIF"} (${formatBRL(f?.freteValor || 0)})</td>
+        `).join("")}
       </tr>
       <tr style="background: #0f172a; color: #ffffff; font-weight: 800; font-size: 11px;">
         <td colspan="2" style="border-color: #0f172a;">VALOR TOTAL FINAL (COM FRETE E DESCONTO)</td>
-        <td class="text-right" style="border-color: #0f172a;">${formatBRL(total1)}</td>
-        <td class="text-right" style="border-color: #0f172a;">${formatBRL(total2)}</td>
-        <td class="text-right" style="border-color: #0f172a;">${formatBRL(total3)}</td>
+        ${fornecedoresAlvo.map((_, i) => `
+          <td class="text-right" style="border-color: #0f172a;">${formatBRL(totais[i] || 0)}</td>
+        `).join("")}
       </tr>
     </tfoot>
   </table>
@@ -7625,6 +7816,47 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       setObraEmEdicao(null);
     }
     dispararAviso(`Obra "${obraNome}" removida com sucesso.`);
+  };
+
+  /* Reagendamento de entrega no Calendário de Cargas (altera somente data/janela/veículo da OC) */
+  const handleReagendarEntrega = (
+    ordemId: string,
+    novaDataISO: string,
+    janela?: string,
+    veiculo?: string
+  ) => {
+    const iso = parseDataEntregaISO(novaDataISO);
+    if (!iso) {
+      dispararAviso("Informe uma data de entrega válida.");
+      return;
+    }
+    const ordemAlvo = ordens.find((o) => o.id === ordemId);
+    if (!ordemAlvo) {
+      dispararAviso("Ordem de compra não encontrada.");
+      return;
+    }
+    const novasOrdens = ordens.map((o) =>
+      o.id === ordemId
+        ? {
+            ...o,
+            dataPrevistaEntrega: formatarDataBR(iso),
+            janelaEntrega:
+              janela !== undefined ? janela.trim() || undefined : o.janelaEntrega,
+            veiculoEntrega:
+              veiculo !== undefined ? veiculo.trim() || undefined : o.veiculoEntrega,
+          }
+        : o
+    );
+    setOrdens(novasOrdens);
+    try {
+      window.localStorage.setItem(ORDENS_STORAGE_KEY, JSON.stringify(novasOrdens));
+    } catch {}
+    salvarChaveSupabase(ORDENS_STORAGE_KEY, novasOrdens).catch(() => {});
+    setCargaEmEdicao(null);
+    setSemanaLogisticaOffset(calcularOffsetSemana(iso));
+    dispararAviso(
+      `Entrega da ${ordemAlvo.numeroOc} (${ordemAlvo.fornecedorNome}) reagendada para ${formatarDataBR(iso)}.`
+    );
   };
 
   const handleSalvarEdicaoOrdem = (ordemAtualizada: OrdemCompra) => {
@@ -11125,32 +11357,47 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                     </div>
                   </div>
 
-                  {/* Cards dos 3 Fornecedores Cotados (Ranking + Totais + Ação) */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {([0, 1, 2] as const).map((idx) => {
-                      const forn = comparativoFornecedores?.[idx] ?? {
-                        nome: `Fornecedor ${idx + 1}`,
-                        vendedor: "",
-                        telefone: "",
-                        prazo: "",
-                        condicao: "",
-                        freteTipo: "CIF" as const,
-                        freteValor: 0,
-                        descontoValor: 0,
-                      };
-                      const total =
-                        idx === 0
-                          ? resumoComparativo.total1
-                          : idx === 1
-                          ? resumoComparativo.total2
-                          : resumoComparativo.total3;
-                      const subtotal =
-                        idx === 0
-                          ? resumoComparativo.subtotal1
-                          : idx === 1
-                          ? resumoComparativo.subtotal2
-                          : resumoComparativo.subtotal3;
+                  {/* Cabeçalho e Ações dos Fornecedores Cotados */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        🏢 Fornecedores em Comparação:
+                      </span>
+                      <span className="text-xs font-black text-emerald-800 bg-emerald-100/80 border border-emerald-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+                        {comparativoFornecedores.length} Fornecedores
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        (Equalize de 2 a 5 propostas simultâneas)
+                      </span>
+                    </div>
 
+                    {comparativoFornecedores.length < 5 && (
+                      <button
+                        type="button"
+                        onClick={handleAdicionarFornecedorComparativo}
+                        className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                        title="Adicionar mais um fornecedor para equalizar (até 5)"
+                      >
+                        <span>➕</span> Adicionar {comparativoFornecedores.length + 1}º Fornecedor
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Cards dos Fornecedores Cotados (Ranking + Totais + Ação) */}
+                  <div
+                    className={`grid grid-cols-1 sm:grid-cols-2 ${
+                      comparativoFornecedores.length === 2
+                        ? "lg:grid-cols-2"
+                        : comparativoFornecedores.length === 3
+                        ? "lg:grid-cols-3"
+                        : comparativoFornecedores.length === 4
+                        ? "lg:grid-cols-2 xl:grid-cols-4"
+                        : "lg:grid-cols-3 xl:grid-cols-5"
+                    } gap-3.5`}
+                  >
+                    {comparativoFornecedores.map((forn, idx) => {
+                      const total = resumoComparativo.totais?.[idx] ?? 0;
+                      const subtotal = resumoComparativo.subtotais?.[idx] ?? 0;
                       const isVencedor =
                         resumoComparativo.vencedorGeral?.index === idx;
                       const posRank =
@@ -11161,17 +11408,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                       return (
                         <div
                           key={idx}
-                          className={`rounded-xl border p-4 shadow-xs transition flex flex-col justify-between ${
+                          className={`rounded-xl border p-3.5 shadow-xs transition flex flex-col justify-between ${
                             isVencedor
-                              ? "bg-emerald-50/50 border-emerald-400 ring-2 ring-emerald-500/20"
+                              ? "bg-emerald-50/60 border-emerald-400 ring-2 ring-emerald-500/20"
                               : "bg-white border-slate-200"
                           }`}
                         >
                           <div>
-                            {/* Cabeçalho do Card com Ranking */}
-                            <div className="flex items-center justify-between gap-2 mb-3">
+                            {/* Cabeçalho do Card com Ranking e Botão de Excluir */}
+                            <div className="flex items-center justify-between gap-1.5 mb-2.5">
                               <span
-                                className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
                                   isVencedor
                                     ? "bg-emerald-700 text-white shadow-xs"
                                     : posRank === 2
@@ -11180,21 +11427,36 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                 }`}
                               >
                                 {isVencedor
-                                  ? "🏆 1º Lugar — Mais em Conta"
+                                  ? "🏆 1º Lugar"
                                   : posRank > 0
                                   ? `${posRank}º Lugar`
                                   : `Orçamento ${idx + 1}`}
                               </span>
-                              <span className="text-xs font-bold text-slate-500">
-                                Proposta #{idx + 1}
-                              </span>
+
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] font-bold text-slate-500">
+                                  #{idx + 1}
+                                </span>
+                                {comparativoFornecedores.length > 2 && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleRemoverFornecedorComparativo(idx)
+                                    }
+                                    className="text-slate-400 hover:text-rose-600 transition p-0.5 rounded text-xs"
+                                    title="Remover fornecedor desta cotação"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
                             </div>
 
                             {/* Nome do Fornecedor + Seleção rápida do CRM */}
-                            <div className="space-y-2 mb-3">
+                            <div className="space-y-1.5 mb-2.5">
                               <div>
-                                <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
-                                  Nome da Empresa / Fornecedor:
+                                <label className="block text-[10px] font-bold text-slate-700 mb-0.5">
+                                  Empresa / Fornecedor:
                                 </label>
                                 <input
                                   type="text"
@@ -11207,7 +11469,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                     )
                                   }
                                   placeholder={`Nome do Fornecedor ${idx + 1}`}
-                                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900"
+                                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900"
                                 />
                               </div>
 
@@ -11237,10 +11499,10 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             </div>
 
                             {/* Vendedor, Contato, Prazo e Frete */}
-                            <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                            <div className="grid grid-cols-2 gap-1.5 text-xs mb-2.5">
                               <div>
-                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">
-                                  Vendedor / Contato:
+                                <label className="block text-[9px] font-semibold text-slate-500 mb-0.5">
+                                  Vendedor:
                                 </label>
                                 <input
                                   type="text"
@@ -11252,12 +11514,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                       e.target.value
                                     )
                                   }
-                                  placeholder="Nome do vendedor"
-                                  className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-800"
+                                  placeholder="Contato"
+                                  className="w-full bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[11px] text-slate-800"
                                 />
                               </div>
                               <div>
-                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">
+                                <label className="block text-[9px] font-semibold text-slate-500 mb-0.5">
                                   Telefone / Whats:
                                 </label>
                                 <input
@@ -11271,12 +11533,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                     )
                                   }
                                   placeholder="(11) 9..."
-                                  className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-800"
+                                  className="w-full bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[11px] text-slate-800"
                                 />
                               </div>
                               <div>
-                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">
-                                  Prazo de Entrega:
+                                <label className="block text-[9px] font-semibold text-slate-500 mb-0.5">
+                                  Prazo:
                                 </label>
                                 <input
                                   type="text"
@@ -11288,13 +11550,13 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                       e.target.value
                                     )
                                   }
-                                  placeholder="Ex: 5 dias úteis"
-                                  className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-800"
+                                  placeholder="Ex: 5 dias"
+                                  className="w-full bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[11px] text-slate-800"
                                 />
                               </div>
                               <div>
-                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">
-                                  Condição de Pagto:
+                                <label className="block text-[9px] font-semibold text-slate-500 mb-0.5">
+                                  Condição:
                                 </label>
                                 <input
                                   type="text"
@@ -11306,16 +11568,16 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                       e.target.value
                                     )
                                   }
-                                  placeholder="Ex: 28 dias boleto"
-                                  className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-800"
+                                  placeholder="Ex: 28 dias"
+                                  className="w-full bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[11px] text-slate-800"
                                 />
                               </div>
                             </div>
 
                             {/* Frete (CIF / FOB) */}
-                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[11px] font-bold text-slate-700">
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 mb-2 flex items-center justify-between gap-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold text-slate-700">
                                   Frete:
                                 </span>
                                 <select
@@ -11327,7 +11589,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                       e.target.value as "CIF" | "FOB"
                                     )
                                   }
-                                  className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-semibold"
+                                  className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-semibold"
                                 >
                                   <option value="CIF">CIF (Incluso)</option>
                                   <option value="FOB">FOB (A pagar)</option>
@@ -11335,7 +11597,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                               </div>
                               {forn.freteTipo === "FOB" && (
                                 <div className="flex items-center gap-1">
-                                  <span className="text-[11px] text-slate-500">
+                                  <span className="text-[10px] text-slate-500">
                                     R$
                                   </span>
                                   <input
@@ -11349,53 +11611,55 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                         parseFloat(e.target.value) || 0
                                       )
                                     }
-                                    className="w-20 bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-right"
+                                    className="w-16 bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-bold text-right"
                                   />
                                 </div>
                               )}
                             </div>
+
+                            {/* Desconto Comercial (R$) */}
+                            <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-2 mb-2.5 flex items-center justify-between gap-1.5">
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] font-bold text-emerald-900">
+                                  🏷️ Desconto:
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] font-bold text-emerald-700">
+                                  - R$
+                                </span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={
+                                    forn.descontoValor === 0
+                                      ? ""
+                                      : forn.descontoValor ?? ""
+                                  }
+                                  onChange={(e) =>
+                                    handleAtualizarFornecedorComparativo(
+                                      idx,
+                                      "descontoValor",
+                                      parseFloat(e.target.value) || 0
+                                    )
+                                  }
+                                  placeholder="0,00"
+                                  className="w-20 bg-white border border-emerald-300 rounded px-1.5 py-0.5 text-[11px] font-bold text-right text-emerald-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-xs"
+                                />
+                              </div>
+                            </div>
                           </div>
 
                           {/* Rodapé do Card: Valor Total + Botão de Emitir OC */}
-      {/* Desconto Comercial (R$) */}
-      <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-2.5 mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-bold text-emerald-900">
-            🏷️ Desconto:
-          </span>
-          <span className="text-[10px] text-emerald-700">
-            (em R$)
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[11px] font-bold text-emerald-700">
-            - R$
-          </span>
-          <input
-            type="number"
-            min="0"
-            step="1"
-            value={forn.descontoValor === 0 ? "" : forn.descontoValor ?? ""}
-            onChange={(e) =>
-              handleAtualizarFornecedorComparativo(
-                idx,
-                "descontoValor",
-                parseFloat(e.target.value) || 0
-              )
-            }
-            placeholder="0,00"
-            className="w-24 bg-white border border-emerald-300 rounded px-2 py-0.5 text-xs font-bold text-right text-emerald-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-xs"
-          />
-        </div>
-      </div>
-                          <div className="border-t border-slate-200 pt-3">
+                          <div className="border-t border-slate-200 pt-2.5">
                             <div className="flex items-baseline justify-between mb-2">
-                              <span className="text-xs font-semibold text-slate-500">
-                                Total da Proposta:
+                              <span className="text-[11px] font-semibold text-slate-500">
+                                Total Proposta:
                               </span>
                               <div className="text-right">
                                 <div
-                                  className={`text-xl font-black tabular-nums ${
+                                  className={`text-lg font-black tabular-nums ${
                                     isVencedor
                                       ? "text-emerald-700"
                                       : "text-slate-900"
@@ -11404,10 +11668,18 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                   {formatBRL(total)}
                                 </div>
                                 {subtotal !== total && (
-                                  <div className="text-[10px] text-slate-500">
+                                  <div className="text-[9px] text-slate-500">
                                     (Mat: {formatBRL(subtotal)}
-                                    {Number(forn.freteValor) > 0 ? ` + Frete: ${formatBRL(forn.freteValor)}` : ""}
-                                    {Number(forn.descontoValor) > 0 ? ` - Desc: ${formatBRL(forn.descontoValor)}` : ""})
+                                    {Number(forn.freteValor) > 0
+                                      ? ` + Frete: ${formatBRL(
+                                          forn.freteValor
+                                        )}`
+                                      : ""}
+                                    {Number(forn.descontoValor) > 0
+                                      ? ` - Desc: ${formatBRL(
+                                          forn.descontoValor
+                                        )}`
+                                      : ""})
                                   </div>
                                 )}
                               </div>
@@ -11416,7 +11688,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             <button
                               type="button"
                               onClick={() => handleEmitirOrdemComparativo(idx)}
-                              className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs ${
+                              className={`w-full py-2 px-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs ${
                                 isVencedor
                                   ? "bg-emerald-700 hover:bg-emerald-800 text-white"
                                   : "bg-slate-900 hover:bg-slate-800 text-white"
@@ -11485,6 +11757,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 shadow-2xs">
                             <span>📦</span> Insumos catalogados no Almoxarifado com SKU
                           </span>
+                          <span className="text-[11px] font-bold text-slate-700 bg-slate-200/80 border border-slate-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                            <span>🏢</span> {comparativoFornecedores.length} Fornecedores Cotados
+                          </span>
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">
                           Insira os preços unitários de cada fornecedor. O sistema destaca em verde o item mais em conta em tempo real.
@@ -11492,6 +11767,16 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {comparativoFornecedores.length < 5 && (
+                          <button
+                            type="button"
+                            onClick={handleAdicionarFornecedorComparativo}
+                            className="px-3 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-bold transition flex items-center gap-1 shadow-2xs"
+                            title="Adicionar mais um fornecedor nesta cotação (até 5)"
+                          >
+                            <span>➕</span> Fornecedor ({comparativoFornecedores.length}/5)
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={handleAdicionarItemComparativo}
@@ -11503,34 +11788,56 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                     </div>
 
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm border-collapse text-left">
+                      <table className="w-full text-sm border-collapse text-left min-w-[850px]">
                         <thead>
                           <tr className="bg-slate-100 border-b border-slate-300 text-xs font-semibold text-slate-700">
-                            <th className="py-3 px-4 w-[28%]">
+                            <th className="py-2.5 px-3 min-w-[200px]" style={{ width: comparativoFornecedores.length >= 4 ? "22%" : "26%" }}>
                               Insumo / Material
                             </th>
-                            <th className="py-3 px-3 w-[14%] text-center">
+                            <th className="py-2.5 px-2 min-w-[95px] w-[10%] text-center">
                               Qtd & Unidade
                             </th>
-                            {([0, 1, 2] as const).map((idx) => (
-                              <th
-                                key={idx}
-                                className={`py-3 px-3 w-[18%] text-right border-l border-slate-200 ${
-                                  resumoComparativo.vencedorGeral?.index === idx
-                                    ? "bg-emerald-50/70 text-emerald-950 font-bold"
-                                    : ""
-                                }`}
-                              >
-                                <div className="truncate">
-                                  {comparativoFornecedores?.[idx]?.nome ||
-                                    `Fornecedor ${idx + 1}`}
-                                </div>
-                                <div className="text-[10px] font-normal text-slate-500 mt-0.5">
-                                  Preço Unit. • Total Item
-                                </div>
-                              </th>
-                            ))}
-                            <th className="py-3 px-3 w-[4%] text-center">
+                            {comparativoFornecedores.map((forn, idx) => {
+                              const isWinnerCol =
+                                resumoComparativo.vencedorGeral?.index === idx;
+                              return (
+                                <th
+                                  key={idx}
+                                  className={`py-2.5 px-2.5 min-w-[145px] text-right border-l border-slate-200 transition ${
+                                    isWinnerCol
+                                      ? "bg-emerald-50/80 text-emerald-950 font-bold border-l-emerald-300"
+                                      : ""
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between gap-1">
+                                    <div
+                                      className="truncate font-extrabold text-xs text-slate-900"
+                                      title={forn.nome || `Fornecedor ${idx + 1}`}
+                                    >
+                                      {forn.nome || `Fornecedor ${idx + 1}`}
+                                    </div>
+                                    {comparativoFornecedores.length > 2 && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleRemoverFornecedorComparativo(idx)
+                                        }
+                                        className="text-slate-400 hover:text-rose-600 transition p-0.5 rounded text-xs ml-1 shrink-0"
+                                        title={`Remover ${
+                                          forn.nome || `Fornecedor ${idx + 1}`
+                                        }`}
+                                      >
+                                        ✕
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="text-[10px] font-normal text-slate-500 mt-0.5">
+                                    Preço Unit. • Total Item
+                                  </div>
+                                </th>
+                              );
+                            })}
+                            <th className="py-2.5 px-2 w-[4%] min-w-[36px] text-center">
                               Excluir
                             </th>
                           </tr>
@@ -11540,7 +11847,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           {comparativoItens.length === 0 ? (
                             <tr>
                               <td
-                                colSpan={6}
+                                colSpan={comparativoFornecedores.length + 3}
                                 className="py-12 text-center text-slate-500"
                               >
                                 <div className="max-w-xs mx-auto space-y-3">
@@ -11567,10 +11874,10 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                 return (
                                   <tr
                                     key={it.id}
-                                    className="hover:bg-slate-50 transition"
+                                    className="hover:bg-slate-50/80 transition"
                                   >
                                     {/* Coluna 1: Nome do Insumo */}
-                                    <td className="py-2.5 px-4">
+                                    <td className="py-2 px-3">
                                       <input
                                         type="text"
                                         value={it.nome}
@@ -11584,7 +11891,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                         placeholder={`Ex: Insumo #${
                                           itemIdx + 1
                                         }`}
-                                        className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 focus:bg-white rounded px-1.5 py-1 text-xs font-bold text-slate-900 transition"
+                                        className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 focus:bg-white rounded px-1.5 py-0.5 text-xs font-bold text-slate-900 transition"
                                       />
                                       {(() => {
                                         const estMatch = estoque.find(
@@ -11614,8 +11921,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                     </td>
 
                                     {/* Coluna 2: Quantidade & Unidade */}
-                                    <td className="py-2.5 px-3 text-center">
-                                      <div className="inline-flex items-center gap-1.5">
+                                    <td className="py-2 px-2 text-center">
+                                      <div className="inline-flex items-center gap-1 justify-center">
                                         <input
                                           type="number"
                                           step="0.01"
@@ -11627,7 +11934,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                               parseFloat(e.target.value) || 0
                                             )
                                           }
-                                          className="w-16 bg-white border border-slate-300 rounded px-1.5 py-1 text-xs font-black text-center text-slate-900"
+                                          className="w-14 bg-white border border-slate-300 rounded px-1 py-0.5 text-xs font-black text-center text-slate-900"
                                         />
                                         <input
                                           type="text"
@@ -11640,83 +11947,83 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                             )
                                           }
                                           placeholder="un"
-                                          className="w-12 bg-white border border-slate-300 rounded px-1 py-1 text-[11px] font-semibold text-center text-slate-700 uppercase"
+                                          className="w-10 bg-white border border-slate-300 rounded px-0.5 py-0.5 text-[11px] font-semibold text-center text-slate-700 uppercase"
                                         />
                                       </div>
                                     </td>
 
-                                    {/* Colunas 3, 4 e 5: Preços Fornecedor 1, 2 e 3 */}
-                                    {[
-                                      {
-                                        p: it.preco1,
-                                        tot: it.tot1,
-                                        win: it.vencedor1,
-                                        key: "preco1" as const,
-                                      },
-                                      {
-                                        p: it.preco2,
-                                        tot: it.tot2,
-                                        win: it.vencedor2,
-                                        key: "preco2" as const,
-                                      },
-                                      {
-                                        p: it.preco3,
-                                        tot: it.tot3,
-                                        win: it.vencedor3,
-                                        key: "preco3" as const,
-                                      },
-                                    ].map((col, cIdx) => (
-                                      <td
-                                        key={cIdx}
-                                        className={`py-2.5 px-3 border-l border-slate-200 transition ${
-                                          col.win
-                                            ? "bg-emerald-50/70 border-emerald-300"
-                                            : ""
-                                        }`}
-                                      >
-                                        <div className="flex items-center justify-between gap-1.5">
-                                          <div className="flex items-center gap-1 bg-white border border-slate-300 rounded px-1.5 py-0.5 shadow-2xs">
-                                            <span className="text-[10px] text-slate-400 font-semibold">
-                                              R$
-                                            </span>
-                                            <input
-                                              type="number"
-                                              step="0.01"
-                                              value={col.p}
-                                              onChange={(e) =>
-                                                handleAtualizarItemComparativo(
-                                                  it.id,
-                                                  col.key,
-                                                  parseFloat(e.target.value) ||
-                                                    0
-                                                )
-                                              }
-                                              className="w-20 text-right text-xs font-black text-slate-900 focus:outline-none tabular-nums"
-                                            />
-                                          </div>
+                                    {/* Colunas dos Fornecedores Cotados */}
+                                    {comparativoFornecedores.map((_, cIdx) => {
+                                      const p =
+                                        it.precos?.[cIdx] ??
+                                        getItemPreco(it, cIdx);
+                                      const tot = (it.quantidade || 0) * p;
+                                      const isWinnerItem =
+                                        it.vencedores?.[cIdx] ?? false;
 
-                                          <div className="text-right">
-                                            <div
-                                              className={`text-xs tabular-nums font-bold ${
-                                                col.win
-                                                  ? "text-emerald-800"
-                                                  : "text-slate-800"
-                                              }`}
-                                            >
-                                              {formatBRL(col.tot)}
+                                      return (
+                                        <td
+                                          key={cIdx}
+                                          className={`py-2 px-2.5 border-l border-slate-200 transition ${
+                                            isWinnerItem
+                                              ? "bg-emerald-50/70 border-emerald-300"
+                                              : ""
+                                          }`}
+                                        >
+                                          <div className="flex flex-col gap-1">
+                                            <div className="flex items-center justify-between gap-1.5">
+                                              {/* Input Preço Unitário */}
+                                              <div className="flex items-center gap-0.5 bg-white border border-slate-300 rounded px-1.5 py-0.5 shadow-2xs focus-within:border-slate-900 focus-within:ring-1 focus-within:ring-slate-900 w-full max-w-[105px]">
+                                                <span className="text-[10px] text-slate-400 font-bold select-none">
+                                                  R$
+                                                </span>
+                                                <input
+                                                  type="number"
+                                                  step="0.01"
+                                                  value={p === 0 ? "" : p}
+                                                  placeholder="0,00"
+                                                  onChange={(e) =>
+                                                    handleAtualizarPrecoItemComparativo(
+                                                      it.id,
+                                                      cIdx,
+                                                      parseFloat(e.target.value) ||
+                                                        0
+                                                    )
+                                                  }
+                                                  className="w-full text-right text-xs font-black text-slate-900 focus:outline-none tabular-nums placeholder:text-slate-300 placeholder:font-normal"
+                                                />
+                                              </div>
+
+                                              {/* Total do Item */}
+                                              <div className="text-right shrink-0">
+                                                <div
+                                                  className={`text-xs tabular-nums font-bold ${
+                                                    isWinnerItem
+                                                      ? "text-emerald-800 font-black"
+                                                      : "text-slate-800"
+                                                  }`}
+                                                  title={`Total: ${it.quantidade} x ${formatBRL(p)}`}
+                                                >
+                                                  {formatBRL(tot)}
+                                                </div>
+                                              </div>
                                             </div>
-                                            {col.win && (
-                                              <span className="inline-block px-1.5 py-0.2 rounded bg-emerald-700 text-white text-[9px] font-extrabold uppercase tracking-tight">
-                                                🏆 Mais em Conta
-                                              </span>
+
+                                            {/* Micro-badge de menor preço */}
+                                            {isWinnerItem && (
+                                              <div className="flex justify-end">
+                                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-emerald-700 text-white text-[9px] font-extrabold uppercase tracking-tight shadow-2xs">
+                                                  <span>🏆</span> Mais em Conta
+                                                </span>
+                                              </div>
                                             )}
                                           </div>
-                                        </div>
-                                      </td>
-                                    ))}
+                                        </td>
+                                      );
+                                    })}
 
-                                    {/* Coluna 6: Excluir */}
-                                    <td className="py-2.5 px-3 text-center">
+                                    {/* Coluna Excluir */}
+                                    <td className="py-2 px-2 text-center">
                                       <button
                                         type="button"
                                         onClick={() =>
@@ -11741,42 +12048,43 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             <tr className="bg-slate-50 text-xs">
                               <td
                                 colSpan={2}
-                                className="py-3 px-4 text-slate-700"
+                                className="py-2.5 px-3 text-slate-700 font-bold"
                               >
                                 Subtotal dos Materiais
                               </td>
-                              <td className="py-3 px-3 text-right text-slate-900 border-l border-slate-200 tabular-nums">
-                                {formatBRL(resumoComparativo.subtotal1)}
-                              </td>
-                              <td className="py-3 px-3 text-right text-slate-900 border-l border-slate-200 tabular-nums">
-                                {formatBRL(resumoComparativo.subtotal2)}
-                              </td>
-                              <td className="py-3 px-3 text-right text-slate-900 border-l border-slate-200 tabular-nums">
-                                {formatBRL(resumoComparativo.subtotal3)}
-                              </td>
+                              {comparativoFornecedores.map((_, idx) => (
+                                <td
+                                  key={idx}
+                                  className="py-2.5 px-2.5 text-right text-slate-900 border-l border-slate-200 tabular-nums font-bold"
+                                >
+                                  {formatBRL(
+                                    resumoComparativo.subtotais?.[idx] ?? 0
+                                  )}
+                                </td>
+                              ))}
                               <td></td>
                             </tr>
 
                             <tr className="bg-emerald-50/60 text-xs border-y border-emerald-200">
                               <td
                                 colSpan={2}
-                                className="py-2.5 px-4 text-emerald-950 font-bold"
+                                className="py-2 px-3 text-emerald-950 font-bold"
                               >
                                 <span className="inline-flex items-center gap-1.5">
                                   <span>🏷️</span>
                                   <span>Desconto Comercial (R$)</span>
                                 </span>
                               </td>
-                              {([0, 1, 2] as const).map((idx) => {
+                              {comparativoFornecedores.map((forn, idx) => {
                                 const descAtual =
-                                  comparativoFornecedores?.[idx]?.descontoValor ?? 0;
+                                  forn?.descontoValor ?? 0;
                                 return (
                                   <td
                                     key={idx}
                                     className="py-1.5 px-2 text-right border-l border-emerald-200 text-xs tabular-nums"
                                   >
                                     <div className="flex items-center justify-end gap-1">
-                                      <span className="text-[11px] font-bold text-emerald-700">
+                                      <span className="text-[10px] font-bold text-emerald-700">
                                         - R$
                                       </span>
                                       <input
@@ -11792,9 +12100,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                           )
                                         }
                                         placeholder="0,00"
-                                        className="w-24 bg-white border border-emerald-300 rounded px-2 py-0.5 text-xs font-bold text-right text-emerald-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-xs"
+                                        className="w-20 bg-white border border-emerald-300 rounded px-1.5 py-0.5 text-xs font-bold text-right text-emerald-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-xs"
                                         title={`Desconto em R$ concedido por ${
-                                          comparativoFornecedores?.[idx]?.nome ||
+                                          forn?.nome ||
                                           `Fornecedor ${idx + 1}`
                                         }`}
                                       />
@@ -11807,20 +12115,19 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             <tr className="bg-slate-50 text-xs">
                               <td
                                 colSpan={2}
-                                className="py-2 px-4 text-slate-600 font-normal"
+                                className="py-2 px-3 text-slate-600 font-normal"
                               >
                                 Frete (CIF / FOB)
                               </td>
-                              {([0, 1, 2] as const).map((idx) => (
+                              {comparativoFornecedores.map((forn, idx) => (
                                 <td
                                   key={idx}
-                                  className="py-2 px-3 text-right text-slate-600 border-l border-slate-200 text-xs tabular-nums"
+                                  className="py-2 px-2.5 text-right text-slate-600 border-l border-slate-200 text-xs tabular-nums font-semibold"
                                 >
-                                  {(comparativoFornecedores?.[idx]?.freteTipo ?? "CIF") ===
-                                  "CIF"
+                                  {(forn?.freteTipo ?? "CIF") === "CIF"
                                     ? "CIF (Incluso)"
                                     : `FOB (${formatBRL(
-                                        comparativoFornecedores?.[idx]?.freteValor ?? 0
+                                        forn?.freteValor ?? 0
                                       )})`}
                                 </td>
                               ))}
@@ -11830,17 +12137,13 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             <tr className="bg-slate-900 text-white text-sm">
                               <td
                                 colSpan={2}
-                                className="py-3 px-4 font-black"
+                                className="py-3 px-3 font-black text-xs sm:text-sm"
                               >
                                 VALOR TOTAL FINAL (COM FRETE E DESCONTO)
                               </td>
-                              {([0, 1, 2] as const).map((idx) => {
+                              {comparativoFornecedores.map((_, idx) => {
                                 const tot =
-                                  idx === 0
-                                    ? resumoComparativo.total1
-                                    : idx === 1
-                                    ? resumoComparativo.total2
-                                    : resumoComparativo.total3;
+                                  resumoComparativo.totais?.[idx] ?? 0;
                                 const isVencedor =
                                   resumoComparativo.vencedorGeral?.index ===
                                   idx;
@@ -11848,15 +12151,15 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                 return (
                                   <td
                                     key={idx}
-                                    className={`py-3 px-3 text-right border-l border-slate-800 tabular-nums font-black ${
+                                    className={`py-3 px-2.5 text-right border-l border-slate-800 tabular-nums font-black ${
                                       isVencedor
-                                        ? "bg-emerald-700 text-white"
+                                        ? "bg-emerald-700 text-white ring-2 ring-emerald-400/40"
                                         : "text-white"
                                     }`}
                                   >
-                                    <div>{formatBRL(tot)}</div>
+                                    <div className="text-xs sm:text-sm">{formatBRL(tot)}</div>
                                     {isVencedor && (
-                                      <div className="text-[10px] uppercase font-bold text-emerald-200 tracking-wider mt-0.5">
+                                      <div className="text-[9px] uppercase font-bold text-emerald-200 tracking-wider mt-0.5">
                                         ⭐ Vencedor
                                       </div>
                                     )}
@@ -11872,6 +12175,52 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
                     {/* Barra de Ações Rápidas no Pé da Tabela */}
                     <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleAdicionarItemComparativo}
+                          className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                        >
+                          <span>+</span> Adicionar Insumo
+                        </button>
+                        {comparativoFornecedores.length < 5 && (
+                          <button
+                            type="button"
+                            onClick={handleAdicionarFornecedorComparativo}
+                            className="px-3.5 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
+                            title="Adicionar mais um fornecedor para equalização (até 5)"
+                          >
+                            <span>➕</span> Adicionar {comparativoFornecedores.length + 1}º Fornecedor
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            comparativoFileInputRef.current?.click()
+                          }
+                          className="px-3.5 py-2 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs font-semibold transition flex items-center gap-1.5"
+                        >
+                          <span>📥</span> Importar Itens (.xlsx)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleExportarComparativoRapidoExcel()}
+                          className="px-3.5 py-2 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs font-semibold transition flex items-center gap-1.5"
+                        >
+                          <span>📊</span> Exportar Excel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleGerarComparativoRapidoPDF()}
+                          className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                        >
+                          <span>🖨️</span> Imprimir Relatório Executivo
+                        </button>
+                      </div>
+                    </div>
                       <button
                         type="button"
                         onClick={handleAdicionarItemComparativo}
@@ -15587,10 +15936,201 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           {/* ABA: CRONOGRAMA LOGÍSTICO & CARGAS NO CANTEIRO (`Logistica`)  */}
           {/* ============================================================= */}
           {activeTab === "Logistica" && (() => {
+            const hojeISOCal = dataLocalISO(new Date());
+            const cargasSemAgenda = listarCargasPendentesSemAgenda(
+              ordens,
+              obraFiltro,
+              cargasLogistica.map((d) => d.dataISO || "")
+            );
             const totalCargas = cargasLogistica.reduce((acc, d) => acc + d.cargas.length, 0);
             const entregasHoje = cargasLogistica.flatMap((d) => d.cargas).filter((c) => c.status === "Hoje").length;
             const conflitosPortao = cargasLogistica.filter((d) => d.conflitoPortao).length;
             const cargasRecebidas = cargasLogistica.flatMap((d) => d.cargas).filter((c) => c.status === "Entregue").length;
+            const periodoInicio = cargasLogistica[0]?.dataLabel || "";
+            const periodoFim = cargasLogistica[cargasLogistica.length - 1]?.dataLabel || "";
+
+            const iniciarEdicaoCarga = (carga: CargaItemLogistica) => {
+              const ordem = ordens.find((o) => o.id === carga.ordemId);
+              setCargaEmEdicao({
+                ordemId: carga.ordemId,
+                dataISO: carga.dataEntregaISO || hojeISOCal,
+                janela: ordem?.janelaEntrega || "",
+                veiculo: ordem?.veiculoEntrega || "",
+              });
+            };
+
+            const renderCartaoCarga = (carga: CargaItemLogistica) => {
+              const emEdicao = cargaEmEdicao?.ordemId === carga.ordemId;
+              const podeMover = !emEdicao && carga.status !== "Entregue";
+              return (
+                <div
+                  key={carga.id}
+                  draggable={podeMover}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("text/plain", carga.ordemId);
+                    e.dataTransfer.effectAllowed = "move";
+                    setCargaArrastandoId(carga.ordemId);
+                  }}
+                  onDragEnd={() => setCargaArrastandoId(null)}
+                  className={`bg-slate-50 rounded-lg border p-3 space-y-2 transition ${
+                    carga.status === "Atrasado" ? "border-rose-300" : "border-slate-200"
+                  } ${podeMover ? "cursor-grab active:cursor-grabbing hover:bg-slate-100/80" : ""} ${
+                    cargaArrastandoId === carga.ordemId ? "opacity-50" : ""
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="font-bold text-xs text-slate-900 block truncate">
+                        {carga.fornecedorNome}
+                      </span>
+                      <span className="text-[10px] text-slate-500">{carga.numeroOc}</span>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${
+                        carga.status === "Entregue"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : carga.status === "Hoje"
+                          ? "bg-blue-100 text-blue-800"
+                          : carga.status === "Atrasado"
+                          ? "bg-rose-100 text-rose-800"
+                          : "bg-slate-200 text-slate-800"
+                      }`}
+                    >
+                      {carga.status === "Entregue"
+                        ? "Entregue"
+                        : carga.status === "Hoje"
+                        ? "Previsto Hoje"
+                        : carga.status === "Atrasado"
+                        ? "Atrasado"
+                        : carga.dataEntregaISO
+                        ? "Agendado"
+                        : "Sem data"}
+                    </span>
+                  </div>
+
+                  <div className="text-xs text-slate-700 font-medium">
+                    {carga.insumoDescricao}
+                  </div>
+
+                  {emEdicao && cargaEmEdicao ? (
+                    <div className="bg-white p-2.5 rounded border border-blue-300 space-y-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
+                          Data de entrega
+                        </label>
+                        <input
+                          type="date"
+                          value={cargaEmEdicao.dataISO}
+                          onChange={(e) =>
+                            setCargaEmEdicao({ ...cargaEmEdicao, dataISO: e.target.value })
+                          }
+                          className="w-full border border-slate-300 focus:border-blue-500 rounded px-2 py-1 text-xs outline-none"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
+                            Janela / Horário
+                          </label>
+                          <input
+                            type="text"
+                            value={cargaEmEdicao.janela}
+                            onChange={(e) =>
+                              setCargaEmEdicao({ ...cargaEmEdicao, janela: e.target.value })
+                            }
+                            placeholder="Ex: 08:00 - 10:00"
+                            className="w-full border border-slate-300 focus:border-blue-500 rounded px-2 py-1 text-xs outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
+                            Veículo
+                          </label>
+                          <input
+                            type="text"
+                            value={cargaEmEdicao.veiculo}
+                            onChange={(e) =>
+                              setCargaEmEdicao({ ...cargaEmEdicao, veiculo: e.target.value })
+                            }
+                            placeholder="Ex: Truck, Carreta"
+                            className="w-full border border-slate-300 focus:border-blue-500 rounded px-2 py-1 text-xs outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setCargaEmEdicao(null)}
+                          className="px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-[11px] font-semibold transition"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleReagendarEntrega(
+                              carga.ordemId,
+                              cargaEmEdicao.dataISO,
+                              cargaEmEdicao.janela,
+                              cargaEmEdicao.veiculo
+                            )
+                          }
+                          className="px-3 py-1 rounded-md bg-blue-700 hover:bg-blue-800 text-white text-[11px] font-bold transition"
+                        >
+                          Salvar nova data
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 bg-white p-2 rounded border border-slate-200">
+                        <div>
+                          <span className="text-slate-400">Janela: </span>
+                          <strong className="text-slate-800">{carga.horarioJanela}</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Veículo: </span>
+                          <strong className="text-slate-800">{carga.tipoVeiculo}</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Frete: </span>
+                          <strong className="text-slate-800">{carga.tipoFrete}</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Canteiro: </span>
+                          <strong className="text-slate-800 truncate block">{carga.obraNome}</strong>
+                        </div>
+                      </div>
+
+                      {!carga.dataEntregaISO && (
+                        <div className="text-[11px] text-amber-800">
+                          Previsão informada na OC:{" "}
+                          <strong>{carga.dataPrevistaTexto || "não informada"}</strong>
+                        </div>
+                      )}
+                      {carga.status === "Atrasado" && carga.dataEntregaISO && (
+                        <div className="text-[11px] text-rose-700 font-semibold">
+                          Previsto para {formatarDataBR(carga.dataEntregaISO)} e ainda não recebido
+                        </div>
+                      )}
+
+                      {carga.status !== "Entregue" && (
+                        <button
+                          type="button"
+                          onClick={() => iniciarEdicaoCarga(carga)}
+                          className="w-full px-2 py-1.5 rounded-md bg-white hover:bg-blue-50 border border-slate-300 hover:border-blue-400 text-slate-800 text-[11px] font-bold flex items-center justify-center gap-1.5 transition"
+                        >
+                          <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span>{carga.dataEntregaISO ? "Alterar data de entrega" : "Definir data de entrega"}</span>
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            };
 
             return (
               <div className="space-y-6">
@@ -15634,7 +16174,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
                   <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
                     <div className="text-xs font-semibold text-slate-500">
-                      Recebidas & Baixadas
+                      Recebidas &amp; Baixadas
                     </div>
                     <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">
                       {cargasRecebidas}
@@ -15645,116 +16185,141 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                   </div>
                 </div>
 
-                {/* Banner de Aviso de Gargalo se houver */}
-                {conflitosPortao > 0 && (
-                  <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">⚠️</span>
-                      <div>
-                        <h4 className="text-sm font-bold text-amber-950">
-                          Alerta Preventivo de Canteiro: Conflito de Acesso e Descarga Detectado
-                        </h4>
-                        <p className="text-xs text-amber-900 mt-0.5">
-                          Existem múltiplos veículos de grande porte agendados simultaneamente para o mesmo dia e portão. Recomenda-se alinhar com os fornecedores janelas de descarga alternadas para evitar filas na via pública.
-                        </p>
-                      </div>
-                    </div>
+                {/* Navegação entre semanas */}
+                <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-sm flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setActiveTab("Ordens")}
-                      className="px-3.5 py-1.5 rounded-md bg-amber-900 hover:bg-amber-800 text-white text-xs font-bold transition whitespace-nowrap"
+                      onClick={() => setSemanaLogisticaOffset((s) => s - 1)}
+                      className="px-3 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold transition"
                     >
-                      Ajustar Agendamentos
+                      &larr; Semana anterior
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setSemanaLogisticaOffset(0)}
+                      disabled={semanaLogisticaOffset === 0}
+                      className="px-3 py-1.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition disabled:opacity-40 disabled:cursor-default"
+                    >
+                      Esta semana
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSemanaLogisticaOffset((s) => s + 1)}
+                      className="px-3 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold transition"
+                    >
+                      Próxima semana &rarr;
+                    </button>
+                  </div>
+                  <div className="text-xs text-slate-600 flex flex-wrap items-center gap-2">
+                    <strong className="text-slate-900">
+                      {periodoInicio} a {periodoFim}
+                    </strong>
+                    <span className="text-slate-400">
+                      Arraste uma carga para outro dia ou clique em &quot;Alterar data de entrega&quot;.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Banner de Aviso de Gargalo se houver */}
+                {conflitosPortao > 0 && (
+                  <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 flex items-center gap-3">
+                    <svg className="w-6 h-6 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div>
+                      <h4 className="text-sm font-bold text-amber-950">
+                        Alerta Preventivo de Canteiro: Conflito de Acesso e Descarga Detectado
+                      </h4>
+                      <p className="text-xs text-amber-900 mt-0.5">
+                        Existem múltiplos veículos agendados para o mesmo dia. Arraste as cargas para outro dia ou ajuste a janela de descarga para evitar filas no portão.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cargas sem data válida ou atrasadas fora da semana exibida */}
+                {cargasSemAgenda.length > 0 && (
+                  <div className="bg-amber-50/60 border border-amber-200 rounded-lg p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-bold text-amber-950">
+                        Cargas sem data definida ou atrasadas ({cargasSemAgenda.length})
+                      </h3>
+                      <span className="text-[11px] text-amber-800">
+                        Defina a data de entrega para posicioná-las no calendário (ou arraste para um dia da semana abaixo).
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {cargasSemAgenda.map((carga) => renderCartaoCarga(carga))}
+                    </div>
                   </div>
                 )}
 
                 {/* Grade Semanal de Logística (Segunda a Sábado) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {cargasLogistica.map((dia) => (
-                    <div
-                      key={dia.diaSemana}
-                      className={`bg-white rounded-lg border shadow-sm p-4 space-y-3 ${
-                        dia.conflitoPortao ? "border-amber-300 ring-1 ring-amber-200" : "border-slate-200"
-                      }`}
-                    >
-                      {/* Cabeçalho do Dia */}
-                      <div className="flex items-start justify-between border-b border-slate-200 pb-2.5">
-                        <div>
-                          <h3 className="font-bold text-sm text-slate-900">
-                            {dia.diaSemana}
-                          </h3>
-                          <span className="text-xs text-slate-500">{dia.dataLabel}</span>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 text-xs font-bold">
-                            {dia.cargas.length} {dia.cargas.length === 1 ? "carga" : "cargas"}
-                          </span>
-                          {dia.conflitoPortao && (
-                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-extrabold border border-amber-300">
-                              ⚠️ Conflito Portão
+                  {cargasLogistica.map((dia) => {
+                    const ehHoje = dia.dataISO === hojeISOCal;
+                    return (
+                      <div
+                        key={dia.dataISO || dia.diaSemana}
+                        onDragOver={(e) => {
+                          if (cargaArrastandoId) {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = "move";
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const idArrastado = e.dataTransfer.getData("text/plain") || cargaArrastandoId;
+                          setCargaArrastandoId(null);
+                          if (!idArrastado || !dia.dataISO) return;
+                          const ordem = ordens.find((o) => o.id === idArrastado);
+                          if (!ordem) return;
+                          if (parseDataEntregaISO(ordem.dataPrevistaEntrega) === dia.dataISO) return;
+                          handleReagendarEntrega(idArrastado, dia.dataISO);
+                        }}
+                        className={`bg-white rounded-lg border shadow-sm p-4 space-y-3 transition ${
+                          dia.conflitoPortao ? "border-amber-300 ring-1 ring-amber-200" : ehHoje ? "border-blue-300 ring-1 ring-blue-200" : "border-slate-200"
+                        } ${cargaArrastandoId ? "border-dashed bg-blue-50/30" : ""}`}
+                      >
+                        {/* Cabeçalho do Dia */}
+                        <div className="flex items-start justify-between border-b border-slate-200 pb-2.5">
+                          <div>
+                            <h3 className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                              {dia.diaSemana}
+                              {ehHoje && (
+                                <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">
+                                  Hoje
+                                </span>
+                              )}
+                            </h3>
+                            <span className="text-xs text-slate-500">{dia.dataLabel}</span>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 text-xs font-bold">
+                              {dia.cargas.length} {dia.cargas.length === 1 ? "carga" : "cargas"}
                             </span>
-                          )}
+                            {dia.conflitoPortao && (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-extrabold border border-amber-300">
+                                Conflito Portão
+                              </span>
+                            )}
+                          </div>
                         </div>
+
+                        {/* Lista de Cargas do Dia */}
+                        {dia.cargas.length === 0 ? (
+                          <div className="py-8 text-center text-xs text-slate-400">
+                            {cargaArrastandoId ? "Solte aqui para reagendar para este dia." : "Nenhuma entrega programada para este dia."}
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5">
+                            {dia.cargas.map((carga) => renderCartaoCarga(carga))}
+                          </div>
+                        )}
                       </div>
-
-                      {/* Lista de Cargas do Dia */}
-                      {dia.cargas.length === 0 ? (
-                        <div className="py-8 text-center text-xs text-slate-400">
-                          Nenhuma entrega programada para este dia.
-                        </div>
-                      ) : (
-                        <div className="space-y-2.5">
-                          {dia.cargas.map((carga) => (
-                            <div
-                              key={carga.id}
-                              className="bg-slate-50 rounded-lg border border-slate-200 p-3 space-y-2 hover:bg-slate-100/80 transition"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <span className="font-bold text-xs text-slate-900">
-                                  {carga.fornecedorNome}
-                                </span>
-                                <span
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                    carga.status === "Entregue"
-                                      ? "bg-emerald-100 text-emerald-800"
-                                      : carga.status === "Hoje"
-                                      ? "bg-blue-100 text-blue-800"
-                                      : "bg-slate-200 text-slate-800"
-                                  }`}
-                                >
-                                  {carga.status === "Entregue" ? "✓ Entregue" : carga.status === "Hoje" ? "🔵 Previsto Hoje" : "Agendado"}
-                                </span>
-                              </div>
-
-                              <div className="text-xs text-slate-700 font-medium">
-                                {carga.insumoDescricao}
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 bg-white p-2 rounded border border-slate-200">
-                                <div>
-                                  <span className="text-slate-400">Janela: </span>
-                                  <strong className="text-slate-800">{carga.horarioJanela}</strong>
-                                </div>
-                                <div>
-                                  <span className="text-slate-400">Veículo: </span>
-                                  <strong className="text-slate-800">{carga.tipoVeiculo}</strong>
-                                </div>
-                                <div>
-                                  <span className="text-slate-400">Frete: </span>
-                                  <strong className="text-slate-800">{carga.tipoFrete}</strong>
-                                </div>
-                                <div>
-                                  <span className="text-slate-400">Canteiro: </span>
-                                  <strong className="text-slate-800 truncate block">{carga.obraNome}</strong>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -24025,7 +24590,7 @@ function ModalVisualizarComparativoPdf({
   comparativoTitulo: string;
   comparativoObraId: string;
   comparativoCategoria: string;
-  comparativoFornecedores: [FornecedorCotadoRapido, FornecedorCotadoRapido, FornecedorCotadoRapido];
+  comparativoFornecedores: FornecedorCotadoRapido[];
   comparativoItens: ItemComparativoRapido[];
   resumoComparativo: any;
   settings: UserSettings;
@@ -24093,9 +24658,9 @@ function ModalVisualizarComparativoPdf({
               <div><span className="text-slate-500 block text-[10px]">Recomendação:</span><strong className="text-emerald-700 truncate block">{resumoComparativo.vencedorGeral?.nome || "A definir"}</strong></div>
               <div><span className="text-slate-500 block text-[10px]">Saving Apurado:</span><strong className="text-emerald-800">{formatBRL(resumoComparativo.savingGlobal)}</strong></div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className={`grid grid-cols-1 sm:grid-cols-${Math.min(comparativoFornecedores.length, 5)} gap-3`}>
               {comparativoFornecedores.map((f, i) => {
-                const tot = i === 0 ? resumoComparativo.total1 : i === 1 ? resumoComparativo.total2 : resumoComparativo.total3;
+                const tot = resumoComparativo.totais?.[i] ?? 0;
                 const isVenc = resumoComparativo.vencedorGeral?.index === i;
                 return (
                   <div key={i} className={`p-3 rounded-lg border text-xs ${isVenc ? "bg-emerald-50/70 border-emerald-400" : "bg-white border-slate-200"}`}>
@@ -24110,11 +24675,11 @@ function ModalVisualizarComparativoPdf({
             <table className="w-full text-[11px] border-collapse">
               <thead>
                 <tr className="bg-slate-100 border border-slate-300 font-bold text-slate-800">
-                  <th className="p-2 text-left w-[34%]">Insumo / Material</th>
+                  <th className="p-2 text-left" style={{ width: comparativoFornecedores.length >= 4 ? "24%" : "30%" }}>Insumo / Material</th>
                   <th className="p-2 text-center w-[12%]">Qtd</th>
-                  <th className="p-2 text-right w-[18%]">{comparativoFornecedores[0]?.nome || "Fornecedor 1"}</th>
-                  <th className="p-2 text-right w-[18%]">{comparativoFornecedores[1]?.nome || "Fornecedor 2"}</th>
-                  <th className="p-2 text-right w-[18%]">{comparativoFornecedores[2]?.nome || "Fornecedor 3"}</th>
+                  {comparativoFornecedores.map((f, i) => (
+                    <th key={i} className="p-2 text-right">{f.nome || `Fornecedor ${i + 1}`}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -24122,36 +24687,42 @@ function ModalVisualizarComparativoPdf({
                   <tr key={it.id} className="border-b border-slate-200 hover:bg-slate-50">
                     <td className="p-2 font-semibold text-slate-900">{it.nome}</td>
                     <td className="p-2 text-center text-slate-600">{it.quantidade} {it.unidade}</td>
-                    <td className={`p-2 text-right ${it.vencedor1 ? "bg-emerald-100/70 font-bold text-emerald-900" : "text-slate-800"}`}>{formatBRL(it.preco1)}</td>
-                    <td className={`p-2 text-right ${it.vencedor2 ? "bg-emerald-100/70 font-bold text-emerald-900" : "text-slate-800"}`}>{formatBRL(it.preco2)}</td>
-                    <td className={`p-2 text-right ${it.vencedor3 ? "bg-emerald-100/70 font-bold text-emerald-900" : "text-slate-800"}`}>{formatBRL(it.preco3)}</td>
+                    {comparativoFornecedores.map((_, i) => {
+                      const p = it.precos?.[i] ?? getItemPreco(it, i);
+                      const isVenc = it.vencedores?.[i] ?? false;
+                      return (
+                        <td key={i} className={`p-2 text-right ${isVenc ? "bg-emerald-100/70 font-bold text-emerald-900" : "text-slate-800"}`}>
+                          {formatBRL(p)}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50 font-bold border-t-2 border-slate-300">
                   <td colSpan={2} className="p-2">Subtotal dos Materiais</td>
-                  <td className="p-2 text-right">{formatBRL(resumoComparativo.subtotal1)}</td>
-                  <td className="p-2 text-right">{formatBRL(resumoComparativo.subtotal2)}</td>
-                  <td className="p-2 text-right">{formatBRL(resumoComparativo.subtotal3)}</td>
+                  {comparativoFornecedores.map((_, i) => (
+                    <td key={i} className="p-2 text-right">{formatBRL(resumoComparativo.subtotais?.[i] ?? 0)}</td>
+                  ))}
                 </tr>
                 <tr className="bg-emerald-50/70 text-emerald-950 font-semibold border-t border-slate-200">
                   <td colSpan={2} className="p-2">Desconto Comercial (R$)</td>
-                  <td className="p-2 text-right text-emerald-700">-{formatBRL(comparativoFornecedores?.[0]?.descontoValor || 0)}</td>
-                  <td className="p-2 text-right text-emerald-700">-{formatBRL(comparativoFornecedores?.[1]?.descontoValor || 0)}</td>
-                  <td className="p-2 text-right text-emerald-700">-{formatBRL(comparativoFornecedores?.[2]?.descontoValor || 0)}</td>
+                  {comparativoFornecedores.map((f, i) => (
+                    <td key={i} className="p-2 text-right text-emerald-700">-{formatBRL(f?.descontoValor || 0)}</td>
+                  ))}
                 </tr>
                 <tr className="bg-slate-50 text-slate-700 font-semibold border-t border-slate-200">
                   <td colSpan={2} className="p-2">Frete (CIF / FOB)</td>
-                  <td className="p-2 text-right">{comparativoFornecedores?.[0]?.freteTipo || "CIF"} ({formatBRL(comparativoFornecedores?.[0]?.freteValor || 0)})</td>
-                  <td className="p-2 text-right">{comparativoFornecedores?.[1]?.freteTipo || "CIF"} ({formatBRL(comparativoFornecedores?.[1]?.freteValor || 0)})</td>
-                  <td className="p-2 text-right">{comparativoFornecedores?.[2]?.freteTipo || "CIF"} ({formatBRL(comparativoFornecedores?.[2]?.freteValor || 0)})</td>
+                  {comparativoFornecedores.map((f, i) => (
+                    <td key={i} className="p-2 text-right">{f?.freteTipo || "CIF"} ({formatBRL(f?.freteValor || 0)})</td>
+                  ))}
                 </tr>
                 <tr className="bg-slate-900 text-white font-extrabold text-xs">
                   <td colSpan={2} className="p-2.5">VALOR TOTAL (COM FRETE E DESCONTO)</td>
-                  <td className="p-2.5 text-right">{formatBRL(resumoComparativo.total1)}</td>
-                  <td className="p-2.5 text-right">{formatBRL(resumoComparativo.total2)}</td>
-                  <td className="p-2.5 text-right">{formatBRL(resumoComparativo.total3)}</td>
+                  {comparativoFornecedores.map((_, i) => (
+                    <td key={i} className="p-2.5 text-right">{formatBRL(resumoComparativo.totais?.[i] ?? 0)}</td>
+                  ))}
                 </tr>
               </tfoot>
             </table>
