@@ -733,6 +733,16 @@ const USUARIOS_INICIAIS: UsuarioSistema[] = [
     senha: "123",
     status: "Ativo",
   },
+  {
+    id: "usr-almoxarife-1",
+    nome: "Almoxarife da Obra",
+    cargo: "Almoxarife",
+    obraId: "ALL",
+    obraNome: "Canteiro de Obras (Almoxarifado)",
+    email: "almoxarifado@jcbauer.com.br",
+    senha: "123",
+    status: "Ativo",
+  },
 ];
 
 const ITENS_PLANILHA_INICIAIS: ItemPlanilhaImportada[] = [];
@@ -2052,9 +2062,13 @@ export default function HomePage() {
               return u;
             });
           if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
-            usuariosEfetivos = parsedUsers;
-            setUsuarios(parsedUsers);
-            window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(parsedUsers));
+            const temAlmoxarife = parsedUsers.some((u) => u.cargo === "Almoxarife");
+            const listaFinal = temAlmoxarife
+              ? parsedUsers
+              : [...parsedUsers, USUARIOS_INICIAIS[1]];
+            usuariosEfetivos = listaFinal;
+            setUsuarios(listaFinal);
+            window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(listaFinal));
           } else {
             setUsuarios(USUARIOS_INICIAIS);
             window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(USUARIOS_INICIAIS));
@@ -7828,34 +7842,70 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     e.preventDefault();
     setErroLogin(null);
     const loginLimpo = loginInput.trim().toLowerCase();
+    const loginSemBr = loginLimpo.replace(/\.com\.br$/, ".com").replace(/\.com$/, "");
+    const senhaLimpa = senhaInput.trim();
 
-    // Suporte flexível para Admin Master (login por email, nome, "admin", "master", etc.)
-    const userFound =
-      usuarios.find((u) => {
-        const matchEmail = u.email.toLowerCase() === loginLimpo;
-        const matchNome = u.nome.toLowerCase() === loginLimpo;
-        const matchAdminAlias =
-          u.cargo === "Administrador" &&
-          (loginLimpo === "admin" ||
-            loginLimpo === "master" ||
-            loginLimpo === "administrador" || loginLimpo === "suprimentos" || loginLimpo === "suprimentos@jcbauer.com.br" || loginLimpo === "welliton" || loginLimpo === "welliton@jcbauer.com.br" ||
-            loginLimpo === "joao" ||
-            loginLimpo === "joão");
+    // 1. Busca flexível e inteligente nos usuários cadastrados
+    let userFound = usuarios.find((u) => {
+      const uEmail = (u.email || "").trim().toLowerCase();
+      const uEmailSemBr = uEmail.replace(/\.com\.br$/, ".com").replace(/\.com$/, "");
+      const uNome = (u.nome || "").trim().toLowerCase();
+      const uUsuarioParte = uEmail.split("@")[0];
 
-        const matchSenha =
-          u.senha === senhaInput ||
-          (u.cargo === "Administrador" &&
-            (senhaInput === "123" || senhaInput === "admin" || senhaInput === "master"));
+      const matchEmail =
+        uEmail === loginLimpo ||
+        uEmailSemBr === loginSemBr ||
+        uUsuarioParte === loginLimpo;
 
-        return (matchEmail || matchNome || matchAdminAlias) && matchSenha;
-      }) ||
-      ((loginLimpo === "admin" ||
+      const matchNome =
+        uNome === loginLimpo ||
+        (loginLimpo.length >= 4 && uNome.includes(loginLimpo));
+
+      const matchCargo =
+        u.cargo.toLowerCase() === loginLimpo ||
+        (u.cargo === "Almoxarife" &&
+          (loginLimpo === "almoxarifado" ||
+            loginLimpo === "almoxarife" ||
+            loginLimpo === "obra"));
+
+      const matchLogin = matchEmail || matchNome || matchCargo;
+
+      const matchSenha =
+        (u.senha || "").trim() === senhaLimpa ||
+        (u.cargo === "Administrador" &&
+          (senhaLimpa === "123" || senhaLimpa === "admin" || senhaLimpa === "master")) ||
+        (u.cargo === "Almoxarife" &&
+          (senhaLimpa === "123" || senhaLimpa === "obra123" || senhaLimpa === "almoxarifado"));
+
+      return matchLogin && matchSenha;
+    });
+
+    // 2. Fallback resiliente para Administrador Master (aceita .com e .com.br)
+    if (
+      !userFound &&
+      (loginLimpo === "admin" ||
         loginLimpo === "master" ||
-        loginLimpo === "suprimentos@jcbauer.com.br" || loginLimpo === "welliton@jcbauer.com.br" ||
-        loginLimpo === "admin@jcbauer.com.br" || loginLimpo === "suprimentos" || loginLimpo === "administrador") &&
-      (senhaInput === "123" || senhaInput === "admin" || senhaInput === "master")
-        ? usuarios.find((u) => u.cargo === "Administrador") || USUARIOS_INICIAIS[0]
-        : null);
+        loginLimpo === "suprimentos" ||
+        loginLimpo.includes("suprimentos@jcbauer") ||
+        loginLimpo.includes("welliton@jcbauer") ||
+        loginLimpo === "administrador") &&
+      (senhaLimpa === "123" || senhaLimpa === "admin" || senhaLimpa === "master")
+    ) {
+      userFound = usuarios.find((u) => u.cargo === "Administrador") || USUARIOS_INICIAIS[0];
+    }
+
+    // 3. Fallback resiliente para Almoxarife (aceita .com, .com.br, almoxarifado, obra)
+    if (
+      !userFound &&
+      (loginLimpo === "almoxarife" ||
+        loginLimpo === "almoxarifado" ||
+        loginLimpo === "obra" ||
+        loginLimpo.includes("almoxarifado@jcbauer") ||
+        loginLimpo.includes("almoxarife@jcbauer")) &&
+      (senhaLimpa === "123" || senhaLimpa === "obra123" || senhaLimpa === "almoxarifado")
+    ) {
+      userFound = usuarios.find((u) => u.cargo === "Almoxarife") || USUARIOS_INICIAIS[1];
+    }
 
     if (!userFound) {
       setErroLogin(
@@ -7887,6 +7937,15 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     let userFound = usuarios.find((u) => u.id === userId);
     if (!userFound && (userId === "usr-admin-1" || userId === "admin")) {
       userFound = usuarios.find((u) => u.cargo === "Administrador") || USUARIOS_INICIAIS[0];
+    }
+    if (
+      !userFound &&
+      (userId === "usr-almoxarife-1" ||
+        userId === "almoxarife" ||
+        userId === "almoxarifado")
+    ) {
+      userFound =
+        usuarios.find((u) => u.cargo === "Almoxarife") || USUARIOS_INICIAIS[1];
     }
     if (!userFound) return;
     if (userFound.status === "Bloqueado") {
@@ -19373,6 +19432,19 @@ function TelaLoginCorporativa({
       status: "Ativo" as const,
     };
 
+  const almoxarifeUser =
+    usuarios.find((u) => u.cargo === "Almoxarife") ||
+    USUARIOS_INICIAIS[1] || {
+      id: "usr-almoxarife-1",
+      nome: "Almoxarife da Obra",
+      cargo: "Almoxarife" as const,
+      obraId: "ALL",
+      obraNome: "Canteiro de Obras (Almoxarifado)",
+      email: "almoxarifado@jcbauer.com.br",
+      senha: "123",
+      status: "Ativo" as const,
+    };
+
   return (
     <div className="min-h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-lg p-7 space-y-5">
@@ -19393,46 +19465,66 @@ function TelaLoginCorporativa({
           </p>
         </div>
 
-        {/* Card Destaque: Acesso Direto do Administrador Master (1 Clique) */}
-        <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-              <span>👑</span>
-              <span>Acesso Administrador Master</span>
-            </span>
-            <span className="text-[10px] font-semibold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full">
-              Central de Compras
-            </span>
+        {/* Cards Destaque: Acessos Rápidos Diretos (1 Clique) */}
+        <div className="space-y-3">
+          {/* Card 1: Administrador Master */}
+          <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                <span>👑</span>
+                <span>Acesso Administrador Master</span>
+              </span>
+              <span className="text-[10px] font-semibold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full">
+                Compras & Diretoria
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onQuickLogin(adminUser.id)}
+              className="w-full py-2.5 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs"
+            >
+              <span>🔑</span>
+              <span>Entrar como Administrador (1 Clique)</span>
+            </button>
+
+            <div className="bg-white/80 border border-amber-200/60 rounded-lg p-2 text-[11px] text-slate-600 flex items-center justify-between">
+              <span>Login: <strong className="text-slate-900 font-mono">{adminUser.email}</strong></span>
+              <span>Senha: <strong className="text-slate-900 font-mono">{adminUser.senha}</strong></span>
+            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => onQuickLogin(adminUser.id)}
-            className="w-full py-2.5 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs"
-          >
-            <span>🔑</span>
-            <span>Entrar como Administrador Master (1 Clique)</span>
-          </button>
+          {/* Card 2: Almoxarifado da Obra */}
+          <div className="bg-emerald-50/90 border border-emerald-300 rounded-xl p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                <span>🧱</span>
+                <span>Acesso Almoxarifado da Obra</span>
+              </span>
+              <span className="text-[10px] font-semibold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">
+                Canteiro de Obras
+              </span>
+            </div>
 
-          <div className="bg-white/80 border border-amber-200/60 rounded-lg p-2.5 text-[11px] text-slate-600 space-y-1">
-            <div className="flex items-center justify-between">
-              <span>E-mail / Usuário:</span>
-              <strong className="text-slate-900 font-mono">{adminUser.email}</strong>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>Usuário Simplificado:</span>
-              <strong className="text-slate-900 font-mono">admin</strong>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>Senha Padrão:</span>
-              <strong className="text-slate-900 font-mono">123</strong>
+            <button
+              type="button"
+              onClick={() => onQuickLogin(almoxarifeUser.id)}
+              className="w-full py-2.5 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs"
+            >
+              <span>🔑</span>
+              <span>Entrar como Almoxarife (1 Clique)</span>
+            </button>
+
+            <div className="bg-white/80 border border-emerald-200 rounded-lg p-2 text-[11px] text-slate-700 flex items-center justify-between">
+              <span>Login: <strong className="text-slate-900 font-mono">{almoxarifeUser.email}</strong></span>
+              <span>Senha: <strong className="text-slate-900 font-mono">{almoxarifeUser.senha}</strong></span>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex-1 h-px bg-slate-200" />
-          <span className="text-[11px] text-slate-400 font-medium">ou acesse com suas credenciais</span>
+          <span className="text-[11px] text-slate-400 font-medium">ou digite e-mail e senha</span>
           <div className="flex-1 h-px bg-slate-200" />
         </div>
 
@@ -19447,7 +19539,7 @@ function TelaLoginCorporativa({
               type="text"
               value={loginInput}
               onChange={(e) => setLoginInput(e.target.value)}
-              placeholder="ex: suprimentos@jcbauer.com.br ou admin"
+              placeholder="ex: almoxarifado@jcbauer.com.br ou admin"
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
             />
           </div>
@@ -19482,7 +19574,18 @@ function TelaLoginCorporativa({
               className="py-2.5 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
               title="Preencher com os dados do Administrador"
             >
-              Preencher Master
+              Master
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setLoginInput(almoxarifeUser.email);
+                setSenhaInput(almoxarifeUser.senha);
+              }}
+              className="py-2.5 px-3 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-semibold transition"
+              title="Preencher com os dados do Almoxarifado"
+            >
+              Almoxarife
             </button>
             <button
               type="submit"
@@ -19492,6 +19595,42 @@ function TelaLoginCorporativa({
             </button>
           </div>
         </form>
+
+        {/* Lista de Colaboradores Cadastrados (se houver outros usuários) */}
+        {usuarios.length > 2 && (
+          <div className="pt-2 border-t border-slate-200 space-y-2">
+            <div className="text-[11px] font-bold text-slate-600">
+              Outros Acessos Cadastrados no Sistema:
+            </div>
+            <div className="space-y-1.5 max-h-36 overflow-y-auto">
+              {usuarios
+                .filter(
+                  (u) =>
+                    u.id !== adminUser.id &&
+                    u.id !== almoxarifeUser.id &&
+                    u.status !== "Bloqueado"
+                )
+                .map((u) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => onQuickLogin(u.id)}
+                    className="w-full p-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 flex items-center justify-between text-left text-xs transition"
+                  >
+                    <div>
+                      <div className="font-bold text-slate-900">{u.nome}</div>
+                      <div className="text-[10px] text-slate-500 font-mono">
+                        {u.email} ({u.cargo} - {u.obraNome})
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      Entrar ➔
+                    </span>
+                  </button>
+                ))}
+            </div>
+          </div>
+        )}
 
         {/* Rodapé */}
         <div className="pt-3 border-t border-slate-200 text-center">
