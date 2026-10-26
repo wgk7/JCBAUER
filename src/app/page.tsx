@@ -5272,25 +5272,70 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       return Math.max(0, sub + fr - desc);
     });
 
-    const totaisValidos = comparativoFornecedores
-      .map((forn, idx) => ({
+    const totalItens = (comparativoItens || []).filter(
+      (it) => it && it.nome && it.nome.trim() !== ""
+    ).length;
+
+    const fornecedoresStatus = comparativoFornecedores.map((forn, idx) => {
+      const cotados = (comparativoItens || []).filter(
+        (it) => it && it.nome && it.nome.trim() !== "" && getItemPreco(it, idx) > 0
+      ).length;
+      const isCompleto = totalItens > 0 && cotados === totalItens;
+      const faltam = Math.max(0, totalItens - cotados);
+      const subtotal = subtotais[idx] || 0;
+      const frete = fretes[idx] || 0;
+      const desconto = descontos[idx] || 0;
+      const total = totais[idx] || 0;
+      return {
         index: idx,
         nome: forn.nome || `Orçamento ${idx + 1}`,
-        subtotal: subtotais[idx] || 0,
-        frete: fretes[idx] || 0,
-        desconto: descontos[idx] || 0,
-        total: totais[idx] || 0,
+        subtotal,
+        frete,
+        desconto,
+        total,
+        cotados,
+        faltam,
+        totalItens,
+        isCompleto,
         forn,
-      }))
-      .filter((t) => t.total > 0 || t.subtotal > 0);
+      };
+    });
 
-    const ranking = [...totaisValidos].sort((a, b) => a.total - b.total);
-    const vencedorGeral = ranking[0] || null;
-    const piorGeral = ranking[ranking.length - 1] || null;
-    const savingGlobal =
-      vencedorGeral && piorGeral && piorGeral.total > vencedorGeral.total
-        ? piorGeral.total - vencedorGeral.total
-        : 0;
+    const totaisValidos = fornecedoresStatus.filter(
+      (t) => t.total > 0 || t.subtotal > 0
+    );
+
+    const completos = totaisValidos.filter((t) => t.isCompleto);
+    let vencedorGeral: (typeof fornecedoresStatus)[0] | null = null;
+    let ranking: (typeof fornecedoresStatus)[] = [];
+    let savingGlobal = 0;
+
+    if (completos.length > 0) {
+      const ordenadosCompletos = [...completos].sort((a, b) => a.total - b.total);
+      vencedorGeral = ordenadosCompletos[0] || null;
+      const piorCompleto = ordenadosCompletos[ordenadosCompletos.length - 1];
+      savingGlobal =
+        vencedorGeral && piorCompleto && piorCompleto.total > vencedorGeral.total
+          ? piorCompleto.total - vencedorGeral.total
+          : 0;
+
+      const incompletos = [...totaisValidos.filter((t) => !t.isCompleto)].sort(
+        (a, b) => a.total - b.total
+      );
+      ranking = [...ordenadosCompletos, ...incompletos];
+    } else if (totaisValidos.length > 0) {
+      const ordenados = [...totaisValidos].sort((a, b) => {
+        if (b.cotados !== a.cotados) return b.cotados - a.cotados;
+        return a.total - b.total;
+      });
+      vencedorGeral = ordenados[0] || null;
+      const pior = ordenados[ordenados.length - 1];
+      savingGlobal =
+        vencedorGeral && pior && pior.total > vencedorGeral.total
+          ? pior.total - vencedorGeral.total
+          : 0;
+      ranking = ordenados;
+    }
 
     const savingCenarioOtimizado =
       vencedorGeral &&
@@ -5310,6 +5355,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       ranking,
       vencedorGeral,
       savingGlobal,
+      fornecedoresStatus,
       // Retrocompatibilidade
       subtotal1: subtotais[0] ?? 0,
       subtotal2: subtotais[1] ?? 0,
@@ -6255,21 +6301,43 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       Math.max(0, (subtotais[i] || 0) + (f?.freteValor || 0) - (f?.descontoValor || 0))
     );
 
-    const validos = fornecedoresAlvo
-      .map((f, i) => ({
-        nome: f.nome || `Fornecedor ${i + 1}`,
-        total: totais[i] || 0,
-        index: i,
-      }))
-      .filter((f) => f.total > 0 && f.nome && f.nome.trim() !== "");
+    const totalItens = itensAlvo.length;
+    const itensCotadosPorForn = fornecedoresAlvo.map((_, i) =>
+      itensAlvo.filter((it) => getItemPreco(it, i) > 0).length
+    );
 
-    let vencedorGeral: { nome: string; total: number; index: number } | null = null;
+    const validos = fornecedoresAlvo
+      .map((f, i) => {
+        const cotados = itensCotadosPorForn[i] || 0;
+        const isCompleto = totalItens > 0 && cotados === totalItens;
+        const faltam = Math.max(0, totalItens - cotados);
+        return {
+          nome: f.nome || `Fornecedor ${i + 1}`,
+          total: totais[i] || 0,
+          subtotal: subtotais[i] || 0,
+          cotados,
+          faltam,
+          isCompleto,
+          index: i,
+        };
+      })
+      .filter((f) => (f.total > 0 || f.subtotal > 0) && f.nome && f.nome.trim() !== "");
+
+    const completos = validos.filter((f) => f.isCompleto);
+    let vencedorGeral: (typeof validos)[0] | null = null;
     let savingGlobal = 0;
-    if (validos.length > 0) {
-      validos.sort((a, b) => a.total - b.total);
+
+    if (completos.length > 0) {
+      completos.sort((a, b) => a.total - b.total);
+      vencedorGeral = completos[0];
+      const maiorCompleto = completos[completos.length - 1];
+      savingGlobal = Math.max(0, maiorCompleto.total - vencedorGeral.total);
+    } else if (validos.length > 0) {
+      validos.sort((a, b) => {
+        if (b.cotados !== a.cotados) return b.cotados - a.cotados;
+        return a.total - b.total;
+      });
       vencedorGeral = validos[0];
-      const maiorVal = validos[validos.length - 1].total;
-      savingGlobal = Math.max(0, maiorVal - vencedorGeral.total);
     }
 
     const itensCalculados = itensAlvo.map((it) => {
@@ -6364,13 +6432,16 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     ${fornecedoresAlvo.map((f, i) => {
         const tot = totais[i] || 0;
         const isVencedor = vencedorGeral?.index === i;
+        const cotados = itensCotadosPorForn[i] || 0;
+        const isComp = totalItens > 0 && cotados === totalItens;
+        const faltam = Math.max(0, totalItens - cotados);
         return `
         <div class="kpi-card ${isVencedor ? 'vencedor' : ''}">
-          <div class="kpi-title">${isVencedor ? "🏆 1º Lugar (Mais em Conta)" : `Orçamento ${i + 1}`}</div>
+          <div class="kpi-title">${isVencedor ? "🏆 1º Lugar (Mais em Conta - Completo)" : !isComp ? `⚠️ Cotação Parcial (${cotados}/${totalItens} itens)` : `Orçamento ${i + 1}`}</div>
           <div class="kpi-name">${f.nome || `Fornecedor ${i + 1}`}</div>
           <div class="kpi-val">${formatBRL(tot)}</div>
-          <div style="font-size: 9px; color: #64748b; margin-top: 2px;">
-            Frete: ${f.freteTipo} (${formatBRL(f.freteValor)}) • Prazo: ${f.prazo || "N/I"} • Pagto: ${f.condicao || "N/I"}
+          <div style="font-size: 9px; color: ${!isComp ? '#b45309' : '#64748b'}; margin-top: 2px;">
+            ${!isComp ? `<strong>⚠️ Faltam ${faltam} itens</strong> • ` : ""}Frete: ${f.freteTipo} (${formatBRL(f.freteValor)}) • Prazo: ${f.prazo || "N/I"} • Pagto: ${f.condicao || "N/I"}
           </div>
         </div>
       `;
@@ -6381,9 +6452,18 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       <tr>
         <th style="width: ${100 - 12 - colWidthPerc * fornecedoresAlvo.length}%;">Insumo / Material</th>
         <th class="text-center" style="width: 12%;">Qtd & Unid</th>
-        ${fornecedoresAlvo.map((f, i) => `
-          <th class="text-right" style="width: ${colWidthPerc}%;">${f.nome || `Fornecedor ${i + 1}`}</th>
-        `).join("")}
+        ${fornecedoresAlvo.map((f, i) => {
+          const cotados = itensCotadosPorForn[i] || 0;
+          const isComp = totalItens > 0 && cotados === totalItens;
+          return `
+          <th class="text-right" style="width: ${colWidthPerc}%;">
+            <div>${f.nome || `Fornecedor ${i + 1}`}</div>
+            <div style="font-size: 8px; font-weight: normal; color: ${isComp ? '#15803d' : '#b45309'};">
+              ${isComp ? '✅ 100% Cotado' : `⚠️ Parcial (${cotados}/${totalItens})`}
+            </div>
+          </th>
+        `;
+        }).join("")}
       </tr>
     </thead>
     <tbody>
@@ -6395,11 +6475,22 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             const p = it.precos[i] || 0;
             const t = it.totaisItem[i] || 0;
             const isVenc = it.vencedores[i];
-            return `
-              <td class="text-right ${isVenc ? 'winner-cell' : ''}">
-                ${formatBRL(p)} / un<br><span style="font-size: 9px; color: ${isVenc ? '#166534' : '#64748b'};">Total: ${formatBRL(t)}</span>
-              </td>
-            `;
+            if (p > 0) {
+              return `
+                <td class="text-right ${isVenc ? 'winner-cell' : ''}">
+                  <strong>${formatBRL(p)}</strong> / un<br>
+                  <span style="font-size: 9px; color: ${isVenc ? '#166534' : '#64748b'};">
+                    Total: ${formatBRL(t)} ${isVenc ? '⭐' : ''}
+                  </span>
+                </td>
+              `;
+            } else {
+              return `
+                <td class="text-right" style="color: #94a3b8; font-style: italic;">
+                  — Não cotado
+                </td>
+              `;
+            }
           }).join("")}
         </tr>
       `).join("")}
@@ -6425,9 +6516,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       </tr>
       <tr style="background: #0f172a; color: #ffffff; font-weight: 800; font-size: 11px;">
         <td colspan="2" style="border-color: #0f172a;">VALOR TOTAL FINAL (COM FRETE E DESCONTO)</td>
-        ${fornecedoresAlvo.map((_, i) => `
-          <td class="text-right" style="border-color: #0f172a;">${formatBRL(totais[i] || 0)}</td>
-        `).join("")}
+        ${fornecedoresAlvo.map((_, i) => {
+          const tot = totais[i] || 0;
+          const isVenc = vencedorGeral?.index === i;
+          const isComp = itensCotadosPorForn[i] === totalItens && totalItens > 0;
+          return `
+            <td class="text-right" style="border-color: #0f172a; color: ${isVenc ? '#4ade80' : '#ffffff'};">
+              <div>${formatBRL(tot)}</div>
+              ${isVenc ? '<div style="font-size: 9px; color: #86efac; font-weight: 700;">⭐ Vencedor (100% dos Itens)</div>' : !isComp ? `<div style="font-size: 8px; color: #fde047; font-weight: 600;">⚠️ Parcial (${itensCotadosPorForn[i]}/${totalItens} itens)</div>` : ''}
+            </td>
+          `;
+        }).join("")}
       </tr>
     </tfoot>
   </table>
@@ -11398,6 +11497,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                     {comparativoFornecedores.map((forn, idx) => {
                       const total = resumoComparativo.totais?.[idx] ?? 0;
                       const subtotal = resumoComparativo.subtotais?.[idx] ?? 0;
+                      const statusForn =
+                        resumoComparativo.fornecedoresStatus?.[idx];
                       const isVencedor =
                         resumoComparativo.vencedorGeral?.index === idx;
                       const posRank =
@@ -11411,6 +11512,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           className={`rounded-xl border p-3.5 shadow-xs transition flex flex-col justify-between ${
                             isVencedor
                               ? "bg-emerald-50/60 border-emerald-400 ring-2 ring-emerald-500/20"
+                              : !statusForn?.isCompleto && (statusForn?.cotados ?? 0) > 0
+                              ? "bg-amber-50/20 border-amber-200"
                               : "bg-white border-slate-200"
                           }`}
                         >
@@ -11421,13 +11524,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                 className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
                                   isVencedor
                                     ? "bg-emerald-700 text-white shadow-xs"
+                                    : !statusForn?.isCompleto && (statusForn?.cotados ?? 0) > 0
+                                    ? "bg-amber-100 text-amber-900 border border-amber-300"
                                     : posRank === 2
                                     ? "bg-blue-100 text-blue-900 border border-blue-200"
                                     : "bg-slate-100 text-slate-700 border border-slate-200"
                                 }`}
                               >
                                 {isVencedor
-                                  ? "🏆 1º Lugar"
+                                  ? "🏆 1º Lugar (Completo)"
+                                  : !statusForn?.isCompleto && (statusForn?.cotados ?? 0) > 0
+                                  ? `⚠️ Parcial (${statusForn?.cotados}/${statusForn?.totalItens})`
                                   : posRank > 0
                                   ? `${posRank}º Lugar`
                                   : `Orçamento ${idx + 1}`}
@@ -11497,6 +11604,14 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                 </select>
                               )}
                             </div>
+
+                            {/* Alerta de Cotação Parcial/Incompleta */}
+                            {statusForn && !statusForn.isCompleto && (statusForn.cotados ?? 0) > 0 && (
+                              <div className="mb-2.5 px-2 py-1 bg-amber-50 border border-amber-200 rounded-lg text-[10px] text-amber-900 font-semibold flex items-center justify-between">
+                                <span>⚠️ Faltam {statusForn.faltam} itens para pacote completo</span>
+                                <span className="text-[9px] uppercase font-bold text-amber-700">Incompleto</span>
+                              </div>
+                            )}
 
                             {/* Vendedor, Contato, Prazo e Frete */}
                             <div className="grid grid-cols-2 gap-1.5 text-xs mb-2.5">
@@ -11654,14 +11769,23 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           {/* Rodapé do Card: Valor Total + Botão de Emitir OC */}
                           <div className="border-t border-slate-200 pt-2.5">
                             <div className="flex items-baseline justify-between mb-2">
-                              <span className="text-[11px] font-semibold text-slate-500">
-                                Total Proposta:
-                              </span>
+                              <div>
+                                <span className="text-[11px] font-semibold text-slate-500 block">
+                                  Total Proposta:
+                                </span>
+                                {statusForn && !statusForn.isCompleto && (statusForn.cotados ?? 0) > 0 && (
+                                  <span className="text-[9px] text-amber-700 font-bold">
+                                    (Apenas {statusForn.cotados} de {statusForn.totalItens} itens)
+                                  </span>
+                                )}
+                              </div>
                               <div className="text-right">
                                 <div
                                   className={`text-lg font-black tabular-nums ${
                                     isVencedor
                                       ? "text-emerald-700"
+                                      : !statusForn?.isCompleto && (statusForn?.cotados ?? 0) > 0
+                                      ? "text-slate-700"
                                       : "text-slate-900"
                                   }`}
                                 >
@@ -11714,7 +11838,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           Economia Direta Apurada (Saving Negociado)
                         </div>
                         <div className="text-sm font-semibold text-emerald-900 mt-0.5">
-                          O orçamento mais em conta (
+                          O orçamento completo mais em conta (
                           <strong>
                             {resumoComparativo.vencedorGeral?.nome || "Vencedor"}
                           </strong>
@@ -11722,7 +11846,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           <strong className="text-emerald-950 font-black">
                             {formatBRL(resumoComparativo.savingGlobal)}
                           </strong>{" "}
-                          em relação à proposta mais cara.
+                          em relação à proposta completa mais cara.
                         </div>
                       </div>
                     </div>
@@ -11800,10 +11924,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                             {comparativoFornecedores.map((forn, idx) => {
                               const isWinnerCol =
                                 resumoComparativo.vencedorGeral?.index === idx;
+                              const statusForn =
+                                resumoComparativo.fornecedoresStatus?.[idx];
                               return (
                                 <th
                                   key={idx}
-                                  className={`py-2.5 px-2.5 min-w-[145px] text-right border-l border-slate-200 transition ${
+                                  className={`py-2 px-2.5 min-w-[150px] text-right border-l border-slate-200 transition ${
                                     isWinnerCol
                                       ? "bg-emerald-50/80 text-emerald-950 font-bold border-l-emerald-300"
                                       : ""
@@ -11816,20 +11942,38 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                     >
                                       {forn.nome || `Fornecedor ${idx + 1}`}
                                     </div>
-                                    {comparativoFornecedores.length > 2 && (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleRemoverFornecedorComparativo(idx)
-                                        }
-                                        className="text-slate-400 hover:text-rose-600 transition p-0.5 rounded text-xs ml-1 shrink-0"
-                                        title={`Remover ${
-                                          forn.nome || `Fornecedor ${idx + 1}`
-                                        }`}
-                                      >
-                                        ✕
-                                      </button>
-                                    )}
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {comparativoItens.length > 0 && statusForn && (
+                                        <span
+                                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0 shadow-2xs ${
+                                            statusForn.isCompleto
+                                              ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                              : "bg-amber-100 text-amber-800 border border-amber-300"
+                                          }`}
+                                          title={
+                                            statusForn.isCompleto
+                                              ? "Cotação 100% Completa (todos os itens cotados)"
+                                              : `Cotação Parcial: cotou ${statusForn.cotados} de ${statusForn.totalItens} itens (faltam ${statusForn.faltam})`
+                                          }
+                                        >
+                                          {statusForn.cotados}/{statusForn.totalItens}
+                                        </span>
+                                      )}
+                                      {comparativoFornecedores.length > 2 && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleRemoverFornecedorComparativo(idx)
+                                          }
+                                          className="text-slate-400 hover:text-rose-600 transition p-0.5 rounded text-xs"
+                                          title={`Remover ${
+                                            forn.nome || `Fornecedor ${idx + 1}`
+                                          }`}
+                                        >
+                                          ✕
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                   <div className="text-[10px] font-normal text-slate-500 mt-0.5">
                                     Preço Unit. • Total Item
@@ -11995,17 +12139,26 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                               </div>
 
                                               {/* Total do Item */}
-                                              <div className="text-right shrink-0">
-                                                <div
-                                                  className={`text-xs tabular-nums font-bold ${
-                                                    isWinnerItem
-                                                      ? "text-emerald-800 font-black"
-                                                      : "text-slate-800"
-                                                  }`}
-                                                  title={`Total: ${it.quantidade} x ${formatBRL(p)}`}
-                                                >
-                                                  {formatBRL(tot)}
-                                                </div>
+                                              <div className="text-right shrink-0 min-w-[65px]">
+                                                {p > 0 ? (
+                                                  <div
+                                                    className={`text-xs tabular-nums font-bold ${
+                                                      isWinnerItem
+                                                        ? "text-emerald-800 font-black"
+                                                        : "text-slate-800"
+                                                    }`}
+                                                    title={`Total: ${it.quantidade} x ${formatBRL(p)}`}
+                                                  >
+                                                    {formatBRL(tot)}
+                                                  </div>
+                                                ) : (
+                                                  <span
+                                                    className="text-[11px] text-slate-400 font-medium italic select-none"
+                                                    title="Item não cotado por este fornecedor"
+                                                  >
+                                                    —
+                                                  </span>
+                                                )}
                                               </div>
                                             </div>
 
@@ -12144,6 +12297,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                               {comparativoFornecedores.map((_, idx) => {
                                 const tot =
                                   resumoComparativo.totais?.[idx] ?? 0;
+                                const statusForn =
+                                  resumoComparativo.fornecedoresStatus?.[idx];
                                 const isVencedor =
                                   resumoComparativo.vencedorGeral?.index ===
                                   idx;
@@ -12160,7 +12315,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                     <div className="text-xs sm:text-sm">{formatBRL(tot)}</div>
                                     {isVencedor && (
                                       <div className="text-[9px] uppercase font-bold text-emerald-200 tracking-wider mt-0.5">
-                                        ⭐ Vencedor
+                                        ⭐ Vencedor (100% dos Itens)
+                                      </div>
+                                    )}
+                                    {!isVencedor && statusForn && !statusForn.isCompleto && (statusForn.cotados ?? 0) > 0 && (
+                                      <div className="text-[9px] text-amber-300 font-semibold tracking-tight mt-0.5">
+                                        ⚠️ Cotação Parcial ({statusForn.cotados}/{statusForn.totalItens} itens)
                                       </div>
                                     )}
                                   </td>
@@ -24635,12 +24795,24 @@ function ModalVisualizarComparativoPdf({
               {comparativoFornecedores.map((f, i) => {
                 const tot = resumoComparativo.totais?.[i] ?? 0;
                 const isVenc = resumoComparativo.vencedorGeral?.index === i;
+                const statusF = resumoComparativo.fornecedoresStatus?.[i];
                 return (
-                  <div key={i} className={`p-3 rounded-lg border text-xs ${isVenc ? "bg-emerald-50/70 border-emerald-400" : "bg-white border-slate-200"}`}>
-                    <div className="text-[10px] font-bold uppercase text-slate-500 mb-1">{isVenc ? "🏆 1º Lugar (Mais em Conta)" : `Orçamento #${i + 1}`}</div>
+                  <div key={i} className={`p-3 rounded-lg border text-xs ${isVenc ? "bg-emerald-50/70 border-emerald-400 ring-2 ring-emerald-500/20" : !statusF?.isCompleto ? "bg-amber-50/30 border-amber-200" : "bg-white border-slate-200"}`}>
+                    <div className="text-[10px] font-bold uppercase text-slate-500 mb-1">
+                      {isVenc
+                        ? "🏆 1º Lugar (Completo)"
+                        : !statusF?.isCompleto
+                        ? `⚠️ Cotação Parcial (${statusF?.cotados}/${statusF?.totalItens})`
+                        : `Orçamento #${i + 1}`}
+                    </div>
                     <div className="font-extrabold text-slate-900 text-sm truncate">{f.nome || `Fornecedor ${i + 1}`}</div>
                     <div className={`text-base font-black mt-1 ${isVenc ? "text-emerald-700" : "text-slate-900"}`}>{formatBRL(tot)}</div>
-                    <div className="text-[10px] text-slate-500 mt-1">Frete: {f.freteTipo} ({formatBRL(f.freteValor)}) • Prazo: {f.prazo || "N/I"}</div>
+                    <div className="text-[10px] text-slate-500 mt-1">
+                      {!statusF?.isCompleto && (
+                        <div className="text-amber-700 font-bold mb-0.5">⚠️ Faltam {statusF?.faltam} itens</div>
+                      )}
+                      Frete: {f.freteTipo} ({formatBRL(f.freteValor)}) • Prazo: {f.prazo || "N/I"}
+                    </div>
                   </div>
                 );
               })}
@@ -24650,9 +24822,19 @@ function ModalVisualizarComparativoPdf({
                 <tr className="bg-slate-100 border border-slate-300 font-bold text-slate-800">
                   <th className="p-2 text-left" style={{ width: comparativoFornecedores.length >= 4 ? "24%" : "30%" }}>Insumo / Material</th>
                   <th className="p-2 text-center w-[12%]">Qtd</th>
-                  {comparativoFornecedores.map((f, i) => (
-                    <th key={i} className="p-2 text-right">{f.nome || `Fornecedor ${i + 1}`}</th>
-                  ))}
+                  {comparativoFornecedores.map((f, i) => {
+                    const statusF = resumoComparativo.fornecedoresStatus?.[i];
+                    return (
+                      <th key={i} className="p-2 text-right">
+                        <div>{f.nome || `Fornecedor ${i + 1}`}</div>
+                        {statusF && (
+                          <div className={`text-[9px] font-normal ${statusF.isCompleto ? "text-emerald-700 font-bold" : "text-amber-700"}`}>
+                            {statusF.isCompleto ? "✅ 100% Cotado" : `⚠️ ${statusF.cotados}/${statusF.totalItens} itens`}
+                          </div>
+                        )}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
@@ -24663,9 +24845,19 @@ function ModalVisualizarComparativoPdf({
                     {comparativoFornecedores.map((_, i) => {
                       const p = it.precos?.[i] ?? getItemPreco(it, i);
                       const isVenc = it.vencedores?.[i] ?? false;
+                      const tot = p * (it.quantidade || 0);
                       return (
-                        <td key={i} className={`p-2 text-right ${isVenc ? "bg-emerald-100/70 font-bold text-emerald-900" : "text-slate-800"}`}>
-                          {formatBRL(p)}
+                        <td key={i} className={`p-2 text-right ${isVenc ? "bg-emerald-100/70 text-emerald-900" : "text-slate-800"}`}>
+                          {p > 0 ? (
+                            <div>
+                              <div className="font-bold">{formatBRL(p)} <span className="text-[9px] font-normal text-slate-500">/un</span></div>
+                              <div className={`text-[10px] ${isVenc ? "text-emerald-700 font-extrabold" : "text-slate-500"}`}>
+                                Total: {formatBRL(tot)} {isVenc && "⭐"}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic select-none">— Não cotado</span>
+                          )}
                         </td>
                       );
                     })}
@@ -24693,9 +24885,20 @@ function ModalVisualizarComparativoPdf({
                 </tr>
                 <tr className="bg-slate-900 text-white font-extrabold text-xs">
                   <td colSpan={2} className="p-2.5">VALOR TOTAL (COM FRETE E DESCONTO)</td>
-                  {comparativoFornecedores.map((_, i) => (
-                    <td key={i} className="p-2.5 text-right">{formatBRL(resumoComparativo.totais?.[i] ?? 0)}</td>
-                  ))}
+                  {comparativoFornecedores.map((_, i) => {
+                    const tot = resumoComparativo.totais?.[i] ?? 0;
+                    const isVenc = resumoComparativo.vencedorGeral?.index === i;
+                    const statusF = resumoComparativo.fornecedoresStatus?.[i];
+                    return (
+                      <td key={i} className={`p-2.5 text-right ${isVenc ? "text-emerald-400" : "text-white"}`}>
+                        <div>{formatBRL(tot)}</div>
+                        {isVenc && <div className="text-[9px] text-emerald-300 uppercase tracking-tight">⭐ Vencedor (100% dos Itens)</div>}
+                        {!isVenc && statusF && !statusF.isCompleto && (
+                          <div className="text-[9px] text-amber-300 font-normal">⚠️ Parcial ({statusF.cotados}/{statusF.totalItens})</div>
+                        )}
+                      </td>
+                    );
+                  })}
                 </tr>
               </tfoot>
             </table>
