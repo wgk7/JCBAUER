@@ -1260,6 +1260,27 @@ function formatarDataBR(iso: string): string {
   return `${d}/${m}/${a}`;
 }
 
+function formatarDataBrasileira(dataStr?: string | null): string {
+  if (!dataStr) return "";
+  try {
+    const limpo = String(dataStr).trim();
+    if (limpo.includes("-")) {
+      const parts = limpo.split("T")[0].split("-");
+      if (parts.length === 3) {
+        const [a, m, d] = parts;
+        return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${a}`;
+      }
+    }
+    const d = new Date(limpo);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString("pt-BR");
+    }
+    return limpo;
+  } catch {
+    return String(dataStr || "");
+  }
+}
+
 function segundaFeiraDaSemana(d: Date): Date {
   const dow = d.getDay();
   const desloc = dow === 0 ? -6 : 1 - dow;
@@ -15439,9 +15460,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                     Puxadas Programadas (Contratos)
                   </div>
                   <div className="text-2xl font-bold text-indigo-700 mt-1 tabular-nums">
-                    {puxadasAtivasContratos
-                      .flatMap((c) => c.programacoes)
-                      .filter((p) => p.status === "Agendada" || p.status === "Em Rota").length}
+                    {(puxadasAtivasContratos || [])
+                      .flatMap((c) => c?.programacoes || [])
+                      .filter((p) => p && (p.status === "Agendada" || p.status === "Em Rota")).length}
                   </div>
                   <div className="text-xs text-slate-500 mt-1">
                     Caminhões de concreto/aço agendados
@@ -15597,12 +15618,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                         </thead>
                         <tbody className="divide-y divide-slate-200">
                           {(() => {
-                            const itensEst = estoque.filter((item) => {
+                            const itensEst = (estoque || []).filter((item) => {
                               const matchObra = obraFiltro === "ALL" || item.obraId === obraFiltro;
                               const matchCat = filtroCategoriaEstoque === "ALL" || item.categoria === filtroCategoriaEstoque;
-                              const matchBusca = buscaEstoque === "" ||
-                                item.descricao.toLowerCase().includes(buscaEstoque.toLowerCase()) ||
-                                item.codigo.toLowerCase().includes(buscaEstoque.toLowerCase());
+                              const descItem = (item.descricao || "").toLowerCase();
+                              const codItem = (item.codigo || "").toLowerCase();
+                              const skuItem = (item.sku || "").toLowerCase();
+                              const busca = (buscaEstoque || "").toLowerCase().trim();
+                              const matchBusca = busca === "" ||
+                                descItem.includes(busca) ||
+                                codItem.includes(busca) ||
+                                skuItem.includes(busca);
                               return matchObra && matchCat && matchBusca;
                             });
                             if (itensEst.length === 0) {
@@ -15623,11 +15649,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                               );
                             }
                             return itensEst.map((item) => {
-                              const critico = item.saldoAtual <= item.estoqueMinimo;
-                              const atencao = !critico && item.saldoAtual <= item.pontoReposicao;
+                              const saldoAtualNum = Number(item.saldoAtual || 0);
+                              const estoqueMinimoNum = Number(item.estoqueMinimo || 0);
+                              const pontoReposicaoNum = Number(item.pontoReposicao || 0);
+                              const custoMedioNum = Number(item.custoMedio || 0);
+
+                              const critico = saldoAtualNum <= estoqueMinimoNum;
+                              const atencao = !critico && saldoAtualNum <= pontoReposicaoNum;
+                              const refReposicao = pontoReposicaoNum > 0 ? pontoReposicaoNum * 1.5 : (estoqueMinimoNum > 0 ? estoqueMinimoNum * 2 : 10);
                               const percentualSeguranca = Math.min(
                                 100,
-                                Math.round((item.saldoAtual / (item.pontoReposicao * 1.5)) * 100)
+                                Math.round((saldoAtualNum / refReposicao) * 100)
                               );
 
                               return (
@@ -15635,23 +15667,23 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                   <td className="py-3 px-4">
                                     <div className="flex items-center gap-1.5">
                                       <span className="px-2 py-0.5 rounded bg-slate-900 text-amber-300 font-mono text-[11px] font-bold">
-                                        {item.sku || item.codigo}
+                                        {item.sku || item.codigo || "SKU-S/N"}
                                       </span>
-                                      <div className="font-semibold text-sm text-slate-900 leading-snug">{item.descricao}</div>
+                                      <div className="font-semibold text-sm text-slate-900 leading-snug">{item.descricao || "Item sem descrição"}</div>
                                     </div>
                                     <div className="text-xs text-slate-500 mt-0.5">
-                                      {item.categoria}
+                                      {item.categoria || "Geral"}
                                     </div>
                                   </td>
                                   <td className="py-3 px-4 text-xs">
-                                    <div className="font-semibold text-slate-800 whitespace-nowrap">{item.obraNome}</div>
-                                    <div className="text-slate-500 mt-0.5 text-[11px]">📍 {item.localizacaoFisica}</div>
+                                    <div className="font-semibold text-slate-800 whitespace-nowrap">{item.obraNome || "Canteiro Central"}</div>
+                                    <div className="text-slate-500 mt-0.5 text-[11px]">📍 {item.localizacaoFisica || "Almoxarifado Geral"}</div>
                                   </td>
                                   <td className="py-3 px-4 text-center">
                                     <div className="w-32 mx-auto">
                                       <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1 font-medium">
-                                        <span>Mín: {item.estoqueMinimo}</span>
-                                        <span>Repor: {item.pontoReposicao}</span>
+                                        <span>Mín: {estoqueMinimoNum}</span>
+                                        <span>Repor: {pontoReposicaoNum}</span>
                                       </div>
                                       <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
                                         <div
@@ -15668,14 +15700,14 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                     </div>
                                   </td>
                                   <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums text-sm">
-                                    <span>{item.saldoAtual.toLocaleString("pt-BR")}</span>{" "}
-                                    <span className="text-xs font-normal text-slate-500">{item.unidade}</span>
+                                    <span>{saldoAtualNum.toLocaleString("pt-BR")}</span>{" "}
+                                    <span className="text-xs font-normal text-slate-500">{item.unidade || "un"}</span>
                                   </td>
                                   <td className="py-3 px-4 text-center whitespace-nowrap">
-                                    {item.quantidadeAEntrar && item.quantidadeAEntrar > 0 ? (
+                                    {Number(item.quantidadeAEntrar || 0) > 0 ? (
                                       <div className="space-y-0.5">
                                         <span className="px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs font-bold inline-block">
-                                          + {item.quantidadeAEntrar} {item.unidade}
+                                          + {item.quantidadeAEntrar} {item.unidade || "un"}
                                         </span>
                                         {item.previsaoEntrega && (
                                           <div className="text-[10px] text-indigo-700 font-semibold">
@@ -15693,9 +15725,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                         <span className="text-xs font-semibold text-slate-800">
                                           {formatarDataBrasileira(item.dataUltimaEntrada)}
                                         </span>
-                                        {item.quantidadeUltimaEntrada && (
+                                        {Number(item.quantidadeUltimaEntrada || 0) > 0 && (
                                           <div className="text-[10px] text-emerald-800 font-medium">
-                                            +{item.quantidadeUltimaEntrada} {item.unidade}
+                                            +{item.quantidadeUltimaEntrada} {item.unidade || "un"}
                                           </div>
                                         )}
                                         {item.notaFiscalUltimaEntrada && (
@@ -15709,13 +15741,13 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                     )}
                                   </td>
                                   <td className="py-3 px-4 text-right text-slate-700 whitespace-nowrap tabular-nums text-xs">
-                                    {formatBRL(item.custoMedio)} / {item.unidade}
+                                    {formatBRL(custoMedioNum)} / {item.unidade || "un"}
                                   </td>
                                   <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums text-sm">
-                                    {formatBRL(item.saldoAtual * item.custoMedio)}
+                                    {formatBRL(saldoAtualNum * custoMedioNum)}
                                   </td>
                                   <td className="py-3 px-4 text-center whitespace-nowrap">
-                                    {item.saldoAtual === 0 && item.estoqueMinimo === 0 ? (
+                                    {saldoAtualNum === 0 && estoqueMinimoNum === 0 ? (
                                       <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 inline-block">
                                         📦 Catalogado (Saldo 0)
                                       </span>
@@ -15894,7 +15926,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-100">
-                                    {ctr.programacoes.map((prg) => (
+                                    {(ctr?.programacoes || []).map((prg) => (
                                       <tr key={prg.id} className="hover:bg-slate-50">
                                         <td className="py-2 px-3 font-bold text-slate-800 whitespace-nowrap">
                                           {prg.dataHoraAgendada}
@@ -16005,7 +16037,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           {movimentacoesEstoque
                             .filter((m) => obraFiltro === "ALL" || m.obraOrigemId === obraFiltro || m.obraDestinoId === obraFiltro)
                             .map((mov) => {
-                              const tipoBadge = {
+                              const tipoBadgeMap: Record<string, { bg: string; label: string }> = {
                                 ENTRADA_COMPRA: {
                                   bg: "bg-emerald-100 text-emerald-800 border-emerald-200",
                                   label: "🟢 Entrada por Compra",
@@ -16026,7 +16058,11 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                   bg: "bg-slate-100 text-slate-800 border-slate-200",
                                   label: "⚪ Ajuste Inventário",
                                 },
-                              }[mov.tipo];
+                              };
+                              const badgeInfo = tipoBadgeMap[mov.tipo] || {
+                                bg: "bg-slate-100 text-slate-800 border-slate-200",
+                                label: mov.tipo || "Movimentação",
+                              };
 
                               return (
                                 <tr key={mov.id} className="hover:bg-slate-50 transition-colors">
@@ -16035,9 +16071,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                   </td>
                                   <td className="py-3 px-4 whitespace-nowrap">
                                     <span
-                                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border inline-block ${tipoBadge.bg}`}
+                                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border inline-block ${badgeInfo.bg}`}
                                     >
-                                      {tipoBadge.label}
+                                      {badgeInfo.label}
                                     </span>
                                   </td>
                                   <td className="py-3 px-4">
@@ -22109,33 +22145,35 @@ function VisaoRestritaObra({
                             </tr>
                           ) : (
                             itensObra.map((it) => {
-                            const critico = it.saldoAtual <= it.estoqueMinimo;
+                            const saldoAtualNum = Number(it.saldoAtual || 0);
+                            const estoqueMinimoNum = Number(it.estoqueMinimo || 0);
+                            const critico = saldoAtualNum <= estoqueMinimoNum;
 
                             return (
                               <tr key={it.id} className="hover:bg-slate-50 transition-colors">
                                 <td className="py-3 px-4">
                                   <div className="flex items-center gap-1.5">
                                     <span className="px-2 py-0.5 rounded bg-slate-900 text-amber-300 font-mono text-[11px] font-bold">
-                                      {it.sku || it.codigo}
+                                      {it.sku || it.codigo || "SKU-S/N"}
                                     </span>
-                                    <span className="font-bold text-slate-900">{it.descricao}</span>
+                                    <span className="font-bold text-slate-900">{it.descricao || "Item sem descrição"}</span>
                                   </div>
                                   <div className="text-xs text-slate-500 mt-0.5">
-                                    {it.categoria}
+                                    {it.categoria || "Geral"}
                                   </div>
                                 </td>
                                 <td className="py-3 px-4 text-xs text-slate-700">
-                                  📍 {it.localizacaoFisica}
+                                  📍 {it.localizacaoFisica || "Almoxarifado Principal"}
                                 </td>
                                 <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums">
-                                  <span className="text-base">{it.saldoAtual}</span>{" "}
-                                  <span className="text-xs font-normal text-slate-500">{it.unidade}</span>
+                                  <span className="text-base">{saldoAtualNum.toLocaleString("pt-BR")}</span>{" "}
+                                  <span className="text-xs font-normal text-slate-500">{it.unidade || "un"}</span>
                                 </td>
                                 <td className="py-3 px-4 text-center whitespace-nowrap">
-                                  {it.quantidadeAEntrar && it.quantidadeAEntrar > 0 ? (
+                                  {Number(it.quantidadeAEntrar || 0) > 0 ? (
                                     <div className="space-y-0.5">
                                       <span className="px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs font-bold inline-block">
-                                        + {it.quantidadeAEntrar} {it.unidade}
+                                        + {it.quantidadeAEntrar} {it.unidade || "un"}
                                       </span>
                                       {it.previsaoEntrega && (
                                         <div className="text-[10px] text-indigo-700 font-semibold">
@@ -22153,9 +22191,9 @@ function VisaoRestritaObra({
                                       <span className="text-xs font-semibold text-slate-800">
                                         {formatarDataBrasileira(it.dataUltimaEntrada)}
                                       </span>
-                                      {it.quantidadeUltimaEntrada && (
+                                      {Number(it.quantidadeUltimaEntrada || 0) > 0 && (
                                         <div className="text-[10px] text-emerald-800 font-medium">
-                                          +{it.quantidadeUltimaEntrada} {it.unidade}
+                                          +{it.quantidadeUltimaEntrada} {it.unidade || "un"}
                                         </div>
                                       )}
                                       {it.notaFiscalUltimaEntrada && (
@@ -22169,7 +22207,7 @@ function VisaoRestritaObra({
                                   )}
                                 </td>
                                 <td className="py-3 px-4 text-center text-xs text-slate-600 whitespace-nowrap">
-                                  Mín: {it.estoqueMinimo} {it.unidade}
+                                  Mín: {estoqueMinimoNum} {it.unidade || "un"}
                                 </td>
                                 <td className="py-3 px-4 text-center">
                                   {critico ? (
