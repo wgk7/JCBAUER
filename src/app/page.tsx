@@ -12221,33 +12221,6 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                         </button>
                       </div>
                     </div>
-                      <button
-                        type="button"
-                        onClick={handleAdicionarItemComparativo}
-                        className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
-                      >
-                        <span>+</span> Adicionar Mais um Insumo
-                      </button>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            comparativoFileInputRef.current?.click()
-                          }
-                          className="px-3.5 py-2 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs font-semibold transition flex items-center gap-1.5"
-                        >
-                          <span>📥</span> Importar Itens (.xlsx)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleGerarComparativoRapidoPDF()}
-                          className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
-                        >
-                          <span>🖨️</span> Imprimir Relatório Executivo
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
