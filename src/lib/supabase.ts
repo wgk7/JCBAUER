@@ -219,3 +219,51 @@ export async function carregarFornecedoresRelacional(): Promise<any[] | null> {
     return null;
   }
 }
+
+/**
+ * Salva a proposta comercial preenchida pelo fornecedor via Portal Online
+ */
+export async function salvarPropostaFornecedor(
+  cotacaoId: string,
+  fornIdx: number,
+  proposta: any
+): Promise<boolean> {
+  const chave = `jc_proposta_${cotacaoId}_forn_${fornIdx}`;
+  return salvarChaveSupabase(chave, proposta);
+}
+
+/**
+ * Carrega todas as propostas submetidas por fornecedores para uma cotação
+ */
+export async function carregarPropostasCotacao(
+  cotacaoId: string
+): Promise<Record<number, any>> {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/system_store?key=like.jc_proposta_${cotacaoId}_forn_*&select=key,value`,
+      {
+        method: "GET",
+        headers: getHeaders(),
+      }
+    );
+    if (!res.ok) return {};
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return {};
+    const resultado: Record<number, any> = {};
+    for (const r of rows) {
+      if (r?.key && r?.value) {
+        const parts = r.key.split("_forn_");
+        if (parts.length === 2) {
+          const idx = parseInt(parts[1], 10);
+          if (!isNaN(idx)) {
+            resultado[idx] = r.value;
+          }
+        }
+      }
+    }
+    return resultado;
+  } catch {
+    return {};
+  }
+}
+
