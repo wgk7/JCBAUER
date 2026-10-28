@@ -10319,7 +10319,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               </div>
 
               {/* ========================================================= */}
-              {/* SEMÁFORO DE CUSTO: ORÃ‡ADO VS REALIZADO POR DISCIPLINA       */}
+              {/* SEMÁFORO DE CUSTO: ORÇADO VS REALIZADO POR DISCIPLINA       */}
               {/* Governança & Decisão em 5 Segundos (Pilar 1 da Diretoria)  */}
               {/* ========================================================= */}
               <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-5">
@@ -10362,199 +10362,183 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                   </div>
                 </div>
 
-                {/* Grade de Disciplinas Estruturadas */}
+                {/* Grade de Disciplinas Estruturadas (100% DINÂMICA VIA SUPABASE & ORDENS DE COMPRA) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {[
-                    {
-                      id: "fundacao",
-                      nome: "01. Fundações & Movimentação de Solo",
-                      fase: "Fase Inicial",
-                      itens: "Estacas Hélice, Escavação, Concreto FCK 30, Aço CA-50",
-                      avancoFisico: 85,
-                      orcado: 380000,
-                      realizado: 368000,
-                      status: "vermelho",
-                      alerta: "🔴 Alerta Crítico: 96.8% do teto já emitido em OCs para 85% executado. Risco iminente de aditivo!",
-                    },
-                    {
-                      id: "estrutura",
-                      nome: "02. Estrutura de Concreto Armado",
-                      fase: "Estrutural",
-                      itens: "Pilares, Vigas, Lajes, Concreto Usinado, Formas Resinadas",
-                      avancoFisico: 62,
-                      orcado: 720000,
-                      realizado: 495000,
-                      status: "amarelo",
-                      alerta: "🟡 Atenção: Comprometimento financeiro de 68.7% supera o avanço físico medido em +6.7%.",
-                    },
-                    {
-                      id: "alvenaria",
-                      nome: "03. Alvenaria Estrutural & Vedações",
-                      fase: "Fechamento",
-                      itens: "Blocos Cerâmicos/Concreto, Argamassa Pronta, Telas",
-                      avancoFisico: 45,
-                      orcado: 290000,
-                      realizado: 122000,
-                      status: "verde",
-                      alerta: "🟢 Normal: Consumo perfeitamente aderente ao cronograma de suprimentos da obra.",
-                    },
-                    {
-                      id: "instalacoes",
-                      nome: "04. Instalações Hidráulicas, Elétricas e PCI",
-                      fase: "Infraestrutura",
-                      itens: "Tubos Tigre/Amanco, Fios Prysmian/Sil, Eletrodutos, Barramentos",
-                      avancoFisico: 35,
-                      orcado: 280000,
-                      realizado: 92000,
-                      status: "verde",
-                      alerta: "🟢 Normal: Compras equalizadas com desconto médio de 14% via tabela distribuidor.",
-                    },
-                    {
-                      id: "impermeabilizacao",
-                      nome: "05. Impermeabilização & Coberturas",
-                      fase: "Envelopamento",
-                      itens: "Manta Asfáltica 4mm, Primer Betuminoso, Calhas, Rufos",
-                      avancoFisico: 25,
-                      orcado: 140000,
-                      realizado: 52000,
-                      status: "verde",
-                      alerta: "🟢 Normal: Lote de mantas e drenagem entregues conforme ensaio de estanqueidade.",
-                    },
-                    {
-                      id: "acabamento",
-                      nome: "06. Acabamentos, Pisos & Pintura",
-                      fase: "Finalização",
-                      itens: "Porcelanatos Retificados, Argamassa ACIII, Tintas Suvinil, Louças Deca",
-                      avancoFisico: 12,
-                      orcado: 310000,
-                      realizado: 48000,
-                      status: "verde",
-                      alerta: "🟢 Normal: Cotações em andamento com margem favorável de negociação.",
-                    },
-                  ].map((disc) => {
-                    const percComprometido = Math.round((disc.realizado / disc.orcado) * 100);
-                    const saldoDisponivel = disc.orcado - disc.realizado;
+                  {(() => {
+                    const ordensAtivas = obraFiltro === "ALL"
+                      ? ordens
+                      : ordens.filter((o) => o.obraId === obraFiltro);
 
-                    return (
-                      <div
-                        key={disc.id}
-                        className={`p-4 rounded-xl border flex flex-col justify-between transition ${
-                          disc.status === "vermelho"
-                            ? "bg-rose-50/70 border-rose-300 ring-1 ring-rose-400"
-                            : disc.status === "amarelo"
-                            ? "bg-amber-50/70 border-amber-300"
-                            : "bg-slate-50/60 border-slate-200"
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                                {disc.fase}
+                    const solicitacoesAtivas = obraFiltro === "ALL"
+                      ? solicitacoes
+                      : solicitacoes.filter((s) => s.obraId === obraFiltro);
+
+                    return CATEGORIAS_CONSTRUCAO.map((catNome, idx) => {
+                      const ocsCat = ordensAtivas.filter(
+                        (o) => (o.categoria || "").trim().toLowerCase() === catNome.toLowerCase() ||
+                               (o.categoria || "").toLowerCase().includes(catNome.split(" ")[0].toLowerCase())
+                      );
+                      const scsCat = solicitacoesAtivas.filter(
+                        (s) => (s.categoria || "").trim().toLowerCase() === catNome.toLowerCase() ||
+                               (s.categoria || "").toLowerCase().includes(catNome.split(" ")[0].toLowerCase())
+                      );
+
+                      const realizado = ocsCat.reduce((acc, o) => acc + (Number(o.valorTotal) || 0), 0);
+                      const orcadoScs = scsCat.reduce((acc, s) =>
+                        acc + (s.itens || []).reduce((iAcc, it) => iAcc + (Number(it.quantidade) * (Number(it.orcamentoUnitario) || 0)), 0),
+                        0
+                      );
+                      const savingCat = ocsCat.reduce((acc, o) => acc + (Number(o.savingGerado) || 0), 0);
+                      const orcado = orcadoScs > 0 ? orcadoScs : (realizado > 0 ? Math.round(realizado * 1.15) : 0);
+                      const saldoDisponivel = orcado - realizado;
+
+                      const itensNomes = Array.from(new Set(
+                        ocsCat.flatMap((o) => (o.itens || []).map((it) => it.descricao || it.codigo)).filter(Boolean)
+                      ));
+                      const itensTexto = itensNomes.length > 0
+                        ? itensNomes.slice(0, 3).join(", ") + (itensNomes.length > 3 ? (" (+" + (itensNomes.length - 3) + ")") : "")
+                        : "Nenhum insumo lançado nesta disciplina.";
+
+                      // Avanço físico a partir dos diários da obra
+                      const diariosCat = diariosObra.filter((d) =>
+                        (obraFiltro === "ALL" || d.obraId === obraFiltro) &&
+                        ((d.etapaObra || "").toLowerCase().includes(catNome.split(" ")[0].toLowerCase()) ||
+                         (d.atividades || "").toLowerCase().includes(catNome.split(" ")[0].toLowerCase()))
+                      );
+                      const avancoFisico = diariosCat.length > 0
+                        ? Math.max(...diariosCat.map((d) => Number(d.avancoPercentual) || 0), 0)
+                        : (realizado > 0 ? Math.min(Math.round((realizado / Math.max(orcado, 1)) * 100), 100) : 0);
+
+                      const percComprometido = orcado > 0 ? Math.round((realizado / orcado) * 100) : (realizado > 0 ? 100 : 0);
+
+                      let statusCor: "verde" | "amarelo" | "vermelho" = "verde";
+                      let statusBadge = "🟢 DENTRO DA MARGEM";
+                      let alertaTexto = "Consumo aderente ao cronograma de suprimentos da obra.";
+
+                      if (realizado === 0 && orcado === 0) {
+                        statusCor = "verde";
+                        statusBadge = "🟢 SEM ORDENS";
+                        alertaTexto = "Nenhuma Ordem de Compra emitida nesta disciplina até o momento.";
+                      } else if (orcado > 0 && percComprometido > 95 && avancoFisico < 85) {
+                        statusCor = "vermelho";
+                        statusBadge = "🔴 ESTOURO IMINENTE";
+                        alertaTexto = "Alerta Crítico: " + percComprometido + "% do orçamento emitido com apenas " + avancoFisico + "% executado.";
+                      } else if (orcado > 0 && percComprometido > avancoFisico + 8) {
+                        const desvio = percComprometido - avancoFisico;
+                        statusCor = "amarelo";
+                        statusBadge = "🟡 ATENÇÃO";
+                        alertaTexto = "Atenção: Comprometimento financeiro (" + percComprometido + "%) supera o avanço físico em +" + desvio + "%.";
+                      }
+
+                      return (
+                        <div
+                          key={catNome}
+                          className={"p-4 rounded-xl border flex flex-col justify-between transition " + (
+                            statusCor === "vermelho"
+                              ? "bg-rose-50/70 border-rose-300 ring-1 ring-rose-400"
+                              : statusCor === "amarelo"
+                              ? "bg-amber-50/70 border-amber-300"
+                              : "bg-slate-50/60 border-slate-200"
+                          )}
+                        >
+                          <div>
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                                  Disciplina {String(idx + 1).padStart(2, "0")}
+                                </span>
+                                <h3 className="text-xs font-black text-slate-900 leading-tight">
+                                  {catNome}
+                                </h3>
+                              </div>
+                              <span
+                                className={"px-2 py-0.5 rounded text-[10px] font-black shrink-0 " + (
+                                  statusCor === "vermelho"
+                                    ? "bg-rose-600 text-white animate-pulse"
+                                    : statusCor === "amarelo"
+                                    ? "bg-amber-500 text-slate-950 font-bold"
+                                    : "bg-emerald-600 text-white"
+                                )}
+                              >
+                                {statusBadge}
                               </span>
-                              <h3 className="text-xs font-black text-slate-900 leading-tight">
-                                {disc.nome}
-                              </h3>
                             </div>
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-black shrink-0 ${
-                                disc.status === "vermelho"
-                                  ? "bg-rose-600 text-white animate-pulse"
-                                  : disc.status === "amarelo"
-                                  ? "bg-amber-500 text-slate-950 font-bold"
-                                  : "bg-emerald-600 text-white"
-                              }`}
-                            >
-                              {disc.status === "vermelho"
-                                ? "🔴 ESTOURO IMINENTE"
-                                : disc.status === "amarelo"
-                                ? "🟡 ATENÃ‡ÃƒO"
-                                : "🟢 DENTRO DA MARGEM"}
-                            </span>
+
+                            <p className="text-[11px] text-slate-500 mt-1 line-clamp-1" title={itensTexto}>
+                              {itensTexto}
+                            </p>
+
+                            {/* Barras de Comparação Físico vs Financeiro */}
+                            <div className="mt-3.5 space-y-2">
+                              <div>
+                                <div className="flex justify-between text-[11px] mb-1">
+                                  <span className="text-slate-500">Avanço Físico Medido:</span>
+                                  <strong className="text-slate-800">{avancoFisico}%</strong>
+                                </div>
+                                <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                  <div
+                                    className="bg-cyan-600 h-full rounded-full transition-all duration-500"
+                                    style={{ width: avancoFisico + "%" }}
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <div className="flex justify-between text-[11px] mb-1">
+                                  <span className="text-slate-500">Comprometido em OCs:</span>
+                                  <strong
+                                    className={
+                                      statusCor === "vermelho"
+                                        ? "text-rose-700 font-black"
+                                        : statusCor === "amarelo"
+                                        ? "text-amber-700 font-black"
+                                        : "text-emerald-700 font-bold"
+                                    }
+                                  >
+                                    {percComprometido}%
+                                  </strong>
+                                </div>
+                                <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                  <div
+                                    className={"h-full rounded-full transition-all duration-500 " + (
+                                      statusCor === "vermelho"
+                                        ? "bg-rose-600"
+                                        : statusCor === "amarelo"
+                                        ? "bg-amber-500"
+                                        : "bg-emerald-600"
+                                    )}
+                                    style={{ width: Math.min(percComprometido, 100) + "%" }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
                           </div>
 
-                          <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">
-                            {disc.itens}
-                          </p>
-
-                          {/* Barras de Comparação Físico vs Financeiro */}
-                          <div className="mt-3.5 space-y-2">
-                            <div>
-                              <div className="flex justify-between text-[11px] mb-1">
-                                <span className="text-slate-500">Avanço Físico Medido:</span>
-                                <strong className="text-slate-800">{disc.avancoFisico}%</strong>
-                              </div>
-                              <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-                                <div
-                                  className="bg-cyan-600 h-full rounded-full transition-all duration-500"
-                                  style={{ width: `${disc.avancoFisico}%` }}
-                                />
-                              </div>
+                          {/* Valores em Moeda */}
+                          <div className="mt-4 pt-3 border-t border-slate-200 space-y-1">
+                            <div className="flex justify-between text-xs font-mono">
+                              <span className="text-slate-500">Orçado Aprovado:</span>
+                              <strong className="text-slate-800">{formatBRL(orcado)}</strong>
+                            </div>
+                            <div className="flex justify-between text-xs font-mono">
+                              <span className="text-slate-500">Realizado em OCs:</span>
+                              <strong className="text-cyan-800 font-extrabold">{formatBRL(realizado)}</strong>
+                            </div>
+                            <div className="flex justify-between text-xs font-mono">
+                              <span className="text-slate-500">Saldo Restante:</span>
+                              <strong className={saldoDisponivel >= 0 ? "text-emerald-700 font-bold" : "text-rose-700 font-black"}>
+                                {formatBRL(saldoDisponivel)}
+                              </strong>
                             </div>
 
-                            <div>
-                              <div className="flex justify-between text-[11px] mb-1">
-                                <span className="text-slate-500">Comprometido em OCs:</span>
-                                <strong
-                                  className={
-                                    disc.status === "vermelho"
-                                      ? "text-rose-700 font-black"
-                                      : disc.status === "amarelo"
-                                      ? "text-amber-700 font-black"
-                                      : "text-emerald-700 font-bold"
-                                  }
-                                >
-                                  {percComprometido}%
-                                </strong>
-                              </div>
-                              <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all duration-500 ${
-                                    disc.status === "vermelho"
-                                      ? "bg-rose-600"
-                                      : disc.status === "amarelo"
-                                      ? "bg-amber-500"
-                                      : "bg-emerald-600"
-                                  }`}
-                                  style={{ width: `${Math.min(percComprometido, 100)}%` }}
-                                />
-                              </div>
+                            <div className="pt-2 text-[10px] text-slate-500 border-t border-slate-200/80">
+                              {alertaTexto}
                             </div>
                           </div>
                         </div>
-
-                        {/* Valores em Moeda */}
-                        <div className="mt-4 pt-3 border-t border-slate-200 space-y-1">
-                          <div className="flex justify-between text-xs font-mono">
-                            <span className="text-slate-500">Orçado Aprovado:</span>
-                            <strong className="text-slate-800">{formatBRL(disc.orcado)}</strong>
-                          </div>
-                          <div className="flex justify-between text-xs font-mono">
-                            <span className="text-slate-500">Realizado em OCs:</span>
-                            <strong className="text-cyan-800 font-extrabold">{formatBRL(disc.realizado)}</strong>
-                          </div>
-                          <div className="flex justify-between text-xs font-mono">
-                            <span className="text-slate-500">Saldo Restante:</span>
-                            <strong className={saldoDisponivel >= 0 ? "text-emerald-700 font-bold" : "text-rose-700 font-black"}>
-                              {formatBRL(saldoDisponivel)}
-                            </strong>
-                          </div>
-
-                          <div
-                            className={`p-2 rounded-lg text-[10px] leading-tight mt-2 ${
-                              disc.status === "vermelho"
-                                ? "bg-rose-100 text-rose-900 border border-rose-300 font-bold"
-                                : disc.status === "amarelo"
-                                ? "bg-amber-100 text-amber-900 border border-amber-300"
-                                : "bg-white text-slate-600 border border-slate-200"
-                            }`}
-                          >
-                            {disc.alerta}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
                 </div>
               </div>
 
@@ -13700,20 +13684,11 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                       </div>
 
                   {/* ============================================================= */}
-                  {/* RADAR JC BAUER DE PREÇOS HISTÓRICOS & REFERÊSNCIA SINAPI      */}
-                  {/* Supercérebro de Suprimentos: Poder de Barganha na Mesa        */}
+                  {/* RADAR JC BAUER DE PREÇOS HISTÓRICOS & REFERÊNCIA SINAPI       */}
+                  {/* Supercérebro de Suprimentos: Poder de Barganha na Mesa         */}
                   {/* ============================================================= */}
                   {(() => {
-                    const itensParaRadar = (comparativoItens && comparativoItens.length > 0)
-                      ? comparativoItens
-                      : [
-                          { id: "ref-1", nome: "Aço CA-50 Barra 12mm 12m", preco1: 8.80, quantidade: 100, unidade: "kg" },
-                          { id: "ref-2", nome: "Concreto Usinado FCK 30 MPa c/ Bomba", preco1: 450.00, quantidade: 40, unidade: "m³" },
-                          { id: "ref-3", nome: "Cimento Portland CP-IV 32 RS (Saco 50kg)", preco1: 42.00, quantidade: 200, unidade: "sc" },
-                          { id: "ref-4", nome: "Tubo PVC Esgoto Normal 100mm 6m", preco1: 36.50, quantidade: 50, unidade: "barra" },
-                          { id: "ref-5", nome: "Areia Média Lavada a Granel", preco1: 115.00, quantidade: 30, unidade: "m³" },
-                          { id: "ref-6", nome: "Manta Asfáltica Alumínio 4mm (10m²)", preco1: 295.00, quantidade: 15, unidade: "rl" }
-                        ];
+                    const temItens = comparativoItens && comparativoItens.length > 0;
 
                     return (
                       <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 rounded-xl p-4 text-white shadow-xl space-y-3">
@@ -13728,114 +13703,101 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                 </span>
                               </h4>
                               <p className="text-xs text-slate-400">
-                                Histórico real de compras em todas as obras da JC Bauer cruzado com índices oficiais para balizar sua negociação.
+                                Cruzamento do histórico real de compras da JC Bauer com as cotações ativas.
                               </p>
                             </div>
                           </div>
                           <span className="text-[11px] font-mono text-cyan-300 font-bold bg-slate-800/80 px-2.5 py-1 rounded-lg border border-cyan-500/30">
-                            {comparativoItens && comparativoItens.length > 0
-                              ? `${comparativoItens.length} Insumos da Cotação Atual`
-                              : "6 Insumos de Referência Ativos"}
+                            {temItens ? (comparativoItens.length + " Insumos em Análise") : "Aguardando Insumos"}
                           </span>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {itensParaRadar.map((it: any, idx: number) => {
-                            const itemNome = (it.nome || "").toLowerCase().trim();
-                            
-                            // Preços de referência baseados na inteligência JC Bauer e SINAPI
-                            let precoUltimaCompra = 0;
-                            let dataUltimaCompra = "15/09/2026";
-                            let fornecedorUltima = "Fornecedor Parceiro";
-                            let obraUltima = "Horizon Tower";
-                            let menorPrecoHistorico = 0;
-                            let sinapiRef = 0;
+                        {temItens ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {comparativoItens.map((it: any, idx: number) => {
+                              const itemNome = (it.nome || "").toLowerCase().trim();
+                              
+                              // Busca no histórico REAL de Ordens de Compra
+                              const comprasHistoricas = ordens.flatMap((o) => 
+                                (o.itens || [])
+                                  .filter((item) => (item.descricao || "").toLowerCase().includes(itemNome) || (itemNome && itemNome.includes((item.descricao || "").toLowerCase())))
+                                  .map((item) => ({
+                                    preco: item.precoUnitario,
+                                    data: o.dataEmissao,
+                                    fornecedor: o.fornecedorNome,
+                                    obra: o.obraNome
+                                  }))
+                              );
 
-                            if (itemNome.includes("aço") || itemNome.includes("ferro") || itemNome.includes("ca-50") || itemNome.includes("barra")) {
-                              precoUltimaCompra = 8.65;
-                              menorPrecoHistorico = 7.95;
-                              sinapiRef = 8.42;
-                              fornecedorUltima = "Gerdau / ArcelorMittal";
-                              obraUltima = "Horizon Tower";
-                            } else if (itemNome.includes("concreto") || itemNome.includes("fck") || itemNome.includes("usinado")) {
-                              precoUltimaCompra = 440.0;
-                              menorPrecoHistorico = 415.0;
-                              sinapiRef = 448.0;
-                              fornecedorUltima = "Polimix Concreto";
-                              obraUltima = "Atrium Bauer";
-                            } else if (itemNome.includes("cimento") || itemNome.includes("cp")) {
-                              precoUltimaCompra = 41.5;
-                              menorPrecoHistorico = 38.9;
-                              sinapiRef = 41.8;
-                              fornecedorUltima = "Votorantim Cimentos";
-                              obraUltima = "SulPark Logístico";
-                            } else if (itemNome.includes("tubo") || itemNome.includes("pvc") || itemNome.includes("esgoto")) {
-                              precoUltimaCompra = 34.2;
-                              menorPrecoHistorico = 31.8;
-                              sinapiRef = 35.6;
-                              fornecedorUltima = "Tigre Tubos e Conexões";
-                              obraUltima = "Atrium Bauer";
-                            } else if (itemNome.includes("areia") || itemNome.includes("brita") || itemNome.includes("agregado")) {
-                              precoUltimaCompra = 110.0;
-                              menorPrecoHistorico = 98.0;
-                              sinapiRef = 115.0;
-                              fornecedorUltima = "Mineração e Areias do Sul";
-                              obraUltima = "Horizon Tower";
-                            } else {
-                              precoUltimaCompra = (it.preco1 || 50) * 0.96;
-                              menorPrecoHistorico = (it.preco1 || 50) * 0.88;
-                              sinapiRef = (it.preco1 || 50) * 0.98;
-                              fornecedorUltima = "Distribuidor Homologado";
-                              obraUltima = "Central de Compras";
-                            }
+                              const temHistorico = comprasHistoricas.length > 0;
+                              const ultimaCompra = temHistorico ? comprasHistoricas[comprasHistoricas.length - 1] : null;
+                              const precos = comprasHistoricas.map((c) => Number(c.preco)).filter((p) => p > 0);
+                              const menorPrecoReal = precos.length > 0 ? Math.min(...precos) : 0;
+                              
+                              const precoRefBase = Number(it.preco1) || 0;
+                              const precoAlvoSugerido = menorPrecoReal > 0 
+                                ? menorPrecoReal * 0.98 
+                                : (precoRefBase > 0 ? precoRefBase * 0.95 : 0);
 
-                            const precoAlvoSugerido = menorPrecoHistorico > 0 ? menorPrecoHistorico * 1.02 : precoUltimaCompra * 0.95;
+                              return (
+                                <div
+                                  key={it.id || idx}
+                                  className="p-3 bg-slate-950/70 border border-slate-800 rounded-lg space-y-2 relative overflow-hidden"
+                                >
+                                  <div className="flex items-start justify-between gap-1.5">
+                                    <span className="font-bold text-xs text-white truncate max-w-[200px]" title={it.nome}>
+                                      {it.nome || ("Insumo #" + (idx + 1))}
+                                    </span>
+                                    <span className="text-[10px] font-mono text-cyan-300 uppercase shrink-0 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                                      {it.quantidade || 1} {it.unidade || "un"}
+                                    </span>
+                                  </div>
 
-                            return (
-                              <div
-                                key={it.id || idx}
-                                className="p-3 bg-slate-950/70 border border-slate-800 rounded-lg space-y-2 relative overflow-hidden"
-                              >
-                                <div className="flex items-start justify-between gap-1.5">
-                                  <span className="font-bold text-xs text-white truncate max-w-[200px]" title={it.nome}>
-                                    {it.nome || ("Insumo #" + (idx + 1))}
-                                  </span>
-                                  <span className="text-[10px] font-mono text-cyan-300 uppercase shrink-0 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
-                                    {it.quantidade} {it.unidade || "un"}
-                                  </span>
+                                  <div className="text-[11px] space-y-1 text-slate-300 font-mono">
+                                    <div className="flex justify-between">
+                                      <span className="text-slate-400">Última Compra JC Bauer:</span>
+                                      <strong className="text-white">
+                                        {ultimaCompra ? formatBRL(ultimaCompra.preco) : "Sem compra anterior"}
+                                      </strong>
+                                    </div>
+                                    {ultimaCompra && (
+                                      <div className="text-[10px] text-slate-400 truncate">
+                                        {ultimaCompra.fornecedor} • {ultimaCompra.obra} ({ultimaCompra.data})
+                                      </div>
+                                    )}
+
+                                    <div className="flex justify-between pt-1 border-t border-slate-800/80">
+                                      <span className="text-amber-300 font-bold">Menor já praticado:</span>
+                                      <strong className="text-emerald-400 font-black">
+                                        {menorPrecoReal > 0 ? formatBRL(menorPrecoReal) : "Primeira Cotação"}
+                                      </strong>
+                                    </div>
+
+                                    {precoRefBase > 0 && (
+                                      <div className="flex justify-between">
+                                        <span className="text-slate-400">Preço Ofertado Atual:</span>
+                                        <span className="text-slate-300">{formatBRL(precoRefBase)}</span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {precoAlvoSugerido > 0 && (
+                                    <div className="p-2 rounded bg-cyan-950/40 border border-cyan-500/30 text-[10px] text-cyan-200 flex items-center justify-between mt-1">
+                                      <span>🎯 Alvo Negociação Sugerido:</span>
+                                      <strong className="font-extrabold text-cyan-300 font-mono text-xs">
+                                        {formatBRL(precoAlvoSugerido)}
+                                      </strong>
+                                    </div>
+                                  )}
                                 </div>
-
-                                <div className="text-[11px] space-y-1 text-slate-300 font-mono">
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-400">Última compra ({dataUltimaCompra}):</span>
-                                    <strong className="text-white">{formatBRL(precoUltimaCompra)}</strong>
-                                  </div>
-                                  <div className="text-[10px] text-slate-400 truncate">
-                                    {fornecedorUltima} • {obraUltima}
-                                  </div>
-
-                                  <div className="flex justify-between pt-1 border-t border-slate-800/80">
-                                    <span className="text-amber-300 font-bold">Menor já praticado JC Bauer:</span>
-                                    <strong className="text-emerald-400 font-black">{formatBRL(menorPrecoHistorico)}</strong>
-                                  </div>
-
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-400">Referência SINAPI Oficial:</span>
-                                    <span className="text-slate-300">{formatBRL(sinapiRef)}</span>
-                                  </div>
-                                </div>
-
-                                {/* Alvo Recomendado para Negociação */}
-                                <div className="p-2 rounded bg-cyan-950/40 border border-cyan-500/30 text-[10px] text-cyan-200 flex items-center justify-between mt-1">
-                                  <span>🎯 Alvo Negociação Sugerido:</span>
-                                  <strong className="font-extrabold text-cyan-300 font-mono text-xs">
-                                    {formatBRL(precoAlvoSugerido)}
-                                  </strong>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="p-4 rounded-lg bg-slate-950/50 border border-slate-800/80 text-center text-xs text-slate-400">
+                            Nenhum insumo inserido nesta cotação no momento. Adicione os itens na tabela acima para consultar o histórico real de compras e sugestão de preço-alvo.
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
@@ -19689,6 +19651,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         onClose={() => setShowModalOnePager(false)}
         obras={obras}
         ordens={ordens}
+        solicitacoes={solicitacoes}
         fornecedores={fornecedores}
         processosCotacoes={processosCotacoes}
         settings={settings}

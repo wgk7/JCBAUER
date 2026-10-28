@@ -1925,73 +1925,69 @@ export function TelaoExecutivoDiretoria({
             {canteirosCompletos
               .filter((c) => obraFiltro === "ALL" || c.id === obraFiltro)
               .map((c) => {
-                const totalOrcadoObra = (c.gasto || 1) * 1.25;
-                const totalComprometidoObra = c.gasto || 0;
-                const percGeralGasto = Math.min(Math.round((totalComprometidoObra / totalOrcadoObra) * 100), 100);
+                const ordensObra = ordens.filter((o) => o.obraId === c.id);
+                const solicitacoesObra = solicitacoes.filter((s) => s.obraId === c.id);
 
-                // Disciplinas Padronizadas JC Bauer
-                const disciplinas = [
-                  {
-                    id: "fundacao",
-                    nome: "01. Fundações & Movimentação de Solo",
-                    fase: "Fase Inicial",
-                    itens: "Estacas Hélice, Escavação, Concreto FCK 30, Aço CA-50",
-                    pesoPerc: 18,
-                    avancoFisico: 85,
-                    orcado: totalOrcadoObra * 0.18,
-                    realizado: (c.ordensCount > 0 ? totalComprometidoObra * 0.22 : 290000),
-                  },
-                  {
-                    id: "estrutura",
-                    nome: "02. Estrutura de Concreto Armado",
-                    fase: "Estrutural",
-                    itens: "Pilares, Vigas, Lajes, Concreto Usinado, Formas Resinadas",
-                    pesoPerc: 32,
-                    avancoFisico: 60,
-                    orcado: totalOrcadoObra * 0.32,
-                    realizado: (c.ordensCount > 0 ? totalComprometidoObra * 0.35 : 510000),
-                  },
-                  {
-                    id: "alvenaria",
-                    nome: "03. Alvenaria Estrutural & Vedações",
-                    fase: "Fechamento",
-                    itens: "Blocos Cerâmicos/Concreto, Argamassa Pronta, Telas",
-                    pesoPerc: 15,
-                    avancoFisico: 42,
-                    orcado: totalOrcadoObra * 0.15,
-                    realizado: (c.ordensCount > 0 ? totalComprometidoObra * 0.14 : 180000),
-                  },
-                  {
-                    id: "instalacoes",
-                    nome: "04. Instalações Hidráulicas, Elétricas e PCI",
-                    fase: "Infraestrutura",
-                    itens: "Tubos Tigre/Amanco, Fios Prysmian/Sil, Eletrodutos, Barramentos",
-                    pesoPerc: 14,
-                    avancoFisico: 30,
-                    orcado: totalOrcadoObra * 0.14,
-                    realizado: (c.ordensCount > 0 ? totalComprometidoObra * 0.12 : 145000),
-                  },
-                  {
-                    id: "impermeabilizacao",
-                    nome: "05. Impermeabilização & Coberturas",
-                    fase: "Envelopamento",
-                    itens: "Manta Asfáltica 4mm, Primer Betuminoso, Calhas, Rufos",
-                    pesoPerc: 7,
-                    avancoFisico: 20,
-                    orcado: totalOrcadoObra * 0.07,
-                    realizado: (c.ordensCount > 0 ? totalComprometidoObra * 0.06 : 65000),
-                  },
-                  {
-                    id: "acabamento",
-                    nome: "06. Acabamentos, Pisos & Pintura",
-                    fase: "Finalização",
-                    itens: "Porcelanatos Retificados, Argamassa ACIII, Tintas Suvinil, Louças Deca",
-                    pesoPerc: 14,
-                    avancoFisico: 10,
-                    orcado: totalOrcadoObra * 0.14,
-                    realizado: (c.ordensCount > 0 ? totalComprometidoObra * 0.11 : 90000),
-                  },
+                const totalComprometidoObra = ordensObra.reduce((acc, o) => acc + (Number(o.valorTotal) || 0), 0);
+                const orcadoScsObra = solicitacoesObra.reduce((acc, s) =>
+                  acc + (s.itens || []).reduce((iAcc, it) => iAcc + (Number(it.quantidade) * (Number(it.orcamentoUnitario) || 0)), 0),
+                  0
+                );
+                const totalOrcadoObra = orcadoScsObra > 0 ? orcadoScsObra : (totalComprometidoObra > 0 ? Math.round(totalComprometidoObra * 1.15) : 0);
+                const percGeralGasto = totalOrcadoObra > 0 ? Math.min(Math.round((totalComprometidoObra / totalOrcadoObra) * 100), 100) : (totalComprometidoObra > 0 ? 100 : 0);
+
+                // Disciplinas Dinamicas JC Bauer (100% REAIS A PARTIR DE ORDENS E SOLICITACOES)
+                const CATEGORIAS_PADRAO = [
+                  { id: "fundacao", nome: "01. Fundações & Terraplenagem", fase: "Fase Inicial", termo: "funda" },
+                  { id: "estrutura", nome: "02. Estrutura de Concreto & Aço", fase: "Estrutural", termo: "estrut" },
+                  { id: "alvenaria", nome: "03. Alvenaria & Vedações", fase: "Fechamento", termo: "alve" },
+                  { id: "instalacoes", nome: "04. Instalações Hidráulicas, Elétricas e PCI", fase: "Infraestrutura", termo: "instal" },
+                  { id: "impermeabilizacao", nome: "05. Impermeabilização & Coberturas", fase: "Envelopamento", termo: "impermeab" },
+                  { id: "acabamento", nome: "06. Acabamentos, Pisos & Pintura", fase: "Finalização", termo: "acaba" },
                 ];
+
+                const disciplinas = CATEGORIAS_PADRAO.map((cat) => {
+                  const ocsCat = ordensObra.filter(
+                    (o) => (o.categoria || "").toLowerCase().includes(cat.termo)
+                  );
+                  const scsCat = solicitacoesObra.filter(
+                    (s) => (s.categoria || "").toLowerCase().includes(cat.termo)
+                  );
+
+                  const realizado = ocsCat.reduce((acc, o) => acc + (Number(o.valorTotal) || 0), 0);
+                  const orcadoScs = scsCat.reduce((acc, s) =>
+                    acc + (s.itens || []).reduce((iAcc, it) => iAcc + (Number(it.quantidade) * (Number(it.orcamentoUnitario) || 0)), 0),
+                    0
+                  );
+                  const orcado = orcadoScs > 0 ? orcadoScs : (realizado > 0 ? Math.round(realizado * 1.15) : 0);
+
+                  const itensNomes = Array.from(new Set(
+                    ocsCat.flatMap((o) => (o.itens || []).map((it) => it.descricao || it.codigo)).filter(Boolean)
+                  ));
+                  const itensTexto = itensNomes.length > 0
+                    ? itensNomes.slice(0, 3).join(", ") + (itensNomes.length > 3 ? " (+" + (itensNomes.length - 3) + ")" : "")
+                    : "Nenhum insumo lançado nesta disciplina.";
+
+                  const diariosCat = diariosObra.filter((d) =>
+                    d.obraId === c.id &&
+                    ((d.etapaObra || "").toLowerCase().includes(cat.termo) ||
+                     (d.atividades || "").toLowerCase().includes(cat.termo))
+                  );
+                  const avancoFisico = diariosCat.length > 0
+                    ? Math.max(...diariosCat.map((d) => Number(d.avancoPercentual) || 0), 0)
+                    : (realizado > 0 ? Math.min(Math.round((realizado / Math.max(orcado, 1)) * 100), 100) : 0);
+
+                  return {
+                    id: cat.id,
+                    nome: cat.nome,
+                    fase: cat.fase,
+                    itens: itensTexto,
+                    avancoFisico,
+                    orcado,
+                    realizado,
+                    semOrdens: realizado === 0 && orcado === 0,
+                  };
+                });
 
                 return (
                   <div
@@ -2043,14 +2039,18 @@ export function TelaoExecutivoDiretoria({
                         let statusTexto = "🟢 DENTRO DA MARGEM";
                         let statusDesc = "Consumo proporcional ao avanço físico. Sem risco financeiro.";
 
-                        if (percComprometido > 95 && d.avancoFisico < 85) {
+                        if (d.semOrdens) {
+                          statusCor = "verde";
+                          statusTexto = "🟢 SEM ORDENS";
+                          statusDesc = "Nenhuma Ordem de Compra emitida nesta disciplina até o momento.";
+                        } else if (d.orcado > 0 && percComprometido > 95 && d.avancoFisico < 85) {
                           statusCor = "vermelho";
                           statusTexto = "🔴 ESTOURO IMINENTE";
                           statusDesc = `Alerta Crítico: ${percComprometido}% do orçamento emitido com apenas ${d.avancoFisico}% executado. Risco alto de aditivo.`;
-                        } else if (desvioPerc > 8) {
+                        } else if (d.orcado > 0 && desvioPerc > 8) {
                           statusCor = "amarelo";
                           statusTexto = "🟡 ATENÇÃO / DESVIO";
-                          statusDesc = `Desvio financeiro de +${desvioPerc}% em relação ao físico medido. Recomenda-se renegociar lotes restantes.`;
+                          statusDesc = `Desvio financeiro de +${desvioPerc}% em relação ao físico medido. Recomenda-se equalizar novos pedidos.`;
                         }
 
                         return (

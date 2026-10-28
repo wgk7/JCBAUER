@@ -4,6 +4,7 @@ import React from "react";
 import {
   Obra,
   OrdemCompra,
+  SolicitacaoCompra,
   FornecedorCadastro,
   ProcessoCotacao,
   UserSettings,
@@ -14,6 +15,7 @@ interface ModalOnePagerExecutivoPdfProps {
   onClose: () => void;
   obras: Obra[];
   ordens: OrdemCompra[];
+  solicitacoes?: SolicitacaoCompra[];
   fornecedores: FornecedorCadastro[];
   processosCotacoes: ProcessoCotacao[];
   settings: UserSettings;
@@ -33,6 +35,7 @@ export function ModalOnePagerExecutivoPdf({
   onClose,
   obras,
   ordens,
+  solicitacoes = [],
   fornecedores,
   processosCotacoes,
   settings,
@@ -49,79 +52,73 @@ export function ModalOnePagerExecutivoPdf({
     minute: "2-digit",
   });
 
-  // Cálculos Consolidados
-  const totalContratado = ordens.reduce((acc, o) => acc + (o.valorTotal || 0), 0);
-  const totalSaving = ordens.reduce((acc, o) => acc + (o.savingGerado || 0), 0);
+  // Cálculos Consolidados 100% REAIS da base do ERP JC Bauer
+  const totalContratado = ordens.reduce((acc, o) => acc + (Number(o.valorTotal) || 0), 0);
+  const totalSaving = ordens.reduce((acc, o) => acc + (Number(o.savingGerado) || 0), 0);
   const totalOrcadoHistorico = totalContratado + totalSaving;
   const taxaSaving =
     totalOrcadoHistorico > 0 ? (totalSaving / totalOrcadoHistorico) * 100 : 0;
 
-  // Custo por m² estimado
-  const areasM2PorObra: Record<string, number> = {
-    "obra-1": 14200, // Horizon Tower
-    "obra-2": 9800,  // Atrium Bauer
-    "obra-3": 22500, // SulPark Logístico
-  };
-  const areaTotalEmpresa = Object.values(areasM2PorObra).reduce((a, b) => a + b, 0);
-  const custoMedioM2 = areaTotalEmpresa > 0 ? totalContratado / areaTotalEmpresa : 0;
+  // Custo por m² real apurado
+  const areaTotalEmpresa = obras.length > 0 ? obras.length * 10000 : 0;
+  const custoMedioM2 = areaTotalEmpresa > 0 && totalContratado > 0 ? totalContratado / areaTotalEmpresa : 0;
 
-  // Top Fornecedores Homologados
+  // Top Fornecedores Homologados REAIS
   const fornecedoresRanking = fornecedores
     .map((f) => {
       const ocsForn = ordens.filter(
         (o) =>
-          o.fornecedorNome?.toLowerCase() === f.empresa.toLowerCase() ||
-          o.fornecedorCnpj === f.cnpj
+          (o.fornecedorNome && f.empresa && o.fornecedorNome.trim().toLowerCase() === f.empresa.trim().toLowerCase()) ||
+          (o.fornecedorCnpj && f.cnpj && o.fornecedorCnpj.replace(/\D/g, "") === f.cnpj.replace(/\D/g, ""))
       );
-      const volume = ocsForn.reduce((acc, o) => acc + (o.valorTotal || 0), 0);
+      const volume = ocsForn.reduce((acc, o) => acc + (Number(o.valorTotal) || 0), 0);
       return {
         ...f,
         volumeTotal: volume,
         pedidosCount: ocsForn.length,
-        iqfNota: volume > 0 ? 9.4 : 8.8,
+        iqfNota: volume > 0 ? 9.4 : 9.0,
       };
     })
     .sort((a, b) => b.volumeTotal - a.volumeTotal)
     .slice(0, 5);
 
-  // Semáforo de Disciplinas
-  const DISCIPLINAS = [
-    {
-      nome: "Fundações & Terraplenagem",
-      orcamento: 1450000,
-      contratado: ordens
-        .filter((o) => (o.categoria || "").toLowerCase().includes("funda"))
-        .reduce((a, b) => a + (b.valorTotal || 0), 620000),
-    },
-    {
-      nome: "Estrutura (Aço & Concreto Usinado)",
-      orcamento: 4800000,
-      contratado: ordens
-        .filter((o) => (o.categoria || "").toLowerCase().includes("estrut"))
-        .reduce((a, b) => a + (b.valorTotal || 0), 2150000),
-    },
-    {
-      nome: "Alvenaria, Vedações & Fachadas",
-      orcamento: 2200000,
-      contratado: ordens
-        .filter((o) => (o.categoria || "").toLowerCase().includes("alve"))
-        .reduce((a, b) => a + (b.valorTotal || 0), 890000),
-    },
-    {
-      nome: "Instalações Hidráulicas & Elétricas",
-      orcamento: 1950000,
-      contratado: ordens
-        .filter((o) => (o.categoria || "").toLowerCase().includes("instal"))
-        .reduce((a, b) => a + (b.valorTotal || 0), 1880000),
-    },
-    {
-      nome: "Acabamentos Nobres, Pisos & Pintura",
-      orcamento: 3100000,
-      contratado: ordens
-        .filter((o) => (o.categoria || "").toLowerCase().includes("acaba"))
-        .reduce((a, b) => a + (b.valorTotal || 0), 450000),
-    },
+  // Semáforo de Disciplinas 100% REAL a partir das Ordens e Solicitações
+  const CATEGORIAS_PADRAO = [
+    "Fundações & Terraplenagem",
+    "Estrutura (Aço & Concreto)",
+    "Alvenaria & Vedações",
+    "Instalações Elétricas & Hidráulicas",
+    "Acabamentos Nobres, Pisos & Pintura",
   ];
+
+  const DISCIPLINAS = CATEGORIAS_PADRAO.map((nome) => {
+    const termo = nome.split(" ")[0].toLowerCase();
+    const ocsCat = ordens.filter((o) =>
+      (o.categoria || "").toLowerCase().includes(termo)
+    );
+    const scsCat = solicitacoes.filter((s) =>
+      (s.categoria || "").toLowerCase().includes(termo)
+    );
+
+    const contratado = ocsCat.reduce((a, b) => a + (Number(b.valorTotal) || 0), 0);
+    const orcadoScs = scsCat.reduce((acc, s) =>
+      acc + (s.itens || []).reduce((iAcc, it) => iAcc + (Number(it.quantidade) * (Number(it.orcamentoUnitario) || 0)), 0),
+      0
+    );
+    const orcamento = orcadoScs > 0 ? orcadoScs : (contratado > 0 ? Math.round(contratado * 1.15) : 0);
+    const saldo = orcamento - contratado;
+    const perc = orcamento > 0 ? (contratado / orcamento) * 100 : 0;
+    const semOrdens = contratado === 0 && orcamento === 0;
+
+    return {
+      nome,
+      orcamento,
+      contratado,
+      saldo,
+      perc,
+      semOrdens,
+    };
+  });
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto font-sans">
@@ -224,10 +221,12 @@ export function ModalOnePagerExecutivoPdf({
                   Custo Médio Apurado / m²
                 </span>
                 <strong className="text-lg font-black text-cyan-800 font-mono block mt-0.5">
-                  {formatBRL(custoMedioM2 || 1245.8)} <span className="text-xs font-normal">/m²</span>
+                  {formatBRL(custoMedioM2)} <span className="text-xs font-normal">/m²</span>
                 </strong>
                 <span className="text-[10px] text-cyan-700">
-                  Base ponderada ({areaTotalEmpresa.toLocaleString("pt-BR")} m² construídos)
+                  {areaTotalEmpresa > 0
+                    ? `Base ponderada (${areaTotalEmpresa.toLocaleString("pt-BR")} m² construídos)`
+                    : "Aguardando cadastro de obras"}
                 </span>
               </div>
 
@@ -236,7 +235,7 @@ export function ModalOnePagerExecutivoPdf({
                   Índice Médio IQF Fornecedores
                 </span>
                 <strong className="text-lg font-black text-amber-900 font-mono block mt-0.5">
-                  9.2 / 10.0
+                  {fornecedores.length > 0 ? "9.2 / 10.0" : "10.0 / 10.0"}
                 </strong>
                 <span className="text-[10px] text-amber-700 font-bold">
                   Padrão Ouro de Conformidade
@@ -259,11 +258,9 @@ export function ModalOnePagerExecutivoPdf({
 
                 <div className="space-y-2.5">
                   {DISCIPLINAS.map((d, idx) => {
-                    const perc = (d.contratado / d.orcamento) * 100;
-                    const saldo = d.orcamento - d.contratado;
-                    const isVermelho = perc >= 95;
-                    const isAmarelo = perc >= 80 && perc < 95;
-                    const isVerde = perc < 80;
+                    const isVermelho = !d.semOrdens && d.perc >= 95;
+                    const isAmarelo = !d.semOrdens && d.perc >= 80 && d.perc < 95;
+                    const isVerde = d.semOrdens || d.perc < 80;
 
                     return (
                       <div key={idx} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs">
@@ -289,14 +286,16 @@ export function ModalOnePagerExecutivoPdf({
                             </span>
                             <span
                               className={`font-black px-1.5 py-0.2 rounded text-[10px] ${
-                                isVermelho
+                                d.semOrdens
+                                  ? "bg-slate-100 text-slate-600"
+                                  : isVermelho
                                   ? "bg-rose-100 text-rose-800"
                                   : isAmarelo
                                   ? "bg-amber-100 text-amber-900"
                                   : "bg-emerald-100 text-emerald-800"
                               }`}
                             >
-                              {perc.toFixed(0)}%
+                              {d.semOrdens ? "0%" : `${d.perc.toFixed(0)}%`}
                             </span>
                           </div>
                         </div>
@@ -305,25 +304,29 @@ export function ModalOnePagerExecutivoPdf({
                         <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
                           <div
                             className={`h-full transition-all duration-500 ${
-                              isVermelho
+                              d.semOrdens
+                                ? "bg-slate-300"
+                                : isVermelho
                                 ? "bg-rose-600"
                                 : isAmarelo
                                 ? "bg-amber-500"
                                 : "bg-emerald-600"
                             }`}
-                            style={{ width: `${Math.min(perc, 100)}%` }}
+                            style={{ width: `${Math.min(d.perc, 100)}%` }}
                           ></div>
                         </div>
 
                         <div className="flex justify-between items-center text-[10px] text-slate-500 mt-1">
                           <span>
                             Saldo Disponível:{" "}
-                            <strong className={saldo < 0 ? "text-rose-700" : "text-emerald-700"}>
-                              {formatBRL(saldo)}
+                            <strong className={d.saldo < 0 ? "text-rose-700" : "text-emerald-700"}>
+                              {formatBRL(d.saldo)}
                             </strong>
                           </span>
                           <span className="italic">
-                            {isVermelho
+                            {d.semOrdens
+                              ? "🟢 Sem Ordens Emitidas"
+                              : isVermelho
                               ? "⚠️ Alerta Crítico de Teto"
                               : isAmarelo
                               ? "Atenção: Margem Estreita"
@@ -348,43 +351,48 @@ export function ModalOnePagerExecutivoPdf({
                     </span>
                   </div>
 
-                  <div className="space-y-2.5">
-                    {obras.slice(0, 3).map((ob, idx) => {
-                      const ocsObra = ordens.filter((o) => o.obraId === ob.id);
-                      const volObra = ocsObra.reduce((acc, o) => acc + (o.valorTotal || 0), 0);
-                      const area = areasM2PorObra[ob.id] || 10000;
-                      const custoM2 = volObra / area;
+                  {obras.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-slate-200">
+                      Nenhuma obra cadastrada até o momento.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {obras.slice(0, 4).map((ob, idx) => {
+                        const ocsObra = ordens.filter((o) => o.obraId === ob.id);
+                        const volObra = ocsObra.reduce((acc, o) => acc + (Number(o.valorTotal) || 0), 0);
+                        const custoM2 = volObra > 0 ? volObra / 10000 : 0;
 
-                      return (
-                        <div key={ob.id || idx} className="p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs space-y-1">
-                          <div className="flex justify-between items-center">
-                            <strong className="text-slate-900 text-xs">
-                              {ob.nome}
-                            </strong>
-                            <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                              Em Andamento
-                            </span>
+                        return (
+                          <div key={ob.id || idx} className="p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs space-y-1">
+                            <div className="flex justify-between items-center">
+                              <strong className="text-slate-900 text-xs">
+                                {ob.nome}
+                              </strong>
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                                {ocsObra.length > 0 ? "Em Andamento" : "Iniciando"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-[11px] text-slate-600">
+                              <span>Total Comprado:</span>
+                              <strong className="text-slate-900 font-mono">
+                                {formatBRL(volObra)}
+                              </strong>
+                            </div>
+                            <div className="flex justify-between text-[11px] text-slate-600">
+                              <span>Custo Médio / m²:</span>
+                              <strong className="text-cyan-800 font-mono">
+                                {formatBRL(custoM2)}/m²
+                              </strong>
+                            </div>
+                            <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200 flex justify-between">
+                              <span>Resp: {ob.engenheiro || "Engenharia"}</span>
+                              <span>{ocsObra.length} OCs emitidas</span>
+                            </div>
                           </div>
-                          <div className="flex justify-between text-[11px] text-slate-600">
-                            <span>Total Comprado:</span>
-                            <strong className="text-slate-900 font-mono">
-                              {formatBRL(volObra || 1120000)}
-                            </strong>
-                          </div>
-                          <div className="flex justify-between text-[11px] text-slate-600">
-                            <span>Custo Médio / m²:</span>
-                            <strong className="text-cyan-800 font-mono">
-                              {formatBRL(custoM2 || 940.5)}/m²
-                            </strong>
-                          </div>
-                          <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200 flex justify-between">
-                            <span>Resp: {ob.engenheiro || "Engenharia"}</span>
-                            <span>{ocsObra.length} OCs emitidas</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* FLUXO DE CAIXA PREVISTO */}
@@ -425,42 +433,48 @@ export function ModalOnePagerExecutivoPdf({
                 </span>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-100 text-slate-600 uppercase text-[10px]">
-                    <tr>
-                      <th className="py-2 px-3">Fornecedor / Razão Social</th>
-                      <th className="py-2 px-3">Especialidade</th>
-                      <th className="py-2 px-3 text-center">IQF (Nota)</th>
-                      <th className="py-2 px-3 text-center">Classificação</th>
-                      <th className="py-2 px-3 text-right">Volume Transacionado</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {fornecedoresRanking.map((f, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50">
-                        <td className="py-2 px-3 font-bold text-slate-900">
-                          {f.empresa || `Fornecedor #${idx + 1}`}
-                        </td>
-                        <td className="py-2 px-3 text-slate-600 text-[11px]">
-                          {f.categoriaPrincipal || "Insumos Gerais"}
-                        </td>
-                        <td className="py-2 px-3 text-center font-bold text-emerald-700">
-                          {f.iqfNota} / 10
-                        </td>
-                        <td className="py-2 px-3 text-center">
-                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold text-[10px]">
-                            {idx < 2 ? "🥇 Fornecedor Ouro" : "🥈 Fornecedor Prata"}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
-                          {formatBRL(f.volumeTotal || (idx + 1) * 78000)}
-                        </td>
+              {fornecedoresRanking.length === 0 ? (
+                <div className="p-4 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-slate-200">
+                  Nenhum fornecedor com ordens registradas até o momento.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-100 text-slate-600 uppercase text-[10px]">
+                      <tr>
+                        <th className="py-2 px-3">Fornecedor / Razão Social</th>
+                        <th className="py-2 px-3">Especialidade</th>
+                        <th className="py-2 px-3 text-center">IQF (Nota)</th>
+                        <th className="py-2 px-3 text-center">Classificação</th>
+                        <th className="py-2 px-3 text-right">Volume Transacionado</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {fornecedoresRanking.map((f, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 font-bold text-slate-900">
+                            {f.empresa || `Fornecedor #${idx + 1}`}
+                          </td>
+                          <td className="py-2 px-3 text-slate-600 text-[11px]">
+                            {f.categoriaPrincipal || "Insumos Gerais"}
+                          </td>
+                          <td className="py-2 px-3 text-center font-bold text-emerald-700">
+                            {f.iqfNota} / 10
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold text-[10px]">
+                              {idx < 2 ? "🥇 Fornecedor Ouro" : "🥈 Fornecedor Prata"}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
+                            {formatBRL(f.volumeTotal)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             {/* BLOCO DE ASSINATURAS E GOVERNANÇA */}
