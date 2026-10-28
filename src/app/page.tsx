@@ -13734,7 +13734,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           </div>
                           <span className="text-[11px] font-mono text-cyan-300 font-bold bg-slate-800/80 px-2.5 py-1 rounded-lg border border-cyan-500/30">
                             {comparativoItens && comparativoItens.length > 0
-                              ? ${comparativoItens.length} Insumos da Cotação Atual
+                              ? `${comparativoItens.length} Insumos da Cotação Atual`
                               : "6 Insumos de Referência Ativos"}
                           </span>
                         </div>
