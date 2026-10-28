@@ -13798,7 +13798,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                               >
                                 <div className="flex items-start justify-between gap-1.5">
                                   <span className="font-bold text-xs text-white truncate max-w-[200px]" title={it.nome}>
-                                    {it.nome || Insumo #}
+                                    {it.nome || ("Insumo #" + (idx + 1))}
                                   </span>
                                   <span className="text-[10px] font-mono text-cyan-300 uppercase shrink-0 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
                                     {it.quantidade} {it.unidade || "un"}
