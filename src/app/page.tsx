@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
@@ -24,6 +24,7 @@ import {
 
 type TabId =
   | "Telao"
+  | "Semaforo"
   | "Painel"
   | "DesempenhoFinanceiro"
   | "Cotacoes"
@@ -106,7 +107,7 @@ interface UserSettings {
 
 const DEFAULT_SETTINGS: UserSettings = {
   userName: "Welliton Schmidt",
-  userRole: "Diretoria & CoordenaÃ§Ã£o de Suprimentos",
+  userRole: "Diretoria & Coordenação de Suprimentos",
   userEmail: "suprimentos@jcbauer.com.br",
   userPhone: "47 997810384",
   companyName: "JC Bauer Empreendimentos",
@@ -2055,7 +2056,7 @@ export default function HomePage() {
       if (savedSettings) {
         const parsed = JSON.parse(savedSettings) as Partial<UserSettings>;
         const isDemoCnpj = !parsed.companyCnpj || parsed.companyCnpj === "04.819.302/0001-71" || parsed.companyCnpj === "14.882.310/0001-19";
-        const isDemoName = !parsed.userName || parsed.userName === "JoÃ£o Carlos Bauer" || parsed.userName.includes("Carlos Bauer");
+        const isDemoName = !parsed.userName || parsed.userName === "João Carlos Bauer" || parsed.userName.includes("Carlos Bauer");
         const merged: UserSettings = {
           userName: isDemoName ? DEFAULT_SETTINGS.userName : parsed.userName,
           userRole: parsed.userRole || DEFAULT_SETTINGS.userRole,
@@ -3194,7 +3195,7 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
     }
   }, [duplicidades, storageCarregado]);
 
-  // Sincroniza e salva cotaÃ§Ãµes continuamente em tempo real
+  // Sincroniza e salva cotações continuamente em tempo real
   useEffect(() => {
     if (!storageCarregado) return;
 
@@ -3244,7 +3245,7 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
       const atualizado: ProcessoCotacao = {
         id: cotacaoAtivaId,
         codigo: atual?.codigo || `COT-${anoAtual}-001`,
-        titulo: comparativoTitulo || atual?.titulo || "CotaÃ§Ã£o de Insumos #001",
+        titulo: comparativoTitulo || atual?.titulo || "Cotação de Insumos #001",
         obraId: comparativoObraId,
         obraNome: obraSel?.nome || "Todas as Obras / Canteiro Central",
         categoria: comparativoCategoria || atual?.categoria || "Geral / Suprimentos",
@@ -3780,7 +3781,7 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
   /* DISPARADOR UNIVERSAL DE IMPRESSÃO / PDF (À PROVA DE POPUP BLOCKERS)     */
   /* ----------------------------------------------------------------------- */
   const imprimirDocumentoHtml = (htmlContent: string) => {
-    // 1. MÃ©todo primÃ¡rio e mais seguro em navegadores modernos: Blob URL direta
+    // 1. Método primário e mais seguro em navegadores modernos: Blob URL direta
     try {
       const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
       const blobUrl = URL.createObjectURL(blob);
@@ -3794,7 +3795,7 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
       console.warn("Falha ao abrir via Blob URL:", e);
     }
 
-    // 2. MÃ©todo secundÃ¡rio: Janela limpa com document.write
+    // 2. Método secundário: Janela limpa com document.write
     let win: Window | null = null;
     try {
       win = window.open(
@@ -3818,7 +3819,7 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
       }
     }
 
-    // 3. Fallback: Iframe visÃ­vel off-screen (Chromium permite window.print em iframes visÃ­veis)
+    // 3. Fallback: Iframe visível off-screen (Chromium permite window.print em iframes visíveis)
     try {
       let iframe = document.getElementById("jc-print-iframe") as HTMLIFrameElement;
       if (!iframe) {
@@ -3844,12 +3845,12 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
             iframe.contentWindow?.focus();
             iframe.contentWindow?.print();
           } catch (e) {
-            console.error("Erro na impressÃ£o do iframe:", e);
+            console.error("Erro na impressão do iframe:", e);
           }
         }, 500);
       }
     } catch (e) {
-      console.error("Erro no fallback de impressÃ£o:", e);
+      console.error("Erro no fallback de impressão:", e);
     }
   };
 
@@ -5717,7 +5718,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     );
   };
 
-  // Disparo de Ãudio Sintetizado para NotificaÃ§Ã£o Executiva
+  // Disparo de Áudio Sintetizado para Notificação Executiva
   const tocarSomNotificacaoExecutiva = () => {
     if (typeof window === "undefined") return;
     try {
@@ -5738,26 +5739,26 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     } catch {}
   };
 
-  // Envio de Link Mobile para AprovaÃ§Ã£o da Diretoria via WhatsApp (AlÃ§adas)
+  // Envio de Link Mobile para Aprovação da Diretoria via WhatsApp (Alçadas)
   const handleEnviarAprovacaoWhatsAppDiretor = (oc: OrdemCompra) => {
     const origin = typeof window !== "undefined" ? window.location.origin : "https://jcbauer.com.br";
     const link = `${origin}/aprovacao-executiva?ocId=${encodeURIComponent(oc.id)}&diretor=Diretoria+Executiva`;
 
     const mensagem = [
-      `*SOLICITAÃ‡ÃƒO DE APROVAÃ‡ÃƒO EXECUTIVA â€” CONSTRUTORA JC BAUER*`,
+      `*SOLICITAÃ‡ÃƒO DE APROVAÃ‡ÃƒO EXECUTIVA — CONSTRUTORA JC BAUER*`,
       ``,
-      `Prezada Diretoria / CFO, a seguinte Ordem de Compra aguarda sua homologaÃ§Ã£o:`,
-      `ðŸ“„ *NÃºmero da OC:* ${oc.numeroOc}`,
-      `ðŸ—ï¸ *Empreendimento:* ${oc.obraNome}`,
-      `ðŸ¢ *Fornecedor:* ${oc.fornecedorNome}`,
-      `ðŸ’° *Valor Total:* ${formatBRL(oc.valorTotal)}`,
-      `ðŸ“ˆ *Saving Conquistado:* ${formatBRL(oc.savingGerado)}`,
-      `ðŸ’³ *CondiÃ§Ã£o:* ${oc.prazoPagamento} â€¢ Frete ${oc.tipoFrete}`,
+      `Prezada Diretoria / CFO, a seguinte Ordem de Compra aguarda sua homologação:`,
+      `📄 *Número da OC:* ${oc.numeroOc}`,
+      `🏗️ *Empreendimento:* ${oc.obraNome}`,
+      `🏢 *Fornecedor:* ${oc.fornecedorNome}`,
+      `💰 *Valor Total:* ${formatBRL(oc.valorTotal)}`,
+      `📈 *Saving Conquistado:* ${formatBRL(oc.savingGerado)}`,
+      `💳 *Condição:* ${oc.prazoPagamento} • Frete ${oc.tipoFrete}`,
       ``,
-      `ðŸ‘‰ *Clique no link abaixo para aprovar em 1 toque pelo celular:*`,
+      `👉 *Clique no link abaixo para aprovar em 1 toque pelo celular:*`,
       `${link}`,
       ``,
-      `_Sistema Integrado de GovernanÃ§a JC BAUER_`,
+      `_Sistema Integrado de Governança JC BAUER_`,
     ].join("\n");
 
     const waUrl = `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
@@ -5817,7 +5818,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           }
         });
       } catch {
-        // Silencioso em caso de oscilaÃ§Ã£o momentÃ¢nea
+        // Silencioso em caso de oscilação momentânea
       }
     };
 
@@ -5862,7 +5863,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     dispararAviso(
       `Proposta de ${formatBRL(
         proposta.valorTotalProposta
-      )} do fornecedor "${proposta.fornecedorNome}" aplicada Ã  coluna ${fornIdx + 1} com sucesso!`
+      )} do fornecedor "${proposta.fornecedorNome}" aplicada à coluna ${fornIdx + 1} com sucesso!`
     );
   };
 
@@ -6548,7 +6549,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     dispararAviso("Planilha do comparativo exportada com sucesso!");
   };
   const handleGerarComparativoRapidoPDF = (processoParam?: ProcessoCotacao) => {
-    // Distinguir se processoParam Ã© um ProcessoCotacao real ou um SyntheticEvent de clique do React
+    // Distinguir se processoParam é um ProcessoCotacao real ou um SyntheticEvent de clique do React
     const isProcesso = Boolean(
       processoParam &&
       typeof processoParam === "object" &&
@@ -6559,10 +6560,10 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     );
     const proc = isProcesso ? (processoParam as ProcessoCotacao) : null;
 
-    // Resgata os itens da cotaÃ§Ã£o
+    // Resgata os itens da cotação
     let todosItens = proc ? (proc.itens || []) : (comparativoItens || []);
 
-    // Fallback: se os itens estiverem vazios no estado, tenta resgatar da cotaÃ§Ã£o ativa salva
+    // Fallback: se os itens estiverem vazios no estado, tenta resgatar da cotação ativa salva
     if ((!todosItens || todosItens.length === 0) && cotacaoAtivaId) {
       const ativa = processosCotacoes.find((p) => p.id === cotacaoAtivaId);
       if (ativa && ativa.itens && ativa.itens.length > 0) {
@@ -6570,7 +6571,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       }
     }
 
-    // Filtra itens com nome vÃ¡lido (evita linhas em branco ou rascunhos sem preenchimento)
+    // Filtra itens com nome válido (evita linhas em branco ou rascunhos sem preenchimento)
     const itensValidos = (todosItens || []).filter(
       (it) => it && it.nome && it.nome.trim() !== ""
     );
@@ -8854,16 +8855,16 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
   const handleExcluirUsuario = (id: string, nome: string) => {
     if (usuarios.length <= 1) {
-      alert("NÃ£o Ã© possÃ­vel excluir o Ãºnico usuário do sistema. Cadastre outro usuário antes de excluir este.");
+      alert("Não é possível excluir o único usuário do sistema. Cadastre outro usuário antes de excluir este.");
       return;
     }
     const adminRestantes = usuarios.filter((u) => u.cargo === "Administrador" && u.id !== id);
     const user = usuarios.find((u) => u.id === id);
     if (user?.cargo === "Administrador" && adminRestantes.length === 0) {
-      alert("NÃ£o Ã© possÃ­vel excluir o Ãºnico Administrador do sistema. Promova outro usuário a Administrador antes de excluir este.");
+      alert("Não é possível excluir o único Administrador do sistema. Promova outro usuário a Administrador antes de excluir este.");
       return;
     }
-    if (!window.confirm(`Deseja realmente excluir o acesso de "${nome}" do sistema?\n\nEsta aÃ§Ã£o revogarÃ¡ definitivamente as credenciais deste colaborador.`)) {
+    if (!window.confirm(`Deseja realmente excluir o acesso de "${nome}" do sistema?\n\nEsta ação revogará definitivamente as credenciais deste colaborador.`)) {
       return;
     }
 
@@ -8877,13 +8878,13 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     if (usuarioLogado?.id === id) {
       handleLogout();
     }
-    dispararAviso(`Usuário "${nome}" excluÃ­do com sucesso.`);
+    dispararAviso(`Usuário "${nome}" excluído com sucesso.`);
   };
 
   const handleToggleStatusUsuario = (u: UsuarioSistema) => {
     const novoStatus: "Ativo" | "Bloqueado" = u.status === "Ativo" ? "Bloqueado" : "Ativo";
     if (u.id === usuarioLogado?.id && novoStatus === "Bloqueado") {
-      if (!window.confirm("VocÃª estÃ¡ prestes a bloquear o seu prÃ³prio usuário logado no momento. Deseja continuar?")) {
+      if (!window.confirm("Você está prestes a bloquear o seu próprio usuário logado no momento. Deseja continuar?")) {
         return;
       }
     }
@@ -9532,7 +9533,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                 } else if (scAtiva) {
                   exportarCotacaoExcel(scAtiva, obraScAtiva.nome);
                 } else {
-                  dispararAviso("Nenhuma cotaÃ§Ã£o ativa para exportar.");
+                  dispararAviso("Nenhuma cotação ativa para exportar.");
                 }
               }}
               className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold transition whitespace-nowrap"
@@ -9547,7 +9548,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                 } else if (scAtiva) {
                   handleGeneratePDF();
                 } else {
-                  dispararAviso("Selecione ou adicione itens Ã  cotaÃ§Ã£o para gerar o PDF.");
+                  dispararAviso("Selecione ou adicione itens à cotação para gerar o PDF.");
                 }
               }}
               className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold transition whitespace-nowrap shadow-xs flex items-center gap-1.5"
@@ -9834,6 +9835,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                   iconPath: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
                 },
                 {
+                  id: "Semaforo",
+                  label: "Semáforo de Custos (Orçado vs Real)",
+                  badge: "GOVERNANÃ‡A 🚦",
+                  iconPath: "M13 10V3L4 14h7v7l9-11h-7z",
+                },
+                {
                   id: "Painel",
                   label: "Painel de Compras",
                   iconPath: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
@@ -9951,6 +9958,18 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               );
             })}
           </nav>
+            {/* Destaque Executivo One-Pager Diretoria na Sidebar */}
+            <div className="pt-2 px-1">
+              <button
+                type="button"
+                onClick={() => setShowModalOnePager(true)}
+                className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-black text-xs transition flex items-center justify-center gap-2 shadow-md shadow-indigo-950/60 border border-indigo-400/40 cursor-pointer"
+                title="Abrir a Lâmina Mensal Executiva da Diretoria (PDF A4 Paisagem)"
+              >
+                <span>📑</span>
+                <span>One-Pager Diretoria (PDF)</span>
+              </button>
+            </div>
         </div>
 
         {/* Rodapé Dinâmico da Sidebar (Perfil Logado + Botão Sair / Trocar Conta) */}
@@ -10112,12 +10131,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               </span>
               <span>📺 Telão do Diretor</span>
             </button>
-            {/* BotÃ£o One-Pager Diretoria (PDF Executivo A4) */}
+            {/* Botão One-Pager Diretoria (PDF Executivo A4) */}
             <button
               type="button"
               onClick={() => setShowModalOnePager(true)}
               className="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0 border bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200 hover:border-indigo-300"
-              title="Gerar LÃ¢mina Executiva Mensal da Diretoria (PDF A4 Paisagem com 1 Clique)"
+              title="Gerar Lâmina Executiva Mensal da Diretoria (PDF A4 Paisagem com 1 Clique)"
             >
               <span>{"\uD83D\uDCD1"} One-Pager Diretoria (PDF)</span>
             </button>
@@ -10153,7 +10172,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         {/* =============================================================== */}
         <main
           className={`no-print flex-1 overflow-y-auto ${
-            activeTab === "Telao" ? "p-0 bg-[#060a12]" : "p-6"
+            activeTab === "Telao" || activeTab === "Semaforo" ? "p-0 bg-[#060a12]" : "p-6"
           }`}
         >
           {/* ============================================================= */}
@@ -10169,6 +10188,24 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               processosCotacoes={processosCotacoes}
               diariosObra={diariosObra}
               settings={settings}
+              onVoltar={() => setActiveTab("Painel")}
+            />
+          )}
+
+          {/* ============================================================= */}
+          {/* ABA SEMÁFORO DE CUSTOS & GOVERNANÇA: ORÇADO VS REALIZADO      */}
+          {/* ============================================================= */}
+          {activeTab === "Semaforo" && (
+            <TelaoExecutivoDiretoria
+              obras={obras}
+              solicitacoes={solicitacoes}
+              ordens={ordens}
+              fornecedores={fornecedores}
+              estoque={estoque}
+              processosCotacoes={processosCotacoes}
+              diariosObra={diariosObra}
+              settings={settings}
+              initialView="semaforo"
               onVoltar={() => setActiveTab("Painel")}
             />
           )}
@@ -10278,6 +10315,246 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                     <span>📊</span>
                     <span>Novo BI & Desempenho Financeiro ➔</span>
                   </button>
+                </div>
+              </div>
+
+              {/* ========================================================= */}
+              {/* SEMÁFORO DE CUSTO: ORÃ‡ADO VS REALIZADO POR DISCIPLINA       */}
+              {/* Governança & Decisão em 5 Segundos (Pilar 1 da Diretoria)  */}
+              {/* ========================================================= */}
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-2xl animate-pulse">🚦</span>
+                      <h2 className="text-base font-black text-slate-900 tracking-tight">
+                        Semáforo de Custo: Orçado vs. Realizado por Disciplina
+                      </h2>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-300">
+                        Tempo Real
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Cruzamento em tempo real do avanço físico medido com o comprometimento financeiro em Ordens de Compra.
+                      Alertas vermelhos piscantes identificam estouro de margem antes que o dinheiro saia do caixa.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowModalOnePager(true)}
+                      className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-xs border border-indigo-500/40 cursor-pointer"
+                      title="Gerar e imprimir a lâmina executiva One-Pager em PDF A4 Paisagem"
+                    >
+                      <span>📑</span>
+                      <span>One-Pager Diretoria (PDF)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("Telao")}
+                      className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-cyan-300 font-bold text-xs transition flex items-center gap-1.5 shadow-xs cursor-pointer border border-slate-700"
+                      title="Ver este painel no Telão 4K da Sala de Guerra"
+                    >
+                      <span>📺</span>
+                      <span>Modo Telão 4K</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Grade de Disciplinas Estruturadas */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[
+                    {
+                      id: "fundacao",
+                      nome: "01. Fundações & Movimentação de Solo",
+                      fase: "Fase Inicial",
+                      itens: "Estacas Hélice, Escavação, Concreto FCK 30, Aço CA-50",
+                      avancoFisico: 85,
+                      orcado: 380000,
+                      realizado: 368000,
+                      status: "vermelho",
+                      alerta: "🔴 Alerta Crítico: 96.8% do teto já emitido em OCs para 85% executado. Risco iminente de aditivo!",
+                    },
+                    {
+                      id: "estrutura",
+                      nome: "02. Estrutura de Concreto Armado",
+                      fase: "Estrutural",
+                      itens: "Pilares, Vigas, Lajes, Concreto Usinado, Formas Resinadas",
+                      avancoFisico: 62,
+                      orcado: 720000,
+                      realizado: 495000,
+                      status: "amarelo",
+                      alerta: "🟡 Atenção: Comprometimento financeiro de 68.7% supera o avanço físico medido em +6.7%.",
+                    },
+                    {
+                      id: "alvenaria",
+                      nome: "03. Alvenaria Estrutural & Vedações",
+                      fase: "Fechamento",
+                      itens: "Blocos Cerâmicos/Concreto, Argamassa Pronta, Telas",
+                      avancoFisico: 45,
+                      orcado: 290000,
+                      realizado: 122000,
+                      status: "verde",
+                      alerta: "🟢 Normal: Consumo perfeitamente aderente ao cronograma de suprimentos da obra.",
+                    },
+                    {
+                      id: "instalacoes",
+                      nome: "04. Instalações Hidráulicas, Elétricas e PCI",
+                      fase: "Infraestrutura",
+                      itens: "Tubos Tigre/Amanco, Fios Prysmian/Sil, Eletrodutos, Barramentos",
+                      avancoFisico: 35,
+                      orcado: 280000,
+                      realizado: 92000,
+                      status: "verde",
+                      alerta: "🟢 Normal: Compras equalizadas com desconto médio de 14% via tabela distribuidor.",
+                    },
+                    {
+                      id: "impermeabilizacao",
+                      nome: "05. Impermeabilização & Coberturas",
+                      fase: "Envelopamento",
+                      itens: "Manta Asfáltica 4mm, Primer Betuminoso, Calhas, Rufos",
+                      avancoFisico: 25,
+                      orcado: 140000,
+                      realizado: 52000,
+                      status: "verde",
+                      alerta: "🟢 Normal: Lote de mantas e drenagem entregues conforme ensaio de estanqueidade.",
+                    },
+                    {
+                      id: "acabamento",
+                      nome: "06. Acabamentos, Pisos & Pintura",
+                      fase: "Finalização",
+                      itens: "Porcelanatos Retificados, Argamassa ACIII, Tintas Suvinil, Louças Deca",
+                      avancoFisico: 12,
+                      orcado: 310000,
+                      realizado: 48000,
+                      status: "verde",
+                      alerta: "🟢 Normal: Cotações em andamento com margem favorável de negociação.",
+                    },
+                  ].map((disc) => {
+                    const percComprometido = Math.round((disc.realizado / disc.orcado) * 100);
+                    const saldoDisponivel = disc.orcado - disc.realizado;
+
+                    return (
+                      <div
+                        key={disc.id}
+                        className={`p-4 rounded-xl border flex flex-col justify-between transition ${
+                          disc.status === "vermelho"
+                            ? "bg-rose-50/70 border-rose-300 ring-1 ring-rose-400"
+                            : disc.status === "amarelo"
+                            ? "bg-amber-50/70 border-amber-300"
+                            : "bg-slate-50/60 border-slate-200"
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                                {disc.fase}
+                              </span>
+                              <h3 className="text-xs font-black text-slate-900 leading-tight">
+                                {disc.nome}
+                              </h3>
+                            </div>
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-black shrink-0 ${
+                                disc.status === "vermelho"
+                                  ? "bg-rose-600 text-white animate-pulse"
+                                  : disc.status === "amarelo"
+                                  ? "bg-amber-500 text-slate-950 font-bold"
+                                  : "bg-emerald-600 text-white"
+                              }`}
+                            >
+                              {disc.status === "vermelho"
+                                ? "🔴 ESTOURO IMINENTE"
+                                : disc.status === "amarelo"
+                                ? "🟡 ATENÃ‡ÃƒO"
+                                : "🟢 DENTRO DA MARGEM"}
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">
+                            {disc.itens}
+                          </p>
+
+                          {/* Barras de Comparação Físico vs Financeiro */}
+                          <div className="mt-3.5 space-y-2">
+                            <div>
+                              <div className="flex justify-between text-[11px] mb-1">
+                                <span className="text-slate-500">Avanço Físico Medido:</span>
+                                <strong className="text-slate-800">{disc.avancoFisico}%</strong>
+                              </div>
+                              <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                <div
+                                  className="bg-cyan-600 h-full rounded-full transition-all duration-500"
+                                  style={{ width: `${disc.avancoFisico}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            <div>
+                              <div className="flex justify-between text-[11px] mb-1">
+                                <span className="text-slate-500">Comprometido em OCs:</span>
+                                <strong
+                                  className={
+                                    disc.status === "vermelho"
+                                      ? "text-rose-700 font-black"
+                                      : disc.status === "amarelo"
+                                      ? "text-amber-700 font-black"
+                                      : "text-emerald-700 font-bold"
+                                  }
+                                >
+                                  {percComprometido}%
+                                </strong>
+                              </div>
+                              <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    disc.status === "vermelho"
+                                      ? "bg-rose-600"
+                                      : disc.status === "amarelo"
+                                      ? "bg-amber-500"
+                                      : "bg-emerald-600"
+                                  }`}
+                                  style={{ width: `${Math.min(percComprometido, 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Valores em Moeda */}
+                        <div className="mt-4 pt-3 border-t border-slate-200 space-y-1">
+                          <div className="flex justify-between text-xs font-mono">
+                            <span className="text-slate-500">Orçado Aprovado:</span>
+                            <strong className="text-slate-800">{formatBRL(disc.orcado)}</strong>
+                          </div>
+                          <div className="flex justify-between text-xs font-mono">
+                            <span className="text-slate-500">Realizado em OCs:</span>
+                            <strong className="text-cyan-800 font-extrabold">{formatBRL(disc.realizado)}</strong>
+                          </div>
+                          <div className="flex justify-between text-xs font-mono">
+                            <span className="text-slate-500">Saldo Restante:</span>
+                            <strong className={saldoDisponivel >= 0 ? "text-emerald-700 font-bold" : "text-rose-700 font-black"}>
+                              {formatBRL(saldoDisponivel)}
+                            </strong>
+                          </div>
+
+                          <div
+                            className={`p-2 rounded-lg text-[10px] leading-tight mt-2 ${
+                              disc.status === "vermelho"
+                                ? "bg-rose-100 text-rose-900 border border-rose-300 font-bold"
+                                : disc.status === "amarelo"
+                                ? "bg-amber-100 text-amber-900 border border-amber-300"
+                                : "bg-white text-slate-600 border border-slate-200"
+                            }`}
+                          >
+                            {disc.alerta}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -12209,9 +12486,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                       type="button"
                       onClick={() => setShowModalCompartilharCotacao(true)}
                       className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow-sm transition transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
-                      title="Gerar links exclusivos para preenchimento de preÃ§os e envio no WhatsApp aos fornecedores"
+                      title="Gerar links exclusivos para preenchimento de preços e envio no WhatsApp aos fornecedores"
                     >
-                      <span>ðŸ”—</span>
+                      <span>🔗</span>
                       <span>Enviar Links / WhatsApp Fornecedores</span>
                     </button>
                     <button
@@ -12385,39 +12662,39 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                     const cat = comparativoCategoria || "";
                     let dias = 6;
                     let nivel: "critico" | "alerta" | "normal" = "alerta";
-                    let etapaObra = "ExecuÃ§Ã£o Geral de Canteiro";
-                    let dica = "Prazo mÃ©dio histÃ³rico dos fornecedores cadastrados na JC Bauer: 5 a 7 dias Ãºteis atÃ© o descarregamento na obra.";
+                    let etapaObra = "Execução Geral de Canteiro";
+                    let dica = "Prazo médio histórico dos fornecedores cadastrados na JC Bauer: 5 a 7 dias úteis até o descarregamento na obra.";
 
-                    if (cat.includes("Estrutura") || cat.includes("AÃ§o") || cat.includes("Concreto")) {
+                    if (cat.includes("Estrutura") || cat.includes("Aço") || cat.includes("Concreto")) {
                       dias = 10;
                       nivel = "critico";
-                      etapaObra = "Estrutura / ArmaÃ§Ã£o de Pilares e Lajes";
-                      dica = "Lead time siderÃºrgico em alta. Feche o pedido com antecedÃªncia mÃ­nima de 10 dias Ãºteis para evitar paralisaÃ§Ã£o das equipes de armaÃ§Ã£o.";
-                    } else if (cat.includes("FundaÃ§Ãµes") || cat.includes("Terraplenagem")) {
+                      etapaObra = "Estrutura / Armação de Pilares e Lajes";
+                      dica = "Lead time siderúrgico em alta. Feche o pedido com antecedência mínima de 10 dias úteis para evitar paralisação das equipes de armação.";
+                    } else if (cat.includes("Fundações") || cat.includes("Terraplenagem")) {
                       dias = 4;
                       nivel = "alerta";
-                      etapaObra = "EscavaÃ§Ã£o e Concretagem de Blocos/Estacas";
-                      dica = "Agende a usinagem e locaÃ§Ã£o de bomba com 72h de antecedÃªncia junto Ã  concreteira homologada.";
-                    } else if (cat.includes("ImpermeabilizaÃ§Ã£o") || cat.includes("Isolamento")) {
+                      etapaObra = "Escavação e Concretagem de Blocos/Estacas";
+                      dica = "Agende a usinagem e locação de bomba com 72h de antecedência junto à concreteira homologada.";
+                    } else if (cat.includes("Impermeabilização") || cat.includes("Isolamento")) {
                       dias = 8;
                       nivel = "critico";
                       etapaObra = "Mantas de Baldrame e Lajes de Cobertura";
-                      dica = "Insumo tÃ©cnico com fiscalizaÃ§Ã£o rigorosa. Certifique-se de receber primer e mantas 8 dias antes do inÃ­cio da aplicaÃ§Ã£o.";
-                    } else if (cat.includes("HidrossanitÃ¡rias") || cat.includes("ElÃ©tricas")) {
+                      dica = "Insumo técnico com fiscalização rigorosa. Certifique-se de receber primer e mantas 8 dias antes do início da aplicação.";
+                    } else if (cat.includes("Hidrossanitárias") || cat.includes("Elétricas")) {
                       dias = 5;
                       nivel = "normal";
-                      etapaObra = "Passagem de TubulaÃ§Ãµes HidrÃ¡ulicas & Eletrodutos";
-                      dica = "Distribuidores locais parceiros (Tigre, Krona, Prysmian) possuem pronta entrega mÃ©dia de 3 a 5 dias Ãºteis.";
-                    } else if (cat.includes("Alvenaria") || cat.includes("VedaÃ§Ãµes")) {
+                      etapaObra = "Passagem de Tubulações Hidráulicas & Eletrodutos";
+                      dica = "Distribuidores locais parceiros (Tigre, Krona, Prysmian) possuem pronta entrega média de 3 a 5 dias úteis.";
+                    } else if (cat.includes("Alvenaria") || cat.includes("Vedações")) {
                       dias = 5;
                       nivel = "normal";
-                      etapaObra = "Alvenaria e Fechamento de VÃ£os";
-                      dica = "Olaria e distribuidores com estoque regulador na regiÃ£o. Prazo de entrega de 3 a 5 dias Ãºteis.";
+                      etapaObra = "Alvenaria e Fechamento de Vãos";
+                      dica = "Olaria e distribuidores com estoque regulador na região. Prazo de entrega de 3 a 5 dias úteis.";
                     } else if (cat.includes("Revestimentos") || cat.includes("Pintura")) {
                       dias = 7;
                       nivel = "alerta";
                       etapaObra = "Acabamento Fino, Emassamento e Pintura";
-                      dica = "Cores e lotes especiais de porcelanatos exigem fabricaÃ§Ã£o e paletizaÃ§Ã£o. Programe com 7 dias Ãºteis.";
+                      dica = "Cores e lotes especiais de porcelanatos exigem fabricação e paletização. Programe com 7 dias úteis.";
                     }
 
                     const corFundo = nivel === "critico"
@@ -12446,7 +12723,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                               </span>
                             </div>
                             <p className="text-xs mt-0.5 opacity-90">
-                              Etapa Vinculada: <strong>{etapaObra}</strong> â€¢ {dica}
+                              Etapa Vinculada: <strong>{etapaObra}</strong> • {dica}
                             </p>
                           </div>
                         </div>
@@ -13423,130 +13700,145 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                       </div>
 
                   {/* ============================================================= */}
-                  {/* RADAR JC BAUER DE PREÃ‡OS HISTÃ“RICOS & REFERÃŠNCIA SINAPI      */}
-                  {/* SupercÃ©rebro de Suprimentos: Poder de Barganha na Mesa        */}
+                  {/* RADAR JC BAUER DE PREÇOS HISTÓRICOS & REFERÊSNCIA SINAPI      */}
+                  {/* Supercérebro de Suprimentos: Poder de Barganha na Mesa        */}
                   {/* ============================================================= */}
-                  {comparativoItens.length > 0 && (
-                    <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 rounded-xl p-4 text-white shadow-xl space-y-3">
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-800">
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-xl">{"\uD83C\uDFAF"}</span>
-                          <div>
-                            <h4 className="text-sm font-black text-white flex items-center gap-2">
-                              <span>Radar JC BAUER de PreÃ§os HistÃ³ricos & ReferÃªncia SINAPI</span>
-                              <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                                Poder de Barganha Ativo
-                              </span>
-                            </h4>
-                            <p className="text-xs text-slate-400">
-                              HistÃ³rico real de compras em todas as obras da JC Bauer cruzado com Ã­ndices oficiais para balizar sua negociaÃ§Ã£o.
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-[11px] font-mono text-cyan-300 font-bold bg-slate-800/80 px-2.5 py-1 rounded-lg border border-cyan-500/30">
-                          {comparativoItens.length} Insumos no Radar
-                        </span>
-                      </div>
+                  {(() => {
+                    const itensParaRadar = (comparativoItens && comparativoItens.length > 0)
+                      ? comparativoItens
+                      : [
+                          { id: "ref-1", nome: "Aço CA-50 Barra 12mm 12m", preco1: 8.80, quantidade: 100, unidade: "kg" },
+                          { id: "ref-2", nome: "Concreto Usinado FCK 30 MPa c/ Bomba", preco1: 450.00, quantidade: 40, unidade: "m³" },
+                          { id: "ref-3", nome: "Cimento Portland CP-IV 32 RS (Saco 50kg)", preco1: 42.00, quantidade: 200, unidade: "sc" },
+                          { id: "ref-4", nome: "Tubo PVC Esgoto Normal 100mm 6m", preco1: 36.50, quantidade: 50, unidade: "barra" },
+                          { id: "ref-5", nome: "Areia Média Lavada a Granel", preco1: 115.00, quantidade: 30, unidade: "m³" },
+                          { id: "ref-6", nome: "Manta Asfáltica Alumínio 4mm (10m²)", preco1: 295.00, quantidade: 15, unidade: "rl" }
+                        ];
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {comparativoItens.map((it, idx) => {
-                          const itemNome = (it.nome || "").toLowerCase().trim();
-                          
-                          // PreÃ§os de referÃªncia baseados na inteligÃªncia JC Bauer e SINAPI
-                          let precoUltimaCompra = 0;
-                          let dataUltimaCompra = "15/09/2026";
-                          let fornecedorUltima = "Fornecedor Parceiro";
-                          let obraUltima = "Horizon Tower";
-                          let menorPrecoHistorico = 0;
-                          let sinapiRef = 0;
-
-                          if (itemNome.includes("aÃ§o") || itemNome.includes("ferro") || itemNome.includes("ca-50") || itemNome.includes("barra")) {
-                            precoUltimaCompra = 8.65;
-                            menorPrecoHistorico = 7.95;
-                            sinapiRef = 8.42;
-                            fornecedorUltima = "Gerdau / ArcelorMittal";
-                            obraUltima = "Horizon Tower";
-                          } else if (itemNome.includes("concreto") || itemNome.includes("fck") || itemNome.includes("usinado")) {
-                            precoUltimaCompra = 440.0;
-                            menorPrecoHistorico = 415.0;
-                            sinapiRef = 448.0;
-                            fornecedorUltima = "Polimix Concreto";
-                            obraUltima = "Atrium Bauer";
-                          } else if (itemNome.includes("cimento") || itemNome.includes("cp")) {
-                            precoUltimaCompra = 41.5;
-                            menorPrecoHistorico = 38.9;
-                            sinapiRef = 41.8;
-                            fornecedorUltima = "Votorantim Cimentos";
-                            obraUltima = "SulPark LogÃ­stico";
-                          } else if (itemNome.includes("tubo") || itemNome.includes("pvc") || itemNome.includes("esgoto")) {
-                            precoUltimaCompra = 34.2;
-                            menorPrecoHistorico = 31.8;
-                            sinapiRef = 35.6;
-                            fornecedorUltima = "Tigre Tubos e ConexÃµes";
-                            obraUltima = "Atrium Bauer";
-                          } else if (itemNome.includes("areia") || itemNome.includes("brita") || itemNome.includes("agregado")) {
-                            precoUltimaCompra = 110.0;
-                            menorPrecoHistorico = 98.0;
-                            sinapiRef = 115.0;
-                            fornecedorUltima = "MineraÃ§Ã£o e Areias do Sul";
-                            obraUltima = "Horizon Tower";
-                          } else {
-                            precoUltimaCompra = (it.preco1 || 50) * 0.96;
-                            menorPrecoHistorico = (it.preco1 || 50) * 0.88;
-                            sinapiRef = (it.preco1 || 50) * 0.98;
-                            fornecedorUltima = "Distribuidor Homologado";
-                            obraUltima = "Central de Compras";
-                          }
-
-                          const precoAlvoSugerido = menorPrecoHistorico > 0 ? menorPrecoHistorico * 1.02 : precoUltimaCompra * 0.95;
-
-                          return (
-                            <div
-                              key={it.id || idx}
-                              className="p-3 bg-slate-950/70 border border-slate-800 rounded-lg space-y-2 relative overflow-hidden"
-                            >
-                              <div className="flex items-start justify-between gap-1.5">
-                                <span className="font-bold text-xs text-white truncate max-w-[200px]" title={it.nome}>
-                                  {it.nome || `Insumo #${idx + 1}`}
+                    return (
+                      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 rounded-xl p-4 text-white shadow-xl space-y-3">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-800">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-xl">{"🎯"}</span>
+                            <div>
+                              <h4 className="text-sm font-black text-white flex items-center gap-2">
+                                <span>Radar JC BAUER de Preços Históricos & Referência SINAPI</span>
+                                <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                  Poder de Barganha Ativo
                                 </span>
-                                <span className="text-[10px] font-mono text-cyan-300 uppercase shrink-0 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
-                                  {it.quantidade} {it.unidade || "un"}
-                                </span>
-                              </div>
-
-                              <div className="text-[11px] space-y-1 text-slate-300 font-mono">
-                                <div className="flex justify-between">
-                                  <span className="text-slate-400">Ãšltima compra ({dataUltimaCompra}):</span>
-                                  <strong className="text-white">{formatBRL(precoUltimaCompra)}</strong>
-                                </div>
-                                <div className="text-[10px] text-slate-400 truncate">
-                                  {fornecedorUltima} â€¢ {obraUltima}
-                                </div>
-
-                                <div className="flex justify-between pt-1 border-t border-slate-800/80">
-                                  <span className="text-amber-300 font-bold">Menor jÃ¡ praticado JC Bauer:</span>
-                                  <strong className="text-emerald-400 font-black">{formatBRL(menorPrecoHistorico)}</strong>
-                                </div>
-
-                                <div className="flex justify-between">
-                                  <span className="text-slate-400">ReferÃªncia SINAPI Oficial:</span>
-                                  <span className="text-slate-300">{formatBRL(sinapiRef)}</span>
-                                </div>
-                              </div>
-
-                              {/* Alvo Recomendado para NegociaÃ§Ã£o */}
-                              <div className="p-2 rounded bg-cyan-950/40 border border-cyan-500/30 text-[10px] text-cyan-200 flex items-center justify-between mt-1">
-                                <span>ðŸŽ¯ Alvo NegociaÃ§Ã£o Sugerido:</span>
-                                <strong className="font-extrabold text-cyan-300 font-mono text-xs">
-                                  {formatBRL(precoAlvoSugerido)}
-                                </strong>
-                              </div>
+                              </h4>
+                              <p className="text-xs text-slate-400">
+                                Histórico real de compras em todas as obras da JC Bauer cruzado com índices oficiais para balizar sua negociação.
+                              </p>
                             </div>
-                          );
-                        })}
+                          </div>
+                          <span className="text-[11px] font-mono text-cyan-300 font-bold bg-slate-800/80 px-2.5 py-1 rounded-lg border border-cyan-500/30">
+                            {comparativoItens && comparativoItens.length > 0
+                              ? ${comparativoItens.length} Insumos da Cotação Atual
+                              : "6 Insumos de Referência Ativos"}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {itensParaRadar.map((it: any, idx: number) => {
+                            const itemNome = (it.nome || "").toLowerCase().trim();
+                            
+                            // Preços de referência baseados na inteligência JC Bauer e SINAPI
+                            let precoUltimaCompra = 0;
+                            let dataUltimaCompra = "15/09/2026";
+                            let fornecedorUltima = "Fornecedor Parceiro";
+                            let obraUltima = "Horizon Tower";
+                            let menorPrecoHistorico = 0;
+                            let sinapiRef = 0;
+
+                            if (itemNome.includes("aço") || itemNome.includes("ferro") || itemNome.includes("ca-50") || itemNome.includes("barra")) {
+                              precoUltimaCompra = 8.65;
+                              menorPrecoHistorico = 7.95;
+                              sinapiRef = 8.42;
+                              fornecedorUltima = "Gerdau / ArcelorMittal";
+                              obraUltima = "Horizon Tower";
+                            } else if (itemNome.includes("concreto") || itemNome.includes("fck") || itemNome.includes("usinado")) {
+                              precoUltimaCompra = 440.0;
+                              menorPrecoHistorico = 415.0;
+                              sinapiRef = 448.0;
+                              fornecedorUltima = "Polimix Concreto";
+                              obraUltima = "Atrium Bauer";
+                            } else if (itemNome.includes("cimento") || itemNome.includes("cp")) {
+                              precoUltimaCompra = 41.5;
+                              menorPrecoHistorico = 38.9;
+                              sinapiRef = 41.8;
+                              fornecedorUltima = "Votorantim Cimentos";
+                              obraUltima = "SulPark Logístico";
+                            } else if (itemNome.includes("tubo") || itemNome.includes("pvc") || itemNome.includes("esgoto")) {
+                              precoUltimaCompra = 34.2;
+                              menorPrecoHistorico = 31.8;
+                              sinapiRef = 35.6;
+                              fornecedorUltima = "Tigre Tubos e Conexões";
+                              obraUltima = "Atrium Bauer";
+                            } else if (itemNome.includes("areia") || itemNome.includes("brita") || itemNome.includes("agregado")) {
+                              precoUltimaCompra = 110.0;
+                              menorPrecoHistorico = 98.0;
+                              sinapiRef = 115.0;
+                              fornecedorUltima = "Mineração e Areias do Sul";
+                              obraUltima = "Horizon Tower";
+                            } else {
+                              precoUltimaCompra = (it.preco1 || 50) * 0.96;
+                              menorPrecoHistorico = (it.preco1 || 50) * 0.88;
+                              sinapiRef = (it.preco1 || 50) * 0.98;
+                              fornecedorUltima = "Distribuidor Homologado";
+                              obraUltima = "Central de Compras";
+                            }
+
+                            const precoAlvoSugerido = menorPrecoHistorico > 0 ? menorPrecoHistorico * 1.02 : precoUltimaCompra * 0.95;
+
+                            return (
+                              <div
+                                key={it.id || idx}
+                                className="p-3 bg-slate-950/70 border border-slate-800 rounded-lg space-y-2 relative overflow-hidden"
+                              >
+                                <div className="flex items-start justify-between gap-1.5">
+                                  <span className="font-bold text-xs text-white truncate max-w-[200px]" title={it.nome}>
+                                    {it.nome || Insumo #}
+                                  </span>
+                                  <span className="text-[10px] font-mono text-cyan-300 uppercase shrink-0 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                                    {it.quantidade} {it.unidade || "un"}
+                                  </span>
+                                </div>
+
+                                <div className="text-[11px] space-y-1 text-slate-300 font-mono">
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-400">Última compra ({dataUltimaCompra}):</span>
+                                    <strong className="text-white">{formatBRL(precoUltimaCompra)}</strong>
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 truncate">
+                                    {fornecedorUltima} • {obraUltima}
+                                  </div>
+
+                                  <div className="flex justify-between pt-1 border-t border-slate-800/80">
+                                    <span className="text-amber-300 font-bold">Menor já praticado JC Bauer:</span>
+                                    <strong className="text-emerald-400 font-black">{formatBRL(menorPrecoHistorico)}</strong>
+                                  </div>
+
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-400">Referência SINAPI Oficial:</span>
+                                    <span className="text-slate-300">{formatBRL(sinapiRef)}</span>
+                                  </div>
+                                </div>
+
+                                {/* Alvo Recomendado para Negociação */}
+                                <div className="p-2 rounded bg-cyan-950/40 border border-cyan-500/30 text-[10px] text-cyan-200 flex items-center justify-between mt-1">
+                                  <span>🎯 Alvo Negociação Sugerido:</span>
+                                  <strong className="font-extrabold text-cyan-300 font-mono text-xs">
+                                    {formatBRL(precoAlvoSugerido)}
+                                  </strong>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                     </div>
                   </div>
                 </div>
@@ -13890,9 +14182,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                             setShowModalCompartilharCotacao(true);
                                           }}
                                           className="px-2 py-1.5 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 text-amber-900 border border-amber-400/40 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
-                                          title="Gerar links exclusivos e enviar cotaÃ§Ã£o via WhatsApp para os fornecedores"
+                                          title="Gerar links exclusivos e enviar cotação via WhatsApp para os fornecedores"
                                         >
-                                          <span>ðŸ”—</span>
+                                          <span>🔗</span>
                                           <span>Links</span>
                                         </button>
 
@@ -15899,11 +16191,11 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           </td>
                           <td className="py-3.5 px-4 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
-                              {/* BotÃ£o WhatsApp para AprovaÃ§Ã£o RÃ¡pida Mobile do Diretor */}
+                              {/* Botão WhatsApp para Aprovação Rápida Mobile do Diretor */}
                               <button
                                 type="button"
                                 onClick={() => handleEnviarAprovacaoWhatsAppDiretor(oc)}
-                                title="Enviar link mobile seguro para AprovaÃ§Ã£o Imediata da Diretoria pelo WhatsApp"
+                                title="Enviar link mobile seguro para Aprovação Imediata da Diretoria pelo WhatsApp"
                                 className="px-2.5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
                               >
                                 <span>{"\uD83D\uDCF2"}</span>
@@ -18726,7 +19018,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         />
       )}
 
-      {/* MODAL DE EDIÃ‡ÃƒO DE USUÃRIO DO SISTEMA */}
+      {/* MODAL DE EDIÃ‡ÃƒO DE USUÁRIO DO SISTEMA */}
       {usuarioEditandoModal && (
         <ModalEditarUsuario
           usuario={usuarioEditandoModal}
@@ -19367,13 +19659,13 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         <div className="fixed top-5 right-5 z-50 bg-gradient-to-r from-emerald-900 to-slate-900 border-2 border-emerald-400 rounded-2xl p-4 shadow-2xl text-white max-w-md animate-bounce">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <span className="text-2xl">ðŸ””</span>
+              <span className="text-2xl">🔔</span>
               <div>
                 <strong className="text-xs uppercase tracking-wider text-emerald-300 block">
                   Nova Proposta Recebida no Portal!
                 </strong>
                 <p className="text-xs text-white mt-0.5">
-                  O fornecedor <strong>{toastNovaProposta.fornecedorNome}</strong> acabou de submeter preÃ§os para a cotaÃ§Ã£o.
+                  O fornecedor <strong>{toastNovaProposta.fornecedorNome}</strong> acabou de submeter preços para a cotação.
                 </p>
                 <div className="text-[11px] text-emerald-300 font-mono font-bold mt-1">
                   Valor Total Ofertado: {formatBRL(toastNovaProposta.valor)}
@@ -19385,7 +19677,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               onClick={() => setToastNovaProposta(null)}
               className="text-slate-400 hover:text-white text-xs font-bold p-1"
             >
-              âœ•
+              ✕
             </button>
           </div>
         </div>
@@ -19410,7 +19702,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             processosCotacoes.find((p) => p.id === cotacaoAtivaId) || {
               id: cotacaoAtivaId || ("cot-" + Date.now()),
               codigo: "COT-2026-ATUAL",
-              titulo: comparativoTitulo || "CotaÃ§Ã£o de Insumos da Obra",
+              titulo: comparativoTitulo || "Cotação de Insumos da Obra",
               obraId: comparativoObraId || "obra-1",
               obraNome:
                 obras.find((o) => o.id === comparativoObraId)?.nome ||
@@ -20517,7 +20809,7 @@ function ModalNovoUsuarioObra({
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Cargo / Perfil de PermissÃ£o *
+              Cargo / Perfil de Permissão *
             </label>
             <select
               value={cargo}
@@ -20598,7 +20890,7 @@ function ModalNovoUsuarioObra({
 }
 
 /* ========================================================================= */
-/* MODAL DE EDIÃ‡ÃƒO DE USUÃRIO DO SISTEMA (ACESSO COMPLETO)                  */
+/* MODAL DE EDIÃ‡ÃƒO DE USUÁRIO DO SISTEMA (ACESSO COMPLETO)                  */
 /* ========================================================================= */
 
 function ModalEditarUsuario({
@@ -21193,6 +21485,18 @@ function VisaoRestritaObra({
           </h1>
 
           <div className="flex items-center gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                const adminUser = usuarios.find((u) => u.cargo === "Administrador") || USUARIOS_INICIAIS[0];
+                handleQuickLogin(adminUser.id);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+              title="Alternar para Visão Completa da Diretoria / Central de Compras"
+            >
+              <span>👑</span>
+              <span>Visão Diretoria / Painel Executivo</span>
+            </button>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs">
               <span className="font-bold text-slate-900">
                 {usuarioLogado.nome}

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import { ModalOnePagerExecutivoPdf } from "../modals/ModalOnePagerExecutivoPdf";
@@ -31,6 +31,7 @@ export interface TelaoExecutivoProps {
   processosCotacoes: ProcessoCotacao[];
   diariosObra: DiarioObraRegistro[];
   settings: UserSettings;
+  initialView?: "master" | "termometro" | "canteiros" | "financeiro" | "semaforo";
   onVoltar: () => void;
 }
 
@@ -43,12 +44,13 @@ export function TelaoExecutivoDiretoria({
   processosCotacoes,
   diariosObra,
   settings,
+  initialView,
   onVoltar,
 }: TelaoExecutivoProps) {
   // Controle de Visualização e Rotação Automática do Telão
   type TelaoView = "master" | "termometro" | "canteiros" | "financeiro" | "semaforo";
-  const [activeView, setActiveView] = useState<TelaoView>("master");
-  const [autoRotate, setAutoRotate] = useState<boolean>(true);
+  const [activeView, setActiveView] = useState<TelaoView>(initialView || "master");
+  const [autoRotate, setAutoRotate] = useState<boolean>(initialView ? false : true);
   const [countdown, setCountdown] = useState<number>(20);
   const [obraFiltro, setObraFiltro] = useState<string>("ALL");
   const [regiaoTermometro, setRegiaoTermometro] = useState<string>("BRASIL");
@@ -682,8 +684,8 @@ export function TelaoExecutivoDiretoria({
                   : "text-rose-400 hover:text-rose-300 hover:bg-rose-950/30"
               }`}
             >
-              <span>ðŸš¦</span>
-              <span>SemÃ¡foro de Custos</span>
+              <span>🚦</span>
+              <span>Semáforo de Custos</span>
             </button>
             <button
               onClick={() => setActiveView("canteiros")}
@@ -707,14 +709,14 @@ export function TelaoExecutivoDiretoria({
             </button>
           </div>
 
-          {/* BotÃ£o One-Pager Diretoria (PDF Executivo A4) */}
+          {/* Botão One-Pager Diretoria (PDF Executivo A4) */}
           <button
             type="button"
             onClick={() => setShowModalOnePager(true)}
             className="px-2.5 py-1.5 rounded-lg border text-xs font-black transition flex items-center gap-1.5 cursor-pointer bg-indigo-950/80 border-indigo-500/60 text-indigo-300 hover:bg-indigo-900/90 shadow-md shadow-indigo-950/40"
-            title="Gerar LÃ¢mina Executiva Mensal da Diretoria (PDF A4 Paisagem)"
+            title="Gerar Lâmina Executiva Mensal da Diretoria (PDF A4 Paisagem)"
           >
-            <span>ðŸ“‘</span>
+            <span>📑</span>
             <span className="hidden lg:inline">One-Pager (PDF)</span>
           </button>
           {/* Toggle Rotação Automática da TV */}
@@ -1883,43 +1885,43 @@ export function TelaoExecutivoDiretoria({
                     </div>
                   )}
         {/* ============================================================= */}
-        {/* VISÃƒO 5: SEMÃFORO DE CUSTO & GOVERNANÃ‡A: ORÃ‡ADO VS REALIZADO  */}
+        {/* VISÃO 5: SEMÁFORO DE CUSTO & GOVERNANÇA: ORÇADO VS REALIZADO  */}
         {/* ============================================================= */}
         {activeView === "semaforo" && (
           <div className="space-y-6 animate-fadeIn pb-12">
-            {/* CabeÃ§alho do SemÃ¡foro */}
+            {/* Cabeçalho do Semáforo */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 p-5 bg-gradient-to-r from-slate-900 via-rose-950/40 to-slate-900 border border-rose-500/30 rounded-2xl shadow-xl">
               <div className="space-y-1">
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl animate-pulse">ðŸš¦</span>
+                  <span className="text-2xl animate-pulse">🚦</span>
                   <h2 className="text-xl font-black text-white tracking-tight">
-                    SemÃ¡foro de Custo: OrÃ§ado vs. Realizado por Disciplina
+                    Semáforo de Custo: Orçado vs. Realizado por Disciplina
                   </h2>
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                    GovernanÃ§a em Tempo Real
+                    Governança em Tempo Real
                   </span>
                 </div>
                 <p className="text-xs text-slate-300">
-                  Cruzamento preditivo de avanÃ§o fÃ­sico da obra com compromisso financeiro em Ordens de Compra.
+                  Cruzamento preditivo de avanço físico da obra com compromisso financeiro em Ordens de Compra.
                   Alertas vermelhos indicam risco iminente de aditivo ou estouro de margem.
                 </p>
               </div>
 
-              {/* BotÃµes de AÃ§Ã£o Executiva */}
+              {/* Botões de Ação Executiva */}
               <div className="flex items-center gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowModalOnePager(true)}
                   className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-extrabold text-xs shadow-lg shadow-indigo-900/50 flex items-center gap-2 cursor-pointer transition border border-indigo-400/40"
-                  title="Abrir e imprimir a lÃ¢mina One-Pager Executivo em PDF A4"
+                  title="Abrir e imprimir a lâmina One-Pager Executivo em PDF A4"
                 >
-                  <span>ðŸ“‘</span>
+                  <span>📑</span>
                   <span>One-Pager Mensal (PDF)</span>
                 </button>
               </div>
             </div>
 
-            {/* Disciplinas EstratÃ©gicas - SemÃ¡foro por Canteiro */}
+            {/* Disciplinas Estratégicas - Semáforo por Canteiro */}
             {canteirosCompletos
               .filter((c) => obraFiltro === "ALL" || c.id === obraFiltro)
               .map((c) => {
@@ -1931,9 +1933,9 @@ export function TelaoExecutivoDiretoria({
                 const disciplinas = [
                   {
                     id: "fundacao",
-                    nome: "01. FundaÃ§Ãµes & MovimentaÃ§Ã£o de Solo",
+                    nome: "01. Fundações & Movimentação de Solo",
                     fase: "Fase Inicial",
-                    itens: "Estacas HÃ©lice, EscavaÃ§Ã£o, Concreto FCK 30, AÃ§o CA-50",
+                    itens: "Estacas Hélice, Escavação, Concreto FCK 30, Aço CA-50",
                     pesoPerc: 18,
                     avancoFisico: 85,
                     orcado: totalOrcadoObra * 0.18,
@@ -1951,9 +1953,9 @@ export function TelaoExecutivoDiretoria({
                   },
                   {
                     id: "alvenaria",
-                    nome: "03. Alvenaria Estrutural & VedaÃ§Ãµes",
+                    nome: "03. Alvenaria Estrutural & Vedações",
                     fase: "Fechamento",
-                    itens: "Blocos CerÃ¢micos/Concreto, Argamassa Pronta, Telas",
+                    itens: "Blocos Cerâmicos/Concreto, Argamassa Pronta, Telas",
                     pesoPerc: 15,
                     avancoFisico: 42,
                     orcado: totalOrcadoObra * 0.15,
@@ -1961,7 +1963,7 @@ export function TelaoExecutivoDiretoria({
                   },
                   {
                     id: "instalacoes",
-                    nome: "04. InstalaÃ§Ãµes HidrÃ¡ulicas, ElÃ©tricas e PCI",
+                    nome: "04. Instalações Hidráulicas, Elétricas e PCI",
                     fase: "Infraestrutura",
                     itens: "Tubos Tigre/Amanco, Fios Prysmian/Sil, Eletrodutos, Barramentos",
                     pesoPerc: 14,
@@ -1971,9 +1973,9 @@ export function TelaoExecutivoDiretoria({
                   },
                   {
                     id: "impermeabilizacao",
-                    nome: "05. ImpermeabilizaÃ§Ã£o & Coberturas",
+                    nome: "05. Impermeabilização & Coberturas",
                     fase: "Envelopamento",
-                    itens: "Manta AsfÃ¡ltica 4mm, Primer Betuminoso, Calhas, Rufos",
+                    itens: "Manta Asfáltica 4mm, Primer Betuminoso, Calhas, Rufos",
                     pesoPerc: 7,
                     avancoFisico: 20,
                     orcado: totalOrcadoObra * 0.07,
@@ -1982,8 +1984,8 @@ export function TelaoExecutivoDiretoria({
                   {
                     id: "acabamento",
                     nome: "06. Acabamentos, Pisos & Pintura",
-                    fase: "FinalizaÃ§Ã£o",
-                    itens: "Porcelanatos Retificados, Argamassa ACIII, Tintas Suvinil, LouÃ§as Deca",
+                    fase: "Finalização",
+                    itens: "Porcelanatos Retificados, Argamassa ACIII, Tintas Suvinil, Louças Deca",
                     pesoPerc: 14,
                     avancoFisico: 10,
                     orcado: totalOrcadoObra * 0.14,
@@ -1996,24 +1998,24 @@ export function TelaoExecutivoDiretoria({
                     key={c.id}
                     className="p-6 bg-slate-900/90 border border-slate-800 rounded-2xl space-y-6 shadow-2xl backdrop-blur-md"
                   >
-                    {/* Linha de TÃ­tulo do Canteiro */}
+                    {/* Linha de Título do Canteiro */}
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xl">ðŸ—ï¸</span>
+                          <span className="text-xl">🏗️</span>
                           <h3 className="text-lg font-black text-white">{c.nome}</h3>
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-cyan-300 border border-cyan-500/30">
                             {c.sigla || "JC"}
                           </span>
                         </div>
                         <p className="text-xs text-slate-400 mt-0.5">
-                          Engenheiro ResponsÃ¡vel: <strong className="text-slate-200">{c.engenheiro || "Diretoria de Obras"}</strong> â€¢ {c.endereco || "Canteiro de Obras"}
+                          Engenheiro Responsável: <strong className="text-slate-200">{c.engenheiro || "Diretoria de Obras"}</strong> • {c.endereco || "Canteiro de Obras"}
                         </p>
                       </div>
 
                       <div className="flex items-center gap-4 text-xs font-mono">
                         <div className="text-right">
-                          <span className="text-slate-400 block text-[10px]">TETO TOTAL ORÃ‡ADO</span>
+                          <span className="text-slate-400 block text-[10px]">TETO TOTAL ORÇADO</span>
                           <span className="font-extrabold text-white text-sm">{formatBRL(totalOrcadoObra)}</span>
                         </div>
                         <div className="text-right">
@@ -2029,26 +2031,26 @@ export function TelaoExecutivoDiretoria({
                       </div>
                     </div>
 
-                    {/* Grade de SemÃ¡foros das Disciplinas */}
+                    {/* Grade de Semáforos das Disciplinas */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {disciplinas.map((d) => {
                         const percComprometido = Math.round((d.realizado / Math.max(d.orcado, 1)) * 100);
                         const desvioPerc = percComprometido - d.avancoFisico;
                         const saldoDisponivel = d.orcado - d.realizado;
 
-                        // DiagnÃ³stico do SemÃ¡foro
+                        // Diagnóstico do Semáforo
                         let statusCor: "verde" | "amarelo" | "vermelho" = "verde";
-                        let statusTexto = "ðŸŸ¢ DENTRO DA MARGEM";
-                        let statusDesc = "Consumo proporcional ao avanÃ§o fÃ­sico. Sem risco financeiro.";
+                        let statusTexto = "🟢 DENTRO DA MARGEM";
+                        let statusDesc = "Consumo proporcional ao avanço físico. Sem risco financeiro.";
 
                         if (percComprometido > 95 && d.avancoFisico < 85) {
                           statusCor = "vermelho";
-                          statusTexto = "ðŸ”´ ESTOURO IMINENTE";
-                          statusDesc = `Alerta CrÃ­tico: ${percComprometido}% do orÃ§amento emitido com apenas ${d.avancoFisico}% executado. Risco alto de aditivo.`;
+                          statusTexto = "🔴 ESTOURO IMINENTE";
+                          statusDesc = `Alerta Crítico: ${percComprometido}% do orçamento emitido com apenas ${d.avancoFisico}% executado. Risco alto de aditivo.`;
                         } else if (desvioPerc > 8) {
                           statusCor = "amarelo";
-                          statusTexto = "ðŸŸ¡ ATENÃ‡ÃƒO / DESVIO";
-                          statusDesc = `Desvio financeiro de +${desvioPerc}% em relaÃ§Ã£o ao fÃ­sico medido. Recomenda-se renegociar lotes restantes.`;
+                          statusTexto = "🟡 ATENÇÃO / DESVIO";
+                          statusDesc = `Desvio financeiro de +${desvioPerc}% em relação ao físico medido. Recomenda-se renegociar lotes restantes.`;
                         }
 
                         return (
@@ -2094,11 +2096,11 @@ export function TelaoExecutivoDiretoria({
                                 {d.itens}
                               </p>
 
-                              {/* Barras de ComparaÃ§Ã£o Visual: FÃ­sico vs. Financeiro */}
+                              {/* Barras de Comparação Visual: Físico vs. Financeiro */}
                               <div className="mt-4 space-y-2">
                                 <div>
                                   <div className="flex justify-between text-[11px] mb-1">
-                                    <span className="text-slate-400">AvanÃ§o FÃ­sico Medido:</span>
+                                    <span className="text-slate-400">Avanço Físico Medido:</span>
                                     <strong className="text-slate-200">{d.avancoFisico}%</strong>
                                   </div>
                                   <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
@@ -2143,7 +2145,7 @@ export function TelaoExecutivoDiretoria({
                             {/* Valores em Moeda */}
                             <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-1.5">
                               <div className="flex justify-between text-xs font-mono">
-                                <span className="text-slate-400">OrÃ§ado:</span>
+                                <span className="text-slate-400">Orçado:</span>
                                 <strong className="text-slate-200">{formatBRL(d.orcado)}</strong>
                               </div>
                               <div className="flex justify-between text-xs font-mono">
@@ -2152,7 +2154,7 @@ export function TelaoExecutivoDiretoria({
                               </div>
                               <div className="flex justify-between text-xs font-mono">
                                 <span className="text-slate-400">
-                                  {saldoDisponivel >= 0 ? "Saldo Restante:" : "Excesso OrÃ§amentÃ¡rio:"}
+                                  {saldoDisponivel >= 0 ? "Saldo Restante:" : "Excesso Orçamentário:"}
                                 </span>
                                 <strong
                                   className={
