@@ -8551,8 +8551,13 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     const loginLimpo = loginInput.trim().toLowerCase();
     const senhaLimpa = senhaInput.trim();
 
-    // 1. Busca rigorosa do usuário com base nas credenciais informadas
-    let userFound = usuarios.find((u) => {
+    if (!loginLimpo || !senhaLimpa) {
+      setErroLogin("Por favor, preencha o e-mail ou usuário e a senha.");
+      return;
+    }
+
+    // Busca rigorosa do usuário por e-mail ou nome cadastrado comparando estritamente com a senha cadastrada
+    const userFound = usuarios.find((u) => {
       const emailCadastrado = (u.email || "").trim().toLowerCase();
       const nomeCadastrado = (u.nome || "").trim().toLowerCase();
       const senhaCadastrada = (u.senha || "").trim();
@@ -8561,94 +8566,25 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         emailCadastrado === loginLimpo ||
         nomeCadastrado === loginLimpo ||
         (u.cargo === "Administrador" &&
-          (loginLimpo === "admin" || loginLimpo === "master")) ||
-        (u.cargo === "Almoxarife" &&
-          (loginLimpo === "almoxarife" ||
-            loginLimpo === "almoxarifado" ||
-            loginLimpo === "henrique"));
+          (loginLimpo === "admin" || loginLimpo === "master"));
 
-      const matchSenha =
-        senhaCadastrada === senhaLimpa ||
-        (u.cargo === "Administrador" &&
-          (senhaLimpa === "123" || senhaLimpa === "admin" || senhaLimpa === "master")) ||
-        (u.cargo === "Almoxarife" &&
-          (senhaLimpa === "obra123" || senhaLimpa === "123"));
-
-      return matchLogin && matchSenha;
+      return matchLogin && senhaCadastrada === senhaLimpa;
     });
-
-    // 2. Se Henrique for digitado especificamente (conforme configurado: suprimentos@jcbauer.com e obra123)
-    if (
-      !userFound &&
-      (loginLimpo === "suprimentos@jcbauer.com" || loginLimpo === "henrique") &&
-      (senhaLimpa === "obra123" || senhaLimpa === "123")
-    ) {
-      userFound =
-        usuarios.find(
-          (u) =>
-            u.email.toLowerCase() === "suprimentos@jcbauer.com" ||
-            u.nome.toLowerCase() === "henrique"
-        ) || USUARIOS_INICIAIS[1];
-    }
-
-    // 3. Se Administrador for digitado especificamente (suprimentos@jcbauer.com.br ou admin e 123)
-    if (
-      !userFound &&
-      (loginLimpo === "suprimentos@jcbauer.com.br" ||
-        loginLimpo === "admin" ||
-        loginLimpo === "master" ||
-        loginLimpo === "welliton") &&
-      (senhaLimpa === "123" || senhaLimpa === "admin" || senhaLimpa === "master")
-    ) {
-      userFound =
-        usuarios.find((u) => u.cargo === "Administrador") || USUARIOS_INICIAIS[0];
-    }
 
     if (!userFound) {
       setErroLogin(
-        "E-mail/Usuário ou senha inválidos. Verifique suas credenciais ou use o botão 'Entrar Direto como Administrador Master' abaixo."
+        "E-mail/usuário ou senha incorretos. Verifique suas credenciais de acesso."
       );
       return;
     }
+
     if (userFound.status === "Bloqueado") {
       setErroLogin(
         "Este acesso encontra-se bloqueado pelo Administrador de Compras."
       );
       return;
     }
-    setUsuarioLogado(userFound);
-    try {
-      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(userFound));
-    } catch {
-      // ignore
-    }
-    setErroLogin(null);
-    if (userFound.cargo !== "Administrador") {
-      setObraActiveTab(
-        userFound.cargo === "Almoxarife" ? "NovoPedido" : "PainelDiario"
-      );
-    }
-  };
 
-  const handleQuickLogin = (userId: string) => {
-    let userFound = usuarios.find((u) => u.id === userId);
-    if (!userFound && (userId === "usr-admin-1" || userId === "admin")) {
-      userFound = usuarios.find((u) => u.cargo === "Administrador") || USUARIOS_INICIAIS[0];
-    }
-    if (
-      !userFound &&
-      (userId === "usr-almoxarife-1" ||
-        userId === "almoxarife" ||
-        userId === "almoxarifado")
-    ) {
-      userFound =
-        usuarios.find((u) => u.cargo === "Almoxarife") || USUARIOS_INICIAIS[1];
-    }
-    if (!userFound) return;
-    if (userFound.status === "Bloqueado") {
-      setErroLogin("Este usuário está bloqueado no momento.");
-      return;
-    }
     setUsuarioLogado(userFound);
     try {
       window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(userFound));
@@ -8656,6 +8592,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       // ignore
     }
     setErroLogin(null);
+    setLoginInput("");
+    setSenhaInput("");
     if (userFound.cargo !== "Administrador") {
       setObraActiveTab(
         userFound.cargo === "Almoxarife" ? "NovoPedido" : "PainelDiario"
@@ -10274,8 +10212,6 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         setSenhaInput={setSenhaInput}
         erroLogin={erroLogin}
         onSubmit={handleLoginSubmit}
-        onQuickLogin={handleQuickLogin}
-        usuarios={usuarios}
       />
     );
   }
@@ -19371,8 +19307,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           <td className="py-3 px-4 text-slate-700 font-mono text-xs">
                             {u.email}
                           </td>
-                          <td className="py-3 px-4 text-slate-700 font-mono text-xs">
-                            {u.senha}
+                          <td className="py-3 px-4 text-slate-500 font-mono text-xs tracking-widest">
+                            ••••••••
                           </td>
                           <td className="py-3 px-4 text-center">
                             <span
@@ -21239,8 +21175,6 @@ function TelaLoginCorporativa({
   setSenhaInput,
   erroLogin,
   onSubmit,
-  onQuickLogin,
-  usuarios,
 }: {
   companyName: string;
   loginInput: string;
@@ -21249,226 +21183,113 @@ function TelaLoginCorporativa({
   setSenhaInput: (v: string) => void;
   erroLogin: string | null;
   onSubmit: (e: React.FormEvent) => void;
-  onQuickLogin: (userId: string) => void;
-  usuarios: UsuarioSistema[];
 }) {
-  const adminUser =
-    usuarios.find((u) => u.cargo === "Administrador") ||
-    USUARIOS_INICIAIS[0] || {
-      id: "usr-admin-1",
-      nome: "Welliton Schmidt",
-      cargo: "Administrador" as const,
-      obraId: "ALL",
-      obraNome: "Todas as Obras (Central de Compras)",
-      email: "suprimentos@jcbauer.com.br",
-      senha: "123",
-      status: "Ativo" as const,
-    };
-
-  const almoxarifeUser =
-    usuarios.find((u) => u.cargo === "Almoxarife") ||
-    USUARIOS_INICIAIS[1] || {
-      id: "usr-almoxarife-1",
-      nome: "Almoxarife da Obra",
-      cargo: "Almoxarife" as const,
-      obraId: "ALL",
-      obraNome: "Canteiro de Obras (Almoxarifado)",
-      email: "almoxarifado@jcbauer.com.br",
-      senha: "123",
-      status: "Ativo" as const,
-    };
+  const [mostrarSenha, setMostrarSenha] = useState(false);
 
   return (
-    <div className="min-h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-lg p-7 space-y-5">
+    <div className="min-h-screen w-full bg-slate-900 text-slate-900 font-sans flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      {/* Background Decorativo Sutil Corporativo */}
+      <div className="absolute inset-0 bg-radial from-slate-800 to-slate-950 opacity-90 pointer-events-none" />
+      <div className="absolute -top-40 -right-40 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200/80 shadow-2xl p-8 space-y-6 relative z-10">
         {/* Cabeçalho Corporativo com Logotipo Oficial Dourado */}
-        <div className="flex flex-col items-center text-center border-b border-slate-200 pb-5">
-          <div className="bg-white p-3 rounded-2xl shadow-sm border border-amber-200/80 mb-3 flex items-center justify-center">
+        <div className="flex flex-col items-center text-center">
+          <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-amber-200/80 mb-3 flex items-center justify-center">
             <img
               src="/logo.png"
               alt="JC Bauer Empreendimentos"
               className="h-14 w-auto object-contain"
             />
           </div>
-          <h1 className="text-base font-extrabold text-slate-900 tracking-wide">
+          <h1 className="text-lg font-black text-slate-900 tracking-tight">
             {companyName}
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-slate-500 mt-0.5">
             Portal Integrado de Suprimentos & Gestão de Obras
           </p>
-        </div>
-
-        {/* Cards Destaque: Acessos Rápidos Diretos (1 Clique) */}
-        <div className="space-y-3">
-          {/* Card 1: Administrador Master */}
-          <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                <span>👑</span>
-                <span>Acesso Administrador Master</span>
-              </span>
-              <span className="text-[10px] font-semibold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full">
-                Compras & Diretoria
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => onQuickLogin(adminUser.id)}
-              className="w-full py-2.5 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs"
-            >
-              <span>🔑</span>
-              <span>Entrar como Administrador (1 Clique)</span>
-            </button>
-
-            <div className="bg-white/80 border border-amber-200/60 rounded-lg p-2 text-[11px] text-slate-600 flex items-center justify-between">
-              <span>Login: <strong className="text-slate-900 font-mono">{adminUser.email}</strong></span>
-              <span>Senha: <strong className="text-slate-900 font-mono">{adminUser.senha}</strong></span>
-            </div>
-          </div>
-
-          {/* Card 2: Almoxarifado da Obra */}
-          <div className="bg-emerald-50/90 border border-emerald-300 rounded-xl p-3.5 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-                <span>🧱</span>
-                <span>Acesso Almoxarifado: {almoxarifeUser.nome}</span>
-              </span>
-              <span className="text-[10px] font-semibold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">
-                Canteiro de Obras
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => onQuickLogin(almoxarifeUser.id)}
-              className="w-full py-2.5 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs"
-            >
-              <span>🔑</span>
-              <span>Entrar como {almoxarifeUser.nome} (1 Clique)</span>
-            </button>
-
-            <div className="bg-white/80 border border-emerald-200 rounded-lg p-2 text-[11px] text-slate-700 flex items-center justify-between">
-              <span>Login: <strong className="text-slate-900 font-mono">{almoxarifeUser.email}</strong></span>
-              <span>Senha: <strong className="text-slate-900 font-mono">{almoxarifeUser.senha}</strong></span>
-            </div>
+          <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+            <span>🔒</span> Acesso Restrito e Individual
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-px bg-slate-200" />
-          <span className="text-[11px] text-slate-400 font-medium">ou digite e-mail e senha</span>
-          <div className="flex-1 h-px bg-slate-200" />
-        </div>
-
-        {/* Formulário de Autenticação */}
-        <form onSubmit={onSubmit} className="space-y-4 text-sm">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              E-mail Corporativo ou Usuário
-            </label>
-            <input
-              required
-              type="text"
-              value={loginInput}
-              onChange={(e) => setLoginInput(e.target.value)}
-              placeholder={`ex: ${adminUser.email} ou ${almoxarifeUser.email}`}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Senha de Acesso
-            </label>
-            <input
-              required
-              type="password"
-              value={senhaInput}
-              onChange={(e) => setSenhaInput(e.target.value)}
-              placeholder="ex: 123 ou obra123"
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
-            />
-          </div>
-
-          {erroLogin && (
-            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs font-semibold text-red-800">
-              {erroLogin}
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setLoginInput(adminUser.email);
-                setSenhaInput(adminUser.senha);
-              }}
-              className="py-2.5 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
-              title="Preencher com os dados do Administrador"
-            >
-              Master
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setLoginInput(almoxarifeUser.email);
-                setSenhaInput(almoxarifeUser.senha);
-              }}
-              className="py-2.5 px-3 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-semibold transition"
-              title={`Preencher com as credenciais de ${almoxarifeUser.nome}`}
-            >
-              {almoxarifeUser.nome}
-            </button>
-            <button
-              type="submit"
-              className="flex-1 py-2.5 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition shadow-xs"
-            >
-              Entrar no Sistema
-            </button>
-          </div>
-        </form>
-
-        {/* Lista de Colaboradores Cadastrados (se houver outros usuários) */}
-        {usuarios.length > 2 && (
-          <div className="pt-2 border-t border-slate-200 space-y-2">
-            <div className="text-[11px] font-bold text-slate-600">
-              Outros Acessos Cadastrados no Sistema:
-            </div>
-            <div className="space-y-1.5 max-h-36 overflow-y-auto">
-              {usuarios
-                .filter(
-                  (u) =>
-                    u.id !== adminUser.id &&
-                    u.id !== almoxarifeUser.id &&
-                    u.status !== "Bloqueado"
-                )
-                .map((u) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => onQuickLogin(u.id)}
-                    className="w-full p-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 flex items-center justify-between text-left text-xs transition"
-                  >
-                    <div>
-                      <div className="font-bold text-slate-900">{u.nome}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">
-                        {u.email} ({u.cargo} - {u.obraNome})
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      Entrar ➔
-                    </span>
-                  </button>
-                ))}
-            </div>
+        {/* Mensagem de Erro de Autenticação */}
+        {erroLogin && (
+          <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-800 flex items-start gap-2.5">
+            <span className="text-red-600 text-sm leading-none shrink-0 mt-0.5">⚠️</span>
+            <span className="leading-relaxed">{erroLogin}</span>
           </div>
         )}
 
-        {/* Rodapé */}
-        <div className="pt-3 border-t border-slate-200 text-center">
-          <p className="text-[11px] text-slate-400">
-            Acesso restrito e autenticado • Construtora JC Bauer
+        {/* Formulário de Autenticação Seguro */}
+        <form onSubmit={onSubmit} className="space-y-4 text-sm">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              E-mail Corporativo ou Usuário
+            </label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 text-sm">
+                👤
+              </span>
+              <input
+                required
+                type="text"
+                autoComplete="username"
+                value={loginInput}
+                onChange={(e) => setLoginInput(e.target.value)}
+                placeholder="ex: seu.email@jcbauer.com.br"
+                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 hover:bg-slate-50/80 focus:bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-xl text-slate-900 text-sm transition outline-none font-medium placeholder:text-slate-400"
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700">
+                Senha de Acesso
+              </label>
+            </div>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 text-sm">
+                🔑
+              </span>
+              <input
+                required
+                type={mostrarSenha ? "text" : "password"}
+                autoComplete="current-password"
+                value={senhaInput}
+                onChange={(e) => setSenhaInput(e.target.value)}
+                placeholder="Digite sua senha de acesso"
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 hover:bg-slate-50/80 focus:bg-white border border-slate-300 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 rounded-xl text-slate-900 text-sm transition outline-none font-medium placeholder:text-slate-400"
+              />
+              <button
+                type="button"
+                onClick={() => setMostrarSenha(!mostrarSenha)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 text-xs transition cursor-pointer"
+                title={mostrarSenha ? "Ocultar senha" : "Exibir senha"}
+              >
+                {mostrarSenha ? "🙈" : "👁️"}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full mt-2 py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+          >
+            <span>Entrar no Sistema</span>
+            <span>➔</span>
+          </button>
+        </form>
+
+        {/* Rodapé e Aviso de Segurança */}
+        <div className="pt-4 border-t border-slate-200 text-center space-y-1.5">
+          <p className="text-[11px] text-slate-500 font-medium">
+            Ambiente Seguro • Construtora JC Bauer
+          </p>
+          <p className="text-[10px] text-slate-400 leading-normal">
+            Acesso monitorado e restrito aos colaboradores autorizados. As credenciais são individuais e intransferíveis.
           </p>
         </div>
       </div>
@@ -22225,18 +22046,6 @@ function VisaoRestritaObra({
           </h1>
 
           <div className="flex items-center gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                const adminUser = usuarios.find((u) => u.cargo === "Administrador") || USUARIOS_INICIAIS[0];
-                handleQuickLogin(adminUser.id);
-              }}
-              className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-xs cursor-pointer"
-              title="Alternar para Visão Completa da Diretoria / Central de Compras"
-            >
-              <span>👑</span>
-              <span>Visão Diretoria / Painel Executivo</span>
-            </button>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs">
               <span className="font-bold text-slate-900">
                 {usuarioLogado.nome}
