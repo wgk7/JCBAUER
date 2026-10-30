@@ -133,6 +133,9 @@ const COMPARATIVO_STORAGE_KEY = "jc_bauer_comparativo_3orc_v4";
 const PROCESSOS_COTACOES_STORAGE_KEY = "jc_bauer_processos_cotacoes_v1";
 const COTACAO_ATIVA_STORAGE_KEY = "jc_bauer_cotacao_ativa_id_v1";
 const ESTOQUE_ALMOXARIFADO_STORAGE_KEY = "jc_bauer_estoque_almoxarifado_v1";
+const REMEMBER_ME_STORAGE_KEY = "jc_bauer_remember_me_v3";
+const SAVED_LOGIN_STORAGE_KEY = "jc_bauer_saved_login_v3";
+const SAVED_PASSWORD_STORAGE_KEY = "jc_bauer_saved_password_v3";
 
 interface DiarioObraRegistro {
   id: string;
@@ -1717,6 +1720,7 @@ export default function HomePage() {
   );
   const [loginInput, setLoginInput] = useState<string>("");
   const [senhaInput, setSenhaInput] = useState<string>("");
+  const [lembrarConectado, setLembrarConectado] = useState<boolean>(true);
   const [erroLogin, setErroLogin] = useState<string | null>(null);
 
   // Navegação de Abas do Administrador (6 Abas Independentes)
@@ -2782,6 +2786,19 @@ export default function HomePage() {
           }
         }
       } catch {}
+
+      const savedRemember = window.localStorage.getItem(REMEMBER_ME_STORAGE_KEY);
+      const deveLembrar = savedRemember !== "false"; // padrão ativo para conforto do usuário
+      setLembrarConectado(deveLembrar);
+
+      const savedLogin = window.localStorage.getItem(SAVED_LOGIN_STORAGE_KEY);
+      if (savedLogin) {
+        setLoginInput(savedLogin);
+      }
+      const savedPass = window.localStorage.getItem(SAVED_PASSWORD_STORAGE_KEY);
+      if (savedPass) {
+        setSenhaInput(savedPass);
+      }
 
       const savedSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
       if (savedSession) {
@@ -8588,12 +8605,23 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     setUsuarioLogado(userFound);
     try {
       window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(userFound));
+      if (lembrarConectado) {
+        window.localStorage.setItem(REMEMBER_ME_STORAGE_KEY, "true");
+        window.localStorage.setItem(SAVED_LOGIN_STORAGE_KEY, loginLimpo);
+        window.localStorage.setItem(SAVED_PASSWORD_STORAGE_KEY, senhaLimpa);
+      } else {
+        window.localStorage.setItem(REMEMBER_ME_STORAGE_KEY, "false");
+        window.localStorage.removeItem(SAVED_LOGIN_STORAGE_KEY);
+        window.localStorage.removeItem(SAVED_PASSWORD_STORAGE_KEY);
+      }
     } catch {
       // ignore
     }
     setErroLogin(null);
-    setLoginInput("");
-    setSenhaInput("");
+    if (!lembrarConectado) {
+      setLoginInput("");
+      setSenhaInput("");
+    }
     if (userFound.cargo !== "Administrador") {
       setObraActiveTab(
         userFound.cargo === "Almoxarife" ? "NovoPedido" : "PainelDiario"
@@ -8608,8 +8636,16 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     } catch {
       // ignore
     }
-    setLoginInput("");
-    setSenhaInput("");
+    const isRemember = window.localStorage.getItem(REMEMBER_ME_STORAGE_KEY) !== "false";
+    if (isRemember) {
+      const savedLogin = window.localStorage.getItem(SAVED_LOGIN_STORAGE_KEY) || "";
+      const savedPass = window.localStorage.getItem(SAVED_PASSWORD_STORAGE_KEY) || "";
+      setLoginInput(savedLogin);
+      setSenhaInput(savedPass);
+    } else {
+      setLoginInput("");
+      setSenhaInput("");
+    }
     setErroLogin(null);
   };
 
@@ -10212,6 +10248,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         setSenhaInput={setSenhaInput}
         erroLogin={erroLogin}
         onSubmit={handleLoginSubmit}
+        lembrarConectado={lembrarConectado}
+        setLembrarConectado={setLembrarConectado}
       />
     );
   }
@@ -21175,6 +21213,8 @@ function TelaLoginCorporativa({
   setSenhaInput,
   erroLogin,
   onSubmit,
+  lembrarConectado,
+  setLembrarConectado,
 }: {
   companyName: string;
   loginInput: string;
@@ -21183,6 +21223,8 @@ function TelaLoginCorporativa({
   setSenhaInput: (v: string) => void;
   erroLogin: string | null;
   onSubmit: (e: React.FormEvent) => void;
+  lembrarConectado: boolean;
+  setLembrarConectado: (v: boolean) => void;
 }) {
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
@@ -21210,7 +21252,7 @@ function TelaLoginCorporativa({
             Portal Integrado de Suprimentos & Gestão de Obras
           </p>
           <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-600 uppercase tracking-wider">
-            <span>🔒</span> Acesso Restrito e Individual
+            <span>🔒</span> Acesso Restrito e Autenticado
           </div>
         </div>
 
@@ -21222,10 +21264,10 @@ function TelaLoginCorporativa({
           </div>
         )}
 
-        {/* Formulário de Autenticação Seguro */}
-        <form onSubmit={onSubmit} className="space-y-4 text-sm">
+        {/* Formulário de Autenticação Seguro com Opção de Salvar Credenciais */}
+        <form onSubmit={onSubmit} method="POST" action="#" autoComplete="on" className="space-y-4 text-sm">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            <label htmlFor="usuario_login" className="block text-xs font-bold text-slate-700 mb-1.5">
               E-mail Corporativo ou Usuário
             </label>
             <div className="relative">
@@ -21234,6 +21276,8 @@ function TelaLoginCorporativa({
               </span>
               <input
                 required
+                id="usuario_login"
+                name="username"
                 type="text"
                 autoComplete="username"
                 value={loginInput}
@@ -21246,7 +21290,7 @@ function TelaLoginCorporativa({
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-bold text-slate-700">
+              <label htmlFor="usuario_senha" className="block text-xs font-bold text-slate-700">
                 Senha de Acesso
               </label>
             </div>
@@ -21256,6 +21300,8 @@ function TelaLoginCorporativa({
               </span>
               <input
                 required
+                id="usuario_senha"
+                name="password"
                 type={mostrarSenha ? "text" : "password"}
                 autoComplete="current-password"
                 value={senhaInput}
@@ -21274,6 +21320,24 @@ function TelaLoginCorporativa({
             </div>
           </div>
 
+          {/* Opção: Salvar dados de acesso e permanecer conectado */}
+          <div className="flex items-center justify-between pt-0.5 pb-1">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none group">
+              <input
+                type="checkbox"
+                checked={lembrarConectado}
+                onChange={(e) => setLembrarConectado(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600 focus:ring-offset-0 cursor-pointer accent-emerald-700"
+              />
+              <span className="text-xs font-semibold text-slate-700 group-hover:text-slate-900 transition flex items-center gap-1.5">
+                <span>Salvar dados e permanecer conectado</span>
+                <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                  Lembrar
+                </span>
+              </span>
+            </label>
+          </div>
+
           <button
             type="submit"
             className="w-full mt-2 py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
@@ -21289,7 +21353,7 @@ function TelaLoginCorporativa({
             Ambiente Seguro • Construtora JC Bauer
           </p>
           <p className="text-[10px] text-slate-400 leading-normal">
-            Acesso monitorado e restrito aos colaboradores autorizados. As credenciais são individuais e intransferíveis.
+            Acesso monitorado e restrito aos colaboradores autorizados. Suas credenciais são salvas com segurança no seu dispositivo.
           </p>
         </div>
       </div>
