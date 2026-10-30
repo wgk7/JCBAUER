@@ -131,6 +131,7 @@ const ITENS_PLANILHA_STORAGE_KEY = "jc_bauer_itens_planilha_v3";
 const DUPLICIDADES_STORAGE_KEY = "jc_bauer_duplicidades_v3";
 const COMPARATIVO_STORAGE_KEY = "jc_bauer_comparativo_3orc_v4";
 const PROCESSOS_COTACOES_STORAGE_KEY = "jc_bauer_processos_cotacoes_v1";
+const COTACAO_ATIVA_STORAGE_KEY = "jc_bauer_cotacao_ativa_id_v1";
 const ESTOQUE_ALMOXARIFADO_STORAGE_KEY = "jc_bauer_estoque_almoxarifado_v1";
 
 interface DiarioObraRegistro {
@@ -269,8 +270,10 @@ interface OrdemCompra {
   status:
     | "Emitida"
     | "Aguardando Entrega"
+    | "Atrasada"
     | "Entregue"
     | "Entregue na Obra (Confirmado pelo Almoxarifado)";
+  statusLogistica?: "Agendado" | "Atrasado" | "Entregue";
   notaFiscalRecebida?: string;
   condicaoRecebimento?: string;
   recebidoPor?: string;
@@ -1258,6 +1261,16 @@ function parseDataEntregaISO(valor?: string): string | null {
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+  if (m) {
+    const ano = parseInt(m[3], 10) < 50 ? `20${m[3]}` : `19${m[3]}`;
+    return `${ano}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  }
+  m = v.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (m) {
+    const anoAtual = new Date().getFullYear();
+    return `${anoAtual}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  }
   return null;
 }
 
@@ -1305,7 +1318,8 @@ function calcularOffsetSemana(iso: string): number {
 function ordemEntregue(o: OrdemCompra): boolean {
   return (
     o.status === "Entregue na Obra (Confirmado pelo Almoxarifado)" ||
-    o.status === "Entregue"
+    o.status === "Entregue" ||
+    o.statusLogistica === "Entregue"
   );
 }
 
@@ -1316,9 +1330,17 @@ function montarCargaLogistica(
 ): CargaItemLogistica {
   const entregue = ordemEntregue(o);
   let status: CargaItemLogistica["status"] = "Agendado";
-  if (entregue) status = "Entregue";
-  else if (dataISO && dataISO === hojeISO) status = "Hoje";
-  else if (dataISO && dataISO < hojeISO) status = "Atrasado";
+  if (entregue) {
+    status = "Entregue";
+  } else if (o.statusLogistica === "Atrasado" || o.status === "Atrasada") {
+    status = "Atrasado";
+  } else if (o.statusLogistica === "Agendado") {
+    status = dataISO && dataISO === hojeISO ? "Hoje" : "Agendado";
+  } else if (dataISO && dataISO === hojeISO) {
+    status = "Hoje";
+  } else if (dataISO && dataISO < hojeISO) {
+    status = "Atrasado";
+  }
 
   return {
     id: `carga-${o.id}`,
@@ -1406,7 +1428,11 @@ function listarCargasPendentesSemAgenda(
     )
     .map((o) => ({ o, iso: parseDataEntregaISO(o.dataPrevistaEntrega) }))
     .filter(
-      ({ iso }) => !iso || (iso < hojeISO && !diasVisiveisISO.includes(iso))
+      ({ o, iso }) =>
+        !iso ||
+        o.statusLogistica === "Atrasado" ||
+        o.status === "Atrasada" ||
+        (iso < hojeISO && !diasVisiveisISO.includes(iso))
     )
     .map(({ o, iso }) => montarCargaLogistica(o, iso, hojeISO));
 }
@@ -1423,41 +1449,121 @@ function gerarSkuInsumo(
   categoria: string,
   estoqueExistente: ItemEstoque[]
 ): string {
-  const textoTotal = `${nome || ""} ${categoria || ""}`.toLowerCase().trim();
-  const n = textoTotal;
-  const c = textoTotal;
+  const n = (nome || "").toLowerCase().trim();
+  const c = (categoria || "").toLowerCase().trim();
 
   let prefixo = "MAT";
 
+  // 1. Telhas e Coberturas
   if (
+    n.includes("telha") ||
+    n.includes("cumeeira") ||
+    n.includes("rufo") ||
+    c.includes("cobertura") ||
+    c.includes("telhad")
+  ) {
+    prefixo = "TEL";
+  }
+  // 2. Madeira e Carpintaria
+  else if (
+    n.includes("madeira") ||
+    n.includes("caibro") ||
+    n.includes("sarrafo") ||
+    n.includes("compensado") ||
+    n.includes("maderite") ||
+    n.includes("tábua") ||
+    n.includes("tabua") ||
+    n.includes("pontalete") ||
+    n.includes("ripa") ||
+    n.includes("vigote")
+  ) {
+    prefixo = "MAD";
+  }
+  // 3. Cimento, Argamassas e Rejuntes (antes de revestimento para capturar argamassa de porcelanato como CIM)
+  else if (
+    n.includes("cimento") ||
+    n.includes("argamassa") ||
+    n.includes("rejunte") ||
+    n.includes("graute") ||
+    /\bcal\b/.test(n) ||
+    n.includes("cal hidratada") ||
+    c.includes("cimento")
+  ) {
+    prefixo = "CIM";
+  }
+  // 4. Revestimentos, Porcelanatos, Cerâmicas e Louças
+  else if (
+    n.includes("porcelanato") ||
+    n.includes("revestimento") ||
+    n.includes("biancogres") ||
+    n.includes("dallas") ||
+    /\bpiso\b/.test(n) ||
+    n.includes("cerâmica") ||
+    n.includes("ceramica") ||
+    n.includes("azulejo") ||
+    n.includes("pastilha") ||
+    n.includes("louça") ||
+    n.includes("louca") ||
+    n.includes("bacia sanitária") ||
+    n.includes("cuba") ||
+    c.includes("revestimento")
+  ) {
+    prefixo = "REV";
+  }
+  // 5. Instalações Elétricas e Acessórios de Infra Elétrica
+  else if (
+    n.includes("cabo") ||
+    n.includes("fio ") ||
+    n.includes("fio-") ||
+    n.startsWith("fio") ||
+    n.includes("disjuntor") ||
+    n.includes("eletroduto") ||
+    n.includes("eletrocalha") ||
+    n.includes("calha") ||
+    n.includes("tomada") ||
+    n.includes("interruptor") ||
+    n.includes("mufa") ||
+    n.includes("cabeçote") ||
+    n.includes("cabecote") ||
+    n.includes("aterramento") ||
+    n.includes("haste") ||
+    n.includes("kanaflex") ||
+    n.includes("alta tensão") ||
+    n.includes("alta tensao") ||
+    n.includes("abraçadeira") ||
+    n.includes("abracadeira") ||
+    n.includes("fita isolante") ||
+    (n.includes("box") && n.includes("rosca")) ||
+    n.includes("galvanizad") ||
+    (n.includes("curva") && (n.includes("horizontal") || n.includes("90°") || n.includes("90"))) ||
+    c.includes("elétr") ||
+    c.includes("telecom") ||
+    c.includes("dados")
+  ) {
+    prefixo = "ELE";
+  }
+  // 6. Hidrossanitário e Conexões PVC
+  else if (
     n.includes("pvc") ||
     n.includes("tubo") ||
     n.includes("joelho") ||
     n.includes("curva") ||
     n.includes("luva") ||
     n.includes("te ") ||
-    n.includes("te.") ||
     n.includes("té ") ||
-    n.includes("té.") ||
     n.includes("válvula") ||
     n.includes("valvula") ||
     n.includes("registro") ||
     n.includes("soldável") ||
-    n.includes("sold") ||
+    n.includes("soldavel") ||
     n.includes("esgoto") ||
     n.includes("hidr") ||
     c.includes("hidr")
   ) {
     prefixo = "PVC";
-  } else if (
-    n.includes("cimento") ||
-    n.includes("argamassa") ||
-    n.includes("cal ") ||
-    n.includes("rejunte") ||
-    c.includes("cimento")
-  ) {
-    prefixo = "CIM";
-  } else if (
+  }
+  // 7. Aço e Estrutura
+  else if (
     n.includes("aço") ||
     n.includes("aco") ||
     n.includes("ca-50") ||
@@ -1465,19 +1571,24 @@ function gerarSkuInsumo(
     n.includes("vergalh") ||
     n.includes("arame") ||
     n.includes("tela soldada") ||
+    n.includes("malha") ||
     c.includes("aço") ||
     c.includes("estrutura")
   ) {
     prefixo = "ACO";
-  } else if (
-    n.includes("adesivo") ||
-    n.includes("cola") ||
-    n.includes("silicone") ||
-    n.includes("fita") ||
-    n.includes("vedante")
+  }
+  // 8. Fixação
+  else if (
+    n.includes("prego") ||
+    n.includes("parafuso") ||
+    n.includes("bucha") ||
+    n.includes("barra roscada") ||
+    n.includes("chumbador")
   ) {
-    prefixo = "ADE";
-  } else if (
+    prefixo = "FIX";
+  }
+  // 9. Pintura
+  else if (
     n.includes("tinta") ||
     n.includes("selador") ||
     n.includes("verniz") ||
@@ -1486,17 +1597,18 @@ function gerarSkuInsumo(
     c.includes("pintura")
   ) {
     prefixo = "PNT";
-  } else if (
-    n.includes("cabo") ||
-    n.includes("fio ") ||
-    n.includes("disjuntor") ||
-    n.includes("eletroduto") ||
-    n.includes("tomada") ||
-    n.includes("interruptor") ||
-    c.includes("elétr")
+  }
+  // 10. Alvenaria
+  else if (
+    n.includes("tijolo") ||
+    n.includes("bloco") ||
+    n.includes("canaleta") ||
+    c.includes("alvenaria")
   ) {
-    prefixo = "ELE";
-  } else if (
+    prefixo = "ALV";
+  }
+  // 11. Agregados
+  else if (
     n.includes("areia") ||
     n.includes("brita") ||
     n.includes("pedra") ||
@@ -1504,34 +1616,14 @@ function gerarSkuInsumo(
     n.includes("saibro")
   ) {
     prefixo = "AGR";
-  } else if (
-    n.includes("tijolo") ||
-    n.includes("bloco") ||
-    n.includes("canaleta") ||
-    c.includes("alvenaria")
-  ) {
-    prefixo = "ALV";
-  } else if (
-    n.includes("madeira") ||
-    n.includes("tábua") ||
-    n.includes("tabua") ||
-    n.includes("sarrafo") ||
-    n.includes("compensado") ||
-    n.includes("pontalete")
-  ) {
-    prefixo = "MAD";
-  } else if (
-    n.includes("prego") ||
-    n.includes("parafuso") ||
-    n.includes("bucha") ||
-    n.includes("barra roscada")
-  ) {
-    prefixo = "FIX";
-  } else if (
+  }
+  // 12. EPI
+  else if (
     n.includes("epi") ||
     n.includes("capacete") ||
     n.includes("bota") ||
     n.includes("óculos") ||
+    n.includes("oculos") ||
     n.includes("luva de vaqueta")
   ) {
     prefixo = "EPI";
@@ -1541,8 +1633,9 @@ function gerarSkuInsumo(
   const skuRegex = new RegExp(`^SKU-${prefixo}-(\\d+)$`, "i");
 
   (estoqueExistente || []).forEach((it) => {
-    if (it.codigo) {
-      const match = it.codigo.match(skuRegex);
+    const cod = it.codigo || it.sku || "";
+    if (cod) {
+      const match = cod.match(skuRegex);
       if (match && match[1]) {
         const num = parseInt(match[1], 10);
         if (!isNaN(num) && num > maxSeq) {
@@ -1554,6 +1647,34 @@ function gerarSkuInsumo(
 
   const proximo = maxSeq + 1;
   return `SKU-${prefixo}-${String(proximo).padStart(3, "0")}`;
+}
+
+function inferirCategoriaPorSku(prefixo: string, categoriaOriginal?: string): string {
+  const cat = (categoriaOriginal || "").trim();
+  switch (prefixo) {
+    case "ELE":
+      if (cat.includes("Fundaç") || !cat || cat.includes("Geral")) return "Instalações Elétricas & Dados";
+      return cat;
+    case "REV":
+      if (cat.includes("Elétr") || !cat || cat.includes("Geral")) return "Revestimentos, Louças & Metais";
+      return cat;
+    case "MAD":
+      if (cat.includes("Fundaç") || !cat || cat.includes("Geral")) return "Alvenaria & Vedações";
+      return cat;
+    case "TEL":
+      return "Cobertura & Telhado";
+    case "CIM":
+      if (cat.includes("Elétr") || !cat || cat.includes("Geral")) return "Alvenaria & Vedações";
+      return cat;
+    case "PVC":
+      return "Instalações Hidrossanitárias";
+    case "ACO":
+      return "Estrutura (Aço & Concreto)";
+    case "PNT":
+      return "Pintura & Acabamentos";
+    default:
+      return cat || "Geral / Suprimentos";
+  }
 }
 
 function normalizarNomeInsumo(nome: string): string {
@@ -1726,6 +1847,7 @@ export default function HomePage() {
     []
   );
   const [cotacaoAtivaId, setCotacaoAtivaId] = useState<string>("");
+  const isSwitchingCotacaoRef = useRef<string | null>(null);
   const [filtroStatusCotacoes, setFiltroStatusCotacoes] =
     useState<string>("TODAS");
   const [buscaProcessosCotacoes, setBuscaProcessosCotacoes] =
@@ -1733,6 +1855,8 @@ export default function HomePage() {
   const [comparativoTitulo, setComparativoTitulo] = useState<string>("");
   const [comparativoObraId, setComparativoObraId] = useState<string>("");
   const [comparativoCategoria, setComparativoCategoria] = useState<string>("");
+  const [linhaEsperaExpandida, setLinhaEsperaExpandida] = useState<boolean>(false);
+  const [menuMaisAcoesCotacao, setMenuMaisAcoesCotacao] = useState<boolean>(false);
   const [comparativoFornecedores, setComparativoFornecedores] = useState<
     FornecedorCotadoRapido[]
   >([
@@ -1859,32 +1983,41 @@ export default function HomePage() {
   /* SINCRONIZAÇÃO AUTOMÁTICA DE INSUMOS DO COMPARATIVO COM O ALMOXARIFADO    */
   /* ----------------------------------------------------------------------- */
   const sincronizarInsumosAoEstoque = (
-    itensParaSincronizar: ItemComparativoRapido[]
+    itensParaSincronizar: ItemComparativoRapido[],
+    categoriaCustom?: string,
+    obraIdCustom?: string,
+    obraNomeCustom?: string,
+    fornecedorCustom?: string
   ) => {
     if (!itensParaSincronizar || itensParaSincronizar.length === 0) return;
 
     setEstoque((prevEstoque) => {
       let modificado = false;
       const novoEstoque = [...prevEstoque];
+      const catBase = categoriaCustom || comparativoCategoria || "Geral / Suprimentos";
+      const oId = obraIdCustom || comparativoObraId || "central";
+      const obraSel = obras.find((o) => o.id === oId);
+      const oNome = obraNomeCustom || obraSel?.nome || "Almoxarifado Central";
+      const fornBase = fornecedorCustom || comparativoFornecedores?.[0]?.nome || undefined;
 
       itensParaSincronizar.forEach((it) => {
         const nomeLimpo = (it.nome || "").trim();
         if (!nomeLimpo || nomeLimpo.length < 2) return;
 
         // Deduplicação estrita: verifica se já existe (ignorando maiúsculas e espaços)
-        const jaExiste = novoEstoque.some(
+        const itemExistente = novoEstoque.find(
           (est) =>
-            est.descricao.trim().toLowerCase() === nomeLimpo.toLowerCase()
+            normalizarNomeInsumo(est.descricao) === normalizarNomeInsumo(nomeLimpo)
         );
 
-        if (!jaExiste) {
+        if (!itemExistente) {
           const sku = gerarSkuInsumo(
             nomeLimpo,
-            comparativoCategoria || "",
+            catBase,
             novoEstoque
           );
-          const obraSel =
-            obras.find((o) => o.id === comparativoObraId) || obras[0];
+          const prefixo = sku.split("-")[1] || "MAT";
+          const catCorrigida = inferirCategoriaPorSku(prefixo, catBase);
 
           // Determina o menor preço cotado caso preenchido
           const precosValidos = Array.isArray(it.precos)
@@ -1899,32 +2032,144 @@ export default function HomePage() {
             id: `est-auto-${Date.now()}-${Math.random()
               .toString(36)
               .substring(2, 6)}`,
-            obraId: comparativoObraId || "central",
-            obraNome: obraSel?.nome || "Almoxarifado Central",
+            obraId: oId,
+            obraNome: oNome,
             codigo: sku,
+            sku: sku,
             descricao: nomeLimpo,
-            categoria: comparativoCategoria || "Geral / Suprimentos",
+            categoria: catCorrigida,
             unidade: it.unidade || "un",
-            saldoAtual: 0, // Saldo inicial 0 para posterior inventário/contagem manual
+            saldoAtual: 0,
             estoqueMinimo: 0,
             pontoReposicao: 0,
             custoMedio: menorPrecoCotado,
             localizacaoFisica: "Almoxarifado Principal",
             ultimaMovimentacao: new Date().toLocaleDateString("pt-BR"),
-            fornecedorHabitual:
-              comparativoFornecedores?.[0]?.nome || undefined,
+            fornecedorHabitual: fornBase,
           };
 
           novoEstoque.push(novoItem);
           modificado = true;
+        } else {
+          // Garante que o item existente tenha o campo sku preenchido
+          if (!itemExistente.sku && itemExistente.codigo) {
+            itemExistente.sku = itemExistente.codigo;
+            modificado = true;
+          }
         }
       });
 
-      return modificado ? novoEstoque : prevEstoque;
+      if (modificado) {
+        try {
+          window.localStorage.setItem(ESTOQUE_STORAGE_KEY, JSON.stringify(novoEstoque));
+          salvarChaveSupabase(ESTOQUE_STORAGE_KEY, novoEstoque).catch(() => {});
+        } catch {}
+        return novoEstoque;
+      }
+      return prevEstoque;
     });
   };
 
-  // Insumos do comparativo só são catalogados no almoxarifado sob comando explícito ou emissão de OC
+  /* ----------------------------------------------------------------------- */
+  /* SINCRONIZAÇÃO EM MASSA: TODAS AS COTAÇÕES SALVAS -> ALMOXARIFADO         */
+  /* ----------------------------------------------------------------------- */
+  const sincronizarTodasCotacoesAoAlmoxarifado = (
+    processosOrigem?: ProcessoCotacao[],
+    silent = false
+  ) => {
+    const lista = processosOrigem || processosCotacoes;
+    if (!Array.isArray(lista) || lista.length === 0) {
+      if (!silent) dispararAviso("Nenhuma cotação salva encontrada para sincronizar.");
+      return;
+    }
+
+    setEstoque((prevEstoque) => {
+      let modificado = false;
+      const novoEstoque = [...prevEstoque];
+      let totalNovos = 0;
+
+      lista.forEach((cot) => {
+        if (!cot.itens || !Array.isArray(cot.itens)) return;
+
+        const catBase = cot.categoria || "Geral / Suprimentos";
+        const oId = cot.obraId || "central";
+        const obraSel = obras.find((o) => o.id === oId);
+        const oNome = cot.obraNome || obraSel?.nome || "Almoxarifado Central";
+        const fornBase = cot.melhorFornecedorNome || cot.fornecedores?.[0]?.nome || undefined;
+
+        cot.itens.forEach((it) => {
+          const nomeLimpo = (it.nome || "").trim();
+          if (!nomeLimpo || nomeLimpo.length < 2) return;
+
+          const itemExistente = novoEstoque.find(
+            (est) =>
+              normalizarNomeInsumo(est.descricao) === normalizarNomeInsumo(nomeLimpo)
+          );
+
+          if (!itemExistente) {
+            const sku = gerarSkuInsumo(nomeLimpo, catBase, novoEstoque);
+            const prefixo = sku.split("-")[1] || "MAT";
+            const catCorrigida = inferirCategoriaPorSku(prefixo, catBase);
+
+            const precosValidos = Array.isArray(it.precos)
+              ? it.precos.map(Number).filter((p) => p > 0)
+              : [it.preco1, it.preco2, it.preco3, it.preco4, it.preco5]
+                  .map(Number)
+                  .filter((p) => p > 0);
+            const menorPrecoCotado =
+              precosValidos.length > 0 ? Math.min(...precosValidos) : 0;
+
+            const novoItem: ItemEstoque = {
+              id: `est-auto-${Date.now()}-${Math.random()
+                .toString(36)
+                .substring(2, 6)}`,
+              obraId: oId,
+              obraNome: oNome,
+              codigo: sku,
+              sku: sku,
+              descricao: nomeLimpo,
+              categoria: catCorrigida,
+              unidade: it.unidade || "un",
+              saldoAtual: 0,
+              estoqueMinimo: 0,
+              pontoReposicao: 0,
+              custoMedio: menorPrecoCotado,
+              localizacaoFisica: "Almoxarifado Principal",
+              ultimaMovimentacao: new Date().toLocaleDateString("pt-BR"),
+              fornecedorHabitual: fornBase,
+            };
+
+            novoEstoque.push(novoItem);
+            modificado = true;
+            totalNovos++;
+          } else {
+            if (!itemExistente.sku && itemExistente.codigo) {
+              itemExistente.sku = itemExistente.codigo;
+              modificado = true;
+            }
+          }
+        });
+      });
+
+      if (modificado) {
+        try {
+          window.localStorage.setItem(ESTOQUE_STORAGE_KEY, JSON.stringify(novoEstoque));
+          salvarChaveSupabase(ESTOQUE_STORAGE_KEY, novoEstoque).catch(() => {});
+        } catch {}
+        if (!silent) {
+          dispararAviso(
+            `Almoxarifado sincronizado com sucesso! ${totalNovos} novos insumos catalogados com SKUs padronizados.`
+          );
+        }
+        return novoEstoque;
+      } else {
+        if (!silent) {
+          dispararAviso("Todos os insumos das cotações já estão devidamente catalogados no Almoxarifado com SKU!");
+        }
+        return prevEstoque;
+      }
+    });
+  };
 
   const handleSalvarAjusteRapidoSaldo = (
     itemId: string,
@@ -2454,16 +2699,32 @@ export default function HomePage() {
           JSON.stringify(listaProcessos)
         );
       } catch {}
-      const ativa = listaProcessos[0];
+      let ativa = listaProcessos[0];
+      try {
+        const savedAtivaId = window.localStorage.getItem(COTACAO_ATIVA_STORAGE_KEY);
+        if (savedAtivaId) {
+          const encontrada = listaProcessos.find((p) => p.id === savedAtivaId);
+          if (encontrada) ativa = encontrada;
+        }
+      } catch {}
+
       if (ativa) {
         setCotacaoAtivaId(ativa.id);
-        setComparativoTitulo(ativa.titulo);
+        setComparativoTitulo(ativa.titulo || "");
         setComparativoObraId(ativa.obraId || "");
         setComparativoCategoria(
           ativa.categoria || "Revestimentos, Louças & Metais"
         );
-        setComparativoFornecedores(ativa.fornecedores);
-        setComparativoItens(ativa.itens);
+        setComparativoFornecedores(
+          Array.isArray(ativa.fornecedores) && ativa.fornecedores.length >= 2
+            ? ativa.fornecedores
+            : [
+                { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
+                { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
+                { nome: "", vendedor: "", telefone: "", prazo: "", condicao: "", freteTipo: "CIF", freteValor: 0, descontoValor: 0 },
+              ]
+        );
+        setComparativoItens(Array.isArray(ativa.itens) ? ativa.itens : []);
       }
       // Carrega Lote de Compra Coletiva do localStorage
       try {
@@ -2701,6 +2962,9 @@ export default function HomePage() {
                     JSON.stringify(processosNuvem)
                   );
                 } catch {}
+                setTimeout(() => {
+                  sincronizarTodasCotacoesAoAlmoxarifado(processosNuvem, true);
+                }, 300);
               }
             }
           }
@@ -2723,28 +2987,27 @@ export default function HomePage() {
           const novos = JSON.parse(e.newValue);
           if (Array.isArray(novos) && novos.length > 0) {
             setProcessosCotacoes(novos);
-            const primeira = novos[0];
-            if (primeira) {
-              setCotacaoAtivaId(primeira.id);
-              setComparativoTitulo(primeira.titulo);
-              setComparativoObraId(primeira.obraId || "");
-              setComparativoCategoria(primeira.categoria || "Revestimentos, Louças & Metais");
-              if (Array.isArray(primeira.fornecedores) && primeira.fornecedores.length >= 2) {
-                setComparativoFornecedores(primeira.fornecedores);
+            // Preserva a cotação que o usuário está trabalhando no momento! Não força para o primeiro!
+            setCotacaoAtivaId((currentAtivaId) => {
+              const cotacaoAtualAindaExiste = novos.find((c) => c.id === currentAtivaId);
+              if (cotacaoAtualAindaExiste) {
+                return currentAtivaId;
               }
-              if (Array.isArray(primeira.itens) && primeira.itens.length > 0) {
-                setComparativoItens(primeira.itens);
+              const primeira = novos[0];
+              if (primeira) {
+                setComparativoTitulo(primeira.titulo || "");
+                setComparativoObraId(primeira.obraId || "");
+                setComparativoCategoria(primeira.categoria || "Geral / Suprimentos");
+                if (Array.isArray(primeira.fornecedores) && primeira.fornecedores.length >= 2) {
+                  setComparativoFornecedores(primeira.fornecedores);
+                }
+                if (Array.isArray(primeira.itens)) {
+                  setComparativoItens(primeira.itens);
+                }
+                return primeira.id;
               }
-            }
-          }
-        } else if (e.key === COMPARATIVO_STORAGE_KEY) {
-          const comp = JSON.parse(e.newValue);
-          if (comp && typeof comp === "object") {
-            if (comp.titulo !== undefined) setComparativoTitulo(comp.titulo);
-            if (comp.obraId !== undefined) setComparativoObraId(comp.obraId);
-            if (comp.categoria !== undefined) setComparativoCategoria(comp.categoria);
-            if (Array.isArray(comp.fornecedores) && comp.fornecedores.length >= 2) setComparativoFornecedores(comp.fornecedores);
-            if (Array.isArray(comp.itens) && comp.itens.length > 0) setComparativoItens(comp.itens);
+              return currentAtivaId;
+            });
           }
         } else if (e.key === ESTOQUE_STORAGE_KEY) {
           const est = JSON.parse(e.newValue);
@@ -3118,6 +3381,7 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
     if (!storageCarregado) return;
     try {
       window.localStorage.setItem(ESTOQUE_STORAGE_KEY, JSON.stringify(estoque));
+      salvarChaveSupabase(ESTOQUE_STORAGE_KEY, estoque).catch(() => {});
     } catch {
       // ignore
     }
@@ -3197,7 +3461,13 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
 
   // Sincroniza e salva cotações continuamente em tempo real
   useEffect(() => {
-    if (!storageCarregado) return;
+    if (!storageCarregado || !cotacaoAtivaId) return;
+
+    // Se acabamos de acionar a troca de cotação pelo seletor/botão, evita sobrescrita imediata com estado defasado
+    if (isSwitchingCotacaoRef.current === cotacaoAtivaId) {
+      isSwitchingCotacaoRef.current = null;
+      return;
+    }
 
     try {
       const dadosSalvar = {
@@ -3213,8 +3483,6 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
       );
     } catch {}
 
-    if (!cotacaoAtivaId) return;
-
     setProcessosCotacoes((prev) => {
       const idx = prev.findIndex((p) => p.id === cotacaoAtivaId);
       const atual = idx !== -1 ? prev[idx] : null;
@@ -3222,7 +3490,7 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
 
       const validos = (comparativoFornecedores || [])
         .map((forn, fIdx) => {
-          const sub = comparativoItens.reduce((acc, it) => {
+          const sub = (comparativoItens || []).reduce((acc, it) => {
             const p = getItemPreco(it, fIdx);
             return acc + (it.quantidade || 0) * p;
           }, 0);
@@ -3247,7 +3515,7 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
         codigo: atual?.codigo || `COT-${anoAtual}-001`,
         titulo: comparativoTitulo || atual?.titulo || "Cotação de Insumos #001",
         obraId: comparativoObraId,
-        obraNome: obraSel?.nome || "Todas as Obras / Canteiro Central",
+        obraNome: obraSel?.nome || atual?.obraNome || "Todas as Obras / Canteiro Central",
         categoria: comparativoCategoria || atual?.categoria || "Geral / Suprimentos",
         status: atual?.status || "Aguardando Fornecedores",
         dataCriacao: atual?.dataCriacao || new Date().toLocaleDateString("pt-BR"),
@@ -3256,6 +3524,9 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
         menorValor: menorVal,
         melhorFornecedorNome: melhorNome,
         savingGerado: resumoComparativo?.savingGlobal || 0,
+        solicitacaoOrigemId: atual?.solicitacaoOrigemId,
+        solicitanteNome: atual?.solicitanteNome,
+        urgencia: atual?.urgencia,
         dataAtualizacao:
           new Date().toLocaleDateString("pt-BR") +
           " " +
@@ -3282,6 +3553,16 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
         );
       } catch {}
 
+      // Garante que insumos desta cotação estejam catalogados no Almoxarifado com SKU
+      if (Array.isArray(comparativoItens) && comparativoItens.length > 0) {
+        sincronizarInsumosAoEstoque(
+          comparativoItens,
+          comparativoCategoria,
+          comparativoObraId,
+          obraSel?.nome
+        );
+      }
+
       return novaLista;
     });
   }, [
@@ -3307,6 +3588,7 @@ CREATE POLICY "Acesso publico comparativos" ON public.comparativos FOR ALL USING
     dataISO: string;
     janela: string;
     veiculo: string;
+    status: "Agendado" | "Atrasado" | "Entregue";
   } | null>(null);
   const [cargaArrastandoId, setCargaArrastandoId] = useState<string | null>(null);
   const cargasLogistica = useMemo(
@@ -5767,29 +6049,6 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     }
   };
 
-  const handleAplicarPropostaFornecedorOnline = (
-    fornIdx: number,
-    proposta: PropostaFornecedorOnline
-  ) => {
-    if (!proposta) return;
-
-    setComparativoFornecedores((prev) => {
-      const copia = [...prev];
-      if (copia[fornIdx]) {
-        copia[fornIdx] = {
-          ...copia[fornIdx],
-          nome: proposta.fornecedorNome || copia[fornIdx].nome,
-          vendedor: proposta.vendedorNome || copia[fornIdx].vendedor,
-          telefone: proposta.telefoneWhatsapp || copia[fornIdx].telefone,
-          prazo: proposta.prazoEntregaGeral || copia[fornIdx].prazo,
-          condicao: proposta.condicaoPagamento || copia[fornIdx].condicao,
-          freteTipo: proposta.tipoFrete || copia[fornIdx].freteTipo,
-          freteValor:
-            proposta.freteValor !== undefined
-              ? proposta.freteValor
-              : copia[fornIdx].freteValor,
-        };
-
   // Polling em Segundo Plano para Detectar Novas Propostas do Portal do Fornecedor em Tempo Real
   const ultimasPropostasNotificadasRef = useRef<Set<string>>(new Set());
 
@@ -5797,7 +6056,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     if (typeof window === "undefined") return;
 
     const verificarPropostasOnline = async () => {
-      const cotacaoId = cotacaoAtivaId || (processosCotacoes[0] ? processosCotacoes[0].id : null);
+      const cotacaoId = cotacaoAtivaId;
       if (!cotacaoId) return;
 
       try {
@@ -5829,7 +6088,30 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       clearTimeout(timerInicial);
       clearInterval(interval);
     };
-  }, [cotacaoAtivaId, processosCotacoes]);
+  }, [cotacaoAtivaId]);
+
+  const handleAplicarPropostaFornecedorOnline = (
+    fornIdx: number,
+    proposta: PropostaFornecedorOnline
+  ) => {
+    if (!proposta) return;
+
+    setComparativoFornecedores((prev) => {
+      const copia = [...prev];
+      if (copia[fornIdx]) {
+        copia[fornIdx] = {
+          ...copia[fornIdx],
+          nome: proposta.fornecedorNome || copia[fornIdx].nome,
+          vendedor: proposta.vendedorNome || copia[fornIdx].vendedor,
+          telefone: proposta.telefoneWhatsapp || copia[fornIdx].telefone,
+          prazo: proposta.prazoEntregaGeral || copia[fornIdx].prazo,
+          condicao: proposta.condicaoPagamento || copia[fornIdx].condicao,
+          freteTipo: proposta.tipoFrete || copia[fornIdx].freteTipo,
+          freteValor:
+            proposta.freteValor !== undefined
+              ? proposta.freteValor
+              : copia[fornIdx].freteValor,
+        };
       }
       return copia;
     });
@@ -6075,12 +6357,16 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     });
 
     // Carrega a nova cotação limpa no quadro ativo
+    isSwitchingCotacaoRef.current = nova.id;
     setCotacaoAtivaId(nova.id);
     setComparativoTitulo(nova.titulo);
     setComparativoObraId(nova.obraId);
     setComparativoCategoria(nova.categoria);
     setComparativoFornecedores(nova.fornecedores);
     setComparativoItens(nova.itens);
+    try {
+      window.localStorage.setItem(COTACAO_ATIVA_STORAGE_KEY, nova.id);
+    } catch {}
     setModoCotacoes("comparativo_rapido");
 
     dispararAviso(
@@ -6089,7 +6375,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
   };
 
   const handleTrocarCotacaoAtiva = (targetId: string) => {
-    if (targetId === cotacaoAtivaId) return;
+    if (!targetId || targetId === cotacaoAtivaId) return;
 
     let listaAtual = processosCotacoes;
     if (cotacaoAtivaId) {
@@ -6127,45 +6413,64 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     const alvo = listaAtual.find((p) => p.id === targetId);
     if (!alvo) return;
 
+    isSwitchingCotacaoRef.current = alvo.id;
+
     setCotacaoAtivaId(alvo.id);
     setComparativoTitulo(alvo.titulo || "");
     setComparativoObraId(alvo.obraId || "");
     setComparativoCategoria(alvo.categoria || "Geral / Suprimentos");
     setComparativoFornecedores(
-      alvo.fornecedores || [
-        {
-          nome: "",
-          vendedor: "",
-          telefone: "",
-          prazo: "",
-          condicao: "",
-          freteTipo: "CIF",
-          freteValor: 0,
-          descontoValor: 0,
-        },
-        {
-          nome: "",
-          vendedor: "",
-          telefone: "",
-          prazo: "",
-          condicao: "",
-          freteTipo: "CIF",
-          freteValor: 0,
-          descontoValor: 0,
-        },
-        {
-          nome: "",
-          vendedor: "",
-          telefone: "",
-          prazo: "",
-          condicao: "",
-          freteTipo: "CIF",
-          freteValor: 0,
-          descontoValor: 0,
-        },
-      ]
+      Array.isArray(alvo.fornecedores) && alvo.fornecedores.length >= 2
+        ? alvo.fornecedores
+        : [
+            {
+              nome: "",
+              vendedor: "",
+              telefone: "",
+              prazo: "",
+              condicao: "",
+              freteTipo: "CIF",
+              freteValor: 0,
+              descontoValor: 0,
+            },
+            {
+              nome: "",
+              vendedor: "",
+              telefone: "",
+              prazo: "",
+              condicao: "",
+              freteTipo: "CIF",
+              freteValor: 0,
+              descontoValor: 0,
+            },
+            {
+              nome: "",
+              vendedor: "",
+              telefone: "",
+              prazo: "",
+              condicao: "",
+              freteTipo: "CIF",
+              freteValor: 0,
+              descontoValor: 0,
+            },
+          ]
     );
-    setComparativoItens(alvo.itens || []);
+    setComparativoItens(Array.isArray(alvo.itens) ? alvo.itens : []);
+
+    // Sincroniza os itens da cotação carregada com o Almoxarifado
+    if (Array.isArray(alvo.itens) && alvo.itens.length > 0) {
+      sincronizarInsumosAoEstoque(
+        alvo.itens,
+        alvo.categoria,
+        alvo.obraId,
+        alvo.obraNome,
+        alvo.melhorFornecedorNome
+      );
+    }
+
+    try {
+      window.localStorage.setItem(COTACAO_ATIVA_STORAGE_KEY, alvo.id);
+    } catch {}
 
     if (modoCotacoes !== "comparativo_rapido") {
       setModoCotacoes("comparativo_rapido");
@@ -6240,12 +6545,16 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       return list;
     });
 
+    isSwitchingCotacaoRef.current = copia.id;
     setCotacaoAtivaId(copia.id);
     setComparativoTitulo(copia.titulo);
     setComparativoObraId(copia.obraId);
     setComparativoCategoria(copia.categoria);
     setComparativoFornecedores(copia.fornecedores);
     setComparativoItens(copia.itens);
+    try {
+      window.localStorage.setItem(COTACAO_ATIVA_STORAGE_KEY, copia.id);
+    } catch {}
     setModoCotacoes("comparativo_rapido");
 
     dispararAviso(
@@ -6326,16 +6635,51 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
   const handleSalvarCotacaoManual = () => {
     try {
+      let listaSalvar = processosCotacoes;
+      if (cotacaoAtivaId) {
+        const idx = processosCotacoes.findIndex((p) => p.id === cotacaoAtivaId);
+        if (idx !== -1) {
+          listaSalvar = [...processosCotacoes];
+          listaSalvar[idx] = {
+            ...listaSalvar[idx],
+            titulo: comparativoTitulo || listaSalvar[idx].titulo,
+            obraId: comparativoObraId,
+            categoria: comparativoCategoria,
+            fornecedores: comparativoFornecedores,
+            itens: comparativoItens,
+            dataAtualizacao:
+              new Date().toLocaleDateString("pt-BR") +
+              " " +
+              new Date().toLocaleTimeString("pt-BR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+          };
+          setProcessosCotacoes(listaSalvar);
+        }
+      }
       window.localStorage.setItem(
         PROCESSOS_COTACOES_STORAGE_KEY,
-        JSON.stringify(processosCotacoes)
+        JSON.stringify(listaSalvar)
       );
       salvarChaveSupabase(
         PROCESSOS_COTACOES_STORAGE_KEY,
-        processosCotacoes
+        listaSalvar
       ).catch(() => {});
+
+      // Sincroniza imediatamente os insumos desta cotação com o Almoxarifado
+      if (Array.isArray(comparativoItens) && comparativoItens.length > 0) {
+        const obraSel = obras.find((o) => o.id === comparativoObraId);
+        sincronizarInsumosAoEstoque(
+          comparativoItens,
+          comparativoCategoria,
+          comparativoObraId,
+          obraSel?.nome
+        );
+      }
+
       dispararAviso(
-        "Cotação salva com sucesso no banco de dados e sincronizada na nuvem!"
+        "Cotação salva com sucesso no banco de dados e insumos sincronizados com o Almoxarifado!"
       );
     } catch {
       dispararAviso("Erro ao salvar cotação.");
@@ -8263,45 +8607,140 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     dispararAviso(`Obra "${obraNome}" removida com sucesso.`);
   };
 
-  /* Reagendamento de entrega no Calendário de Cargas (altera somente data/janela/veículo da OC) */
-  const handleReagendarEntrega = (
+  /* Reagendamento e Edição Completa de Carga (Data, Status, Janela, Veículo) */
+  const handleSalvarEdicaoCarga = (
     ordemId: string,
-    novaDataISO: string,
+    novaDataISO?: string,
     janela?: string,
-    veiculo?: string
+    veiculo?: string,
+    novoStatus?: "Agendado" | "Atrasado" | "Entregue"
   ) => {
-    const iso = parseDataEntregaISO(novaDataISO);
-    if (!iso) {
-      dispararAviso("Informe uma data de entrega válida.");
-      return;
-    }
     const ordemAlvo = ordens.find((o) => o.id === ordemId);
     if (!ordemAlvo) {
       dispararAviso("Ordem de compra não encontrada.");
       return;
     }
-    const novasOrdens = ordens.map((o) =>
-      o.id === ordemId
-        ? {
-            ...o,
-            dataPrevistaEntrega: formatarDataBR(iso),
-            janelaEntrega:
-              janela !== undefined ? janela.trim() || undefined : o.janelaEntrega,
-            veiculoEntrega:
-              veiculo !== undefined ? veiculo.trim() || undefined : o.veiculoEntrega,
-          }
-        : o
-    );
+
+    const iso = novaDataISO ? parseDataEntregaISO(novaDataISO) : null;
+    if (novaDataISO && !iso) {
+      dispararAviso("Informe uma data de entrega válida.");
+      return;
+    }
+
+    const dataHora = `${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+    const recebedor = usuarioLogado ? `${usuarioLogado.nome} (${usuarioLogado.cargo})` : "Almoxarifado da Obra";
+
+    const novasOrdens = ordens.map((o) => {
+      if (o.id !== ordemId) return o;
+
+      const atualizada: OrdemCompra = {
+        ...o,
+        dataPrevistaEntrega: iso ? formatarDataBR(iso) : o.dataPrevistaEntrega,
+        janelaEntrega: janela !== undefined ? janela.trim() || undefined : o.janelaEntrega,
+        veiculoEntrega: veiculo !== undefined ? veiculo.trim() || undefined : o.veiculoEntrega,
+      };
+
+      if (novoStatus === "Entregue") {
+        atualizada.status = "Entregue na Obra (Confirmado pelo Almoxarifado)";
+        atualizada.statusLogistica = "Entregue";
+        atualizada.recebidoPor = o.recebidoPor || recebedor;
+        atualizada.dataHoraRecebimento = o.dataHoraRecebimento || dataHora;
+      } else if (novoStatus === "Atrasado") {
+        atualizada.status = "Atrasada";
+        atualizada.statusLogistica = "Atrasado";
+      } else if (novoStatus === "Agendado") {
+        atualizada.status = "Aguardando Entrega";
+        atualizada.statusLogistica = "Agendado";
+      }
+
+      return atualizada;
+    });
+
     setOrdens(novasOrdens);
     try {
       window.localStorage.setItem(ORDENS_STORAGE_KEY, JSON.stringify(novasOrdens));
     } catch {}
     salvarChaveSupabase(ORDENS_STORAGE_KEY, novasOrdens).catch(() => {});
     setCargaEmEdicao(null);
-    setSemanaLogisticaOffset(calcularOffsetSemana(iso));
-    dispararAviso(
-      `Entrega da ${ordemAlvo.numeroOc} (${ordemAlvo.fornecedorNome}) reagendada para ${formatarDataBR(iso)}.`
-    );
+
+    if (iso) {
+      setSemanaLogisticaOffset(calcularOffsetSemana(iso));
+    }
+
+    if (novoStatus === "Entregue") {
+      setSolicitacoes((prev) =>
+        prev.map((s) =>
+          s.id === ordemAlvo.scId || s.codigo === ordemAlvo.scCodigo
+            ? {
+                ...s,
+                status: "Entregue na Obra",
+                recebidoPor: recebedor,
+                dataHoraRecebimento: dataHora,
+              }
+            : s
+        )
+      );
+
+      if (Array.isArray(ordemAlvo.itens) && ordemAlvo.itens.length > 0) {
+        setEstoque((prevEstoque) => {
+          const novoEstoque = [...prevEstoque];
+          let modificado = false;
+          ordemAlvo.itens.forEach((itemOc) => {
+            const itemIdx = novoEstoque.findIndex(
+              (it) =>
+                it.obraId === ordemAlvo.obraId &&
+                (it.descricao.trim().toLowerCase() === itemOc.descricao.trim().toLowerCase() ||
+                  (itemOc.codigo && it.codigo.toLowerCase() === itemOc.codigo.toLowerCase()))
+            );
+            if (itemIdx >= 0) {
+              const itemExistente = novoEstoque[itemIdx];
+              novoEstoque[itemIdx] = {
+                ...itemExistente,
+                saldoAtual: itemExistente.saldoAtual + (Number(itemOc.quantidade) || 0),
+                dataUltimaEntrada: new Date().toISOString().split("T")[0],
+                quantidadeUltimaEntrada: Number(itemOc.quantidade) || 0,
+                fornecedorUltimaEntrada: ordemAlvo.fornecedorNome,
+              };
+              modificado = true;
+            }
+          });
+          if (modificado) {
+            try {
+              window.localStorage.setItem(ESTOQUE_STORAGE_KEY, JSON.stringify(novoEstoque));
+              salvarChaveSupabase(ESTOQUE_STORAGE_KEY, novoEstoque).catch(() => {});
+            } catch {}
+            return novoEstoque;
+          }
+          return prevEstoque;
+        });
+      }
+
+      dispararAviso(`Carga da ${ordemAlvo.numeroOc} confirmada como ENTREGUE na obra!`);
+    } else if (novoStatus === "Atrasado") {
+      dispararAviso(`Carga da ${ordemAlvo.numeroOc} sinalizada como ATRASADA.`);
+    } else {
+      dispararAviso(
+        iso
+          ? `Entrega da ${ordemAlvo.numeroOc} reagendada para ${formatarDataBR(iso)}.`
+          : `Carga da ${ordemAlvo.numeroOc} atualizada com sucesso!`
+      );
+    }
+  };
+
+  const handleReagendarEntrega = (
+    ordemId: string,
+    novaDataISO: string,
+    janela?: string,
+    veiculo?: string
+  ) => {
+    handleSalvarEdicaoCarga(ordemId, novaDataISO, janela, veiculo, undefined);
+  };
+
+  const handleAlterarStatusCargaDireto = (
+    ordemId: string,
+    novoStatus: "Agendado" | "Atrasado" | "Entregue"
+  ) => {
+    handleSalvarEdicaoCarga(ordemId, undefined, undefined, undefined, novoStatus);
   };
 
   const handleSalvarEdicaoOrdem = (ordemAtualizada: OrdemCompra) => {
@@ -9824,152 +10263,176 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             </button>
           </div>
 
-          {/* Menu com Abas Independentes + Configurações */}
-          <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-160px)]">
+          {/* Menu Organizado por Áreas Estratégicas */}
+          <nav className="p-3 space-y-4 overflow-y-auto max-h-[calc(100vh-170px)]">
             {(
               [
                 {
-                  id: "Telao",
-                  label: "Telão Executivo (TV / Sala de Guerra)",
-                  badge: "AO VIVO 🔴",
-                  iconPath: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
+                  categoria: "Suprimentos & Compras",
+                  itens: [
+                    {
+                      id: "Painel" as TabId,
+                      label: "Painel de Compras",
+                      iconPath: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
+                    },
+                    {
+                      id: "Cotacoes" as TabId,
+                      label: "Comparativo de Preços",
+                      badge: "3 Cotações",
+                      iconPath: "M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3",
+                    },
+                    {
+                      id: "Ordens" as TabId,
+                      label: "Ordens de Compra",
+                      iconPath: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
+                    },
+                    {
+                      id: "Estoque" as TabId,
+                      label: "Almoxarifado & Estoque",
+                      iconPath: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
+                    },
+                  ],
                 },
                 {
-                  id: "Semaforo",
-                  label: "Semáforo de Custos (Orçado vs Real)",
-                  badge: "GOVERNANÃ‡A 🚦",
-                  iconPath: "M13 10V3L4 14h7v7l9-11h-7z",
+                  categoria: "Canteiro & Logística",
+                  itens: [
+                    {
+                      id: "Logistica" as TabId,
+                      label: "Calendário de Cargas",
+                      iconPath: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+                    },
+                    {
+                      id: "Medicoes" as TabId,
+                      label: "Contratos & Medições",
+                      iconPath: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z",
+                    },
+                    {
+                      id: "Concreteiras" as TabId,
+                      label: "Concreteiras & Bombas",
+                      iconPath: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
+                    },
+                    {
+                      id: "ComprasColetivas" as TabId,
+                      label: "Compras Coletivas",
+                      iconPath: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z",
+                    },
+                  ],
                 },
                 {
-                  id: "Painel",
-                  label: "Painel de Compras",
-                  iconPath: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
+                  categoria: "Diretoria & Custos",
+                  itens: [
+                    {
+                      id: "Telao" as TabId,
+                      label: "Telão Executivo (War Room)",
+                      badge: "AO VIVO",
+                      iconPath: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
+                    },
+                    {
+                      id: "Semaforo" as TabId,
+                      label: "Semáforo de Custos",
+                      iconPath: "M13 10V3L4 14h7v7l9-11h-7z",
+                    },
+                    {
+                      id: "DesempenhoFinanceiro" as TabId,
+                      label: "BI Financeiro & Obras",
+                      iconPath: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
+                    },
+                    {
+                      id: "Orcamento" as TabId,
+                      label: "Orçamento da Obra",
+                      iconPath: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+                    },
+                  ],
                 },
                 {
-                  id: "DesempenhoFinanceiro",
-                  label: "BI Financeiro & Obras",
-                  badge: "Saving",
-                  iconPath: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
+                  categoria: "Cadastros & Sistema",
+                  itens: [
+                    {
+                      id: "Fornecedores" as TabId,
+                      label: "Fornecedores & IQF",
+                      iconPath: "M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
+                    },
+                    {
+                      id: "Importacao" as TabId,
+                      label: "Importar Planilhas",
+                      iconPath: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12",
+                    },
+                    {
+                      id: "Configuracoes" as TabId,
+                      label: "Configurações",
+                      iconPath: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z",
+                    },
+                  ],
                 },
-                {
-                  id: "Cotacoes",
-                  label: "Comparativo de Pre\u00E7os",
-                  badge: "3 Or\u00E7amentos",
-                  iconPath: "M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3",
-                },
-                {
-                  id: "Concreteiras",
-                  label: "Concreteiras (Concreto & Bomba)",
-                  badge: "Especializado",
-                  iconPath: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
-                },
-                {
-                  id: "ComprasColetivas",
-                  label: "Compras Coletivas (Ganho de Escala)",
-                  badge: "Multiobra",
-                  iconPath: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z",
-                },
-                {
-                  id: "Fornecedores",
-                  label: "Fornecedores & IQF",
-                  iconPath: "M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
-                },
-                {
-                  id: "Ordens",
-                  label: "Ordens de Compra",
-                  iconPath: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-                },
-                {
-                  id: "Estoque",
-                  label: "Almoxarifado & Estoque",
-                  iconPath: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
-                },
-                {
-                  id: "Medicoes",
-                  label: "Contratos & Medi\u00E7\u00F5es",
-                  iconPath: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z",
-                },
-                {
-                  id: "Orcamento",
-                  label: "Or\u00E7amento da Obra",
-                  iconPath: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
-                },
-                {
-                  id: "Logistica",
-                  label: "Calend\u00E1rio de Cargas",
-                  iconPath: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
-                },
-                {
-                  id: "Importacao",
-                  label: "Importar Planilhas",
-                  iconPath: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12",
-                },
-                {
-                  id: "Configuracoes",
-                  label: "Configura\u00E7\u00F5es",
-                  iconPath: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z",
-                },
-              ] as { id: TabId; label: string; badge?: string; iconPath: string }[]
-            ).map((item) => {
-              const ativo = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setActiveTab(item.id);
-                    setMenuLateralAberto(false);
-                  }}
-                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-lg text-xs font-semibold transition text-left cursor-pointer ${
-                    ativo
-                      ? "bg-emerald-600 text-white shadow-xs"
-                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <svg className={`w-4 h-4 shrink-0 ${ativo ? "text-white" : "text-slate-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.iconPath} />
-                    </svg>
-                    <span className="truncate">{item.label}</span>
-                  </div>
-                  {item.badge && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-600 text-[10px] font-extrabold shrink-0">
-                      {item.badge}
-                    </span>
-                  )}
-                  {item.id === "Painel" && novosPedidosCanteiroCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-xs font-extrabold shrink-0">
-                      {novosPedidosCanteiroCount}
-                    </span>
-                  )}
-                  {item.id === "Estoque" && itensAbaixoMinimo.length > 0 && (
-                    <span
-                      title={`${itensAbaixoMinimo.length} insumos abaixo do estoque de segurança`}
-                      className="px-1.5 py-0.5 rounded-full bg-red-600 text-white text-xs font-extrabold shrink-0 animate-pulse"
+              ]
+            ).map((grupo) => (
+              <div key={grupo.categoria} className="space-y-0.5">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 pt-2 pb-1">
+                  {grupo.categoria}
+                </div>
+                {grupo.itens.map((item) => {
+                  const ativo = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActiveTab(item.id);
+                        setMenuLateralAberto(false);
+                      }}
+                      className={`w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition text-left cursor-pointer ${
+                        ativo
+                          ? "bg-emerald-600 text-white font-semibold shadow-xs"
+                          : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
+                      }`}
                     >
-                      {itensAbaixoMinimo.length}
-                    </span>
-                  )}
-                  {item.id === "Logistica" && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-blue-300 text-xs font-bold shrink-0">
-                      {cargasLogistica.flatMap((d) => d.cargas).filter((c) => c.status === "Hoje" || c.status === "Agendado").length}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <svg className={`w-4 h-4 shrink-0 ${ativo ? "text-white" : "text-slate-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={item.iconPath} />
+                        </svg>
+                        <span className="truncate">{item.label}</span>
+                      </div>
+                      {item.badge && (
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 text-[10px] font-bold shrink-0">
+                          {item.badge}
+                        </span>
+                      )}
+                      {item.id === "Painel" && novosPedidosCanteiroCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-xs font-extrabold shrink-0">
+                          {novosPedidosCanteiroCount}
+                        </span>
+                      )}
+                      {item.id === "Estoque" && itensAbaixoMinimo.length > 0 && (
+                        <span
+                          title={`${itensAbaixoMinimo.length} insumos abaixo do estoque de segurança`}
+                          className="px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-xs font-bold shrink-0"
+                        >
+                          {itensAbaixoMinimo.length}
+                        </span>
+                      )}
+                      {item.id === "Logistica" && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-blue-300 text-xs font-bold shrink-0">
+                          {cargasLogistica.flatMap((d) => d.cargas).filter((c) => c.status === "Hoje" || c.status === "Agendado").length}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
-            {/* Destaque Executivo One-Pager Diretoria na Sidebar */}
-            <div className="pt-2 px-1">
-              <button
-                type="button"
-                onClick={() => setShowModalOnePager(true)}
-                className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-black text-xs transition flex items-center justify-center gap-2 shadow-md shadow-indigo-950/60 border border-indigo-400/40 cursor-pointer"
-                title="Abrir a Lâmina Mensal Executiva da Diretoria (PDF A4 Paisagem)"
-              >
-                <span>📑</span>
-                <span>One-Pager Diretoria (PDF)</span>
-              </button>
-            </div>
+
+          {/* Destaque Executivo One-Pager Diretoria na Sidebar */}
+          <div className="pt-2 px-3 pb-1">
+            <button
+              type="button"
+              onClick={() => setShowModalOnePager(true)}
+              className="w-full py-2 px-3 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-200 hover:text-white font-bold text-xs transition flex items-center justify-center gap-2 border border-indigo-500/30 cursor-pointer"
+              title="Abrir a Lâmina Mensal Executiva da Diretoria (PDF A4 Paisagem)"
+            >
+              <span>📑</span>
+              <span>One-Pager Diretoria (PDF)</span>
+            </button>
+          </div>
         </div>
 
         {/* Rodapé Dinâmico da Sidebar (Perfil Logado + Botão Sair / Trocar Conta) */}
@@ -10049,31 +10512,25 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             <button
               type="button"
               onClick={() => setActiveTab("Configuracoes")}
-              className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition ${
+              className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition ${
                 supabaseStatus.schemaReady
-                  ? "bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-800"
+                  ? "bg-emerald-50/80 hover:bg-emerald-100/80 border-emerald-200 text-emerald-800"
                   : supabaseStatus.connected
-                  ? "bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800"
-                  : "bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700"
+                  ? "bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-800"
+                  : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600"
               }`}
               title={supabaseStatus.message}
             >
               <span
                 className={`w-2 h-2 rounded-full ${
                   supabaseStatus.schemaReady
-                    ? "bg-emerald-500 animate-pulse"
+                    ? "bg-emerald-500"
                     : supabaseStatus.connected
                     ? "bg-amber-500"
                     : "bg-slate-400"
                 }`}
               />
-              <span>
-                {supabaseStatus.schemaReady
-                  ? "☁️ Supabase Nuvem"
-                  : supabaseStatus.connected
-                  ? "⚡ Supabase (Configurar)"
-                  : "🔌 Supabase"}
-              </span>
+              <span>Nuvem</span>
             </button>
             {/* Botão de Notificações com Badge */}
             <div className="relative">
@@ -10085,26 +10542,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               >
                 <span className="text-base">🔔</span>
                 {notificacoesSistema.length > 0 && (
-                  <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-red-600 text-white rounded-full text-[10px] font-extrabold animate-pulse">
+                  <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-rose-600 text-white rounded-full text-[10px] font-bold">
                     {notificacoesSistema.length}
                   </span>
                 )}
               </button>
             </div>
 
-            <div className="hidden 2xl:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs">
-              <span className="font-bold text-emerald-800">
-                👑 {usuarioLogado.cargo}:
-              </span>
-              <span className="font-semibold text-slate-800">
-                {usuarioLogado.nome}
-              </span>
-            </div>
-
             <select
               value={obraFiltro}
               onChange={(e) => setObraFiltro(e.target.value)}
-              className="bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-slate-900"
+              className="bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer"
             >
               <option value="ALL">Todas as Obras ({obras.length})</option>
               {obras.map((o) => (
@@ -10114,42 +10562,52 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               ))}
             </select>
 
-            {/* Botão de Destaque Telão do Proprietário */}
+            {/* Botão Telão do Proprietário */}
             <button
               type="button"
               onClick={() => setActiveTab("Telao")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 shadow-md cursor-pointer shrink-0 border ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 border ${
                 activeTab === "Telao"
-                  ? "bg-cyan-500 text-slate-950 border-cyan-400 ring-2 ring-cyan-400/50"
-                  : "bg-slate-900 hover:bg-slate-800 text-cyan-300 border-cyan-500/40 hover:border-cyan-400"
+                  ? "bg-slate-900 text-amber-400 border-slate-900 shadow-xs"
+                  : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200"
               }`}
               title="Abrir o Telão Executivo da Diretoria (Sala de Guerra / TV em Tempo Real)"
             >
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span>📺 Telão do Diretor</span>
+              <span>📺</span>
+              <span className="hidden xl:inline">Telão Diretor</span>
             </button>
-            {/* Botão One-Pager Diretoria (PDF Executivo A4) */}
+
+            {/* Botão One-Pager Diretoria */}
             <button
               type="button"
               onClick={() => setShowModalOnePager(true)}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0 border bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200 hover:border-indigo-300"
-              title="Gerar Lâmina Executiva Mensal da Diretoria (PDF A4 Paisagem com 1 Clique)"
+              className="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 border bg-white hover:bg-indigo-50/60 text-indigo-900 border-slate-200"
+              title="Gerar Lâmina Executiva Mensal da Diretoria (PDF A4 Paisagem)"
             >
-              <span>{"\uD83D\uDCD1"} One-Pager Diretoria (PDF)</span>
+              <span>📑</span>
+              <span className="hidden xl:inline">One-Pager</span>
             </button>
 
             {renderBotaoPrimarioHeader()}
 
-            <button
-              onClick={handleLogout}
-              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-700 border border-slate-300 text-xs font-semibold transition whitespace-nowrap"
-              title="Encerrar sessão ou trocar de perfil"
-            >
-              🚪 Sair
-            </button>
+            {/* Perfil & Sair */}
+            <div className="flex items-center pl-1 border-l border-slate-200 gap-1.5">
+              <div className="hidden 2xl:flex flex-col text-right pr-1">
+                <span className="text-[11px] font-bold text-slate-900 leading-tight">
+                  {usuarioLogado.nome}
+                </span>
+                <span className="text-[10px] text-slate-500 leading-tight">
+                  {usuarioLogado.cargo}
+                </span>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="px-2.5 py-1.5 rounded-lg hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-200 hover:border-rose-200 text-xs font-medium transition cursor-pointer"
+                title="Encerrar sessão ou trocar de perfil"
+              >
+                Sair
+              </button>
+            </div>
           </div>
         </header>
 
@@ -10374,14 +10832,24 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                       : solicitacoes.filter((s) => s.obraId === obraFiltro);
 
                     return CATEGORIAS_CONSTRUCAO.map((catNome, idx) => {
-                      const ocsCat = ordensAtivas.filter(
-                        (o) => (o.categoria || "").trim().toLowerCase() === catNome.toLowerCase() ||
-                               (o.categoria || "").toLowerCase().includes(catNome.split(" ")[0].toLowerCase())
-                      );
-                      const scsCat = solicitacoesAtivas.filter(
-                        (s) => (s.categoria || "").trim().toLowerCase() === catNome.toLowerCase() ||
-                               (s.categoria || "").toLowerCase().includes(catNome.split(" ")[0].toLowerCase())
-                      );
+                      const matchCat = (categoriaItem: string) => {
+                        const itemCat = (categoriaItem || "").trim().toLowerCase();
+                        const discCat = catNome.trim().toLowerCase();
+                        if (!itemCat) return false;
+                        if (itemCat === discCat) return true;
+                        // Diferenciação estrita de Instalações
+                        if (discCat.includes("hidro") || discCat.includes("sanit")) {
+                          return itemCat.includes("hidro") || itemCat.includes("sanit") || itemCat.includes("hidráulica");
+                        }
+                        if (discCat.includes("elétric") || discCat.includes("dados")) {
+                          return itemCat.includes("elétric") || itemCat.includes("dados") || itemCat.includes("energia");
+                        }
+                        const palavraChave = discCat.split(" ")[0];
+                        return itemCat.includes(palavraChave) || discCat.includes(itemCat);
+                      };
+
+                      const ocsCat = ordensAtivas.filter((o) => matchCat(o.categoria));
+                      const scsCat = solicitacoesAtivas.filter((s) => matchCat(s.categoria));
 
                       const realizado = ocsCat.reduce((acc, o) => acc + (Number(o.valorTotal) || 0), 0);
                       const orcadoScs = scsCat.reduce((acc, s) =>
@@ -12276,7 +12744,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           {/* ============================================================= */}
           {activeTab === "Cotacoes" && (
             <div>
-              {/* LINHA DE ESPERA DO MAPA DE COTAÇÃO (DEMANDAS DO ALMOXARIFADO & CANTEIROS) */}
+              {/* LINHA DE ESPERA COMPACTA & EXPANSÍVEL (DEMANDAS DO ALMOXARIFADO) */}
               {(() => {
                 const demandasLinhaEspera = processosCotacoes.filter(
                   (p) => p.status === "Aguardando Fornecedores" || p.solicitacaoOrigemId
@@ -12284,223 +12752,294 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                 if (demandasLinhaEspera.length === 0) return null;
 
                 return (
-                  <div className="bg-gradient-to-r from-amber-50 via-white to-amber-50/40 border-2 border-amber-400/80 rounded-xl p-4 shadow-sm mb-6">
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl mb-4 overflow-hidden shadow-2xs transition-all">
+                    <div className="px-3.5 py-2 flex flex-wrap items-center justify-between gap-2.5 bg-amber-100/40">
                       <div className="flex items-center gap-2">
-                        <span className="flex h-3 w-3 relative">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                        <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                        <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                          <span>📥</span> Linha de Espera
                         </span>
-                        <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
-                          <span>📥</span> Linha de Espera do Mapa de Cotação — Demandas do Almoxarifado
-                        </h3>
-                        <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-950 text-xs font-black">
+                        <span className="px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-950 text-[11px] font-bold">
                           {demandasLinhaEspera.length} na fila
                         </span>
+                        <span className="text-xs text-amber-800/80 hidden lg:inline">
+                          • Demandas do almoxarifado aguardando equalização
+                        </span>
                       </div>
-                      <span className="text-xs text-slate-500 font-medium">
-                        Clique em <strong>"Equalizar nesta Cotação"</strong> para carregar os insumos e preencher os fornecedores
-                      </span>
+
+                      <div className="flex items-center gap-2">
+                        {demandasLinhaEspera.slice(0, 3).map((proc) => {
+                          const isAtiva = cotacaoAtivaId === proc.id;
+                          return (
+                            <button
+                              key={proc.id}
+                              type="button"
+                              onClick={() => handleTrocarCotacaoAtiva(proc.id)}
+                              className={`text-[11px] font-medium px-2.5 py-1 rounded-md transition flex items-center gap-1.5 cursor-pointer ${
+                                isAtiva
+                                  ? "bg-slate-900 text-amber-300 font-bold shadow-2xs"
+                                  : "bg-white hover:bg-amber-100/80 text-slate-700 border border-amber-300/60"
+                              }`}
+                              title={`Carregar ${proc.codigo} - ${proc.titulo}`}
+                            >
+                              <span className="font-mono text-[10px] font-bold">{proc.codigo}</span>
+                              <span className="truncate max-w-[110px]">{proc.titulo}</span>
+                              {isAtiva && <span className="text-amber-400">✓</span>}
+                            </button>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => setLinhaEsperaExpandida(!linhaEsperaExpandida)}
+                          className="text-xs font-bold text-amber-900 hover:text-amber-950 px-2 py-1 hover:bg-amber-100/60 rounded transition cursor-pointer"
+                        >
+                          {linhaEsperaExpandida ? "Ocultar ▲" : `Ver todas (${demandasLinhaEspera.length}) ▼`}
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {demandasLinhaEspera.slice(0, 6).map((proc) => {
-                        const isAtiva = cotacaoAtivaId === proc.id;
-                        return (
-                          <div
-                            key={proc.id}
-                            className={`p-3 rounded-lg border transition ${
-                              isAtiva
-                                ? "bg-slate-900 text-white border-slate-900 shadow-md"
-                                : "bg-white text-slate-900 border-amber-200 hover:border-amber-400"
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-1 mb-1.5">
-                              <div>
+                    {linhaEsperaExpandida && (
+                      <div className="p-3.5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 bg-white/60 border-t border-amber-200/70">
+                        {demandasLinhaEspera.map((proc) => {
+                          const isAtiva = cotacaoAtivaId === proc.id;
+                          return (
+                            <div
+                              key={proc.id}
+                              className={`p-3 rounded-lg border transition ${
+                                isAtiva
+                                  ? "bg-slate-900 text-white border-slate-900 shadow-md"
+                                  : "bg-white text-slate-900 border-amber-200 hover:border-amber-400"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-1 mb-1.5">
+                                <div>
+                                  <span
+                                    className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                                      isAtiva ? "bg-amber-400 text-slate-950" : "bg-amber-100 text-amber-900"
+                                    }`}
+                                  >
+                                    {proc.codigo}
+                                  </span>
+                                  <div className="font-bold text-xs mt-1 truncate max-w-[200px]">
+                                    {proc.titulo}
+                                  </div>
+                                </div>
                                 <span
-                                  className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                                    isAtiva ? "bg-amber-400 text-slate-950" : "bg-amber-100 text-amber-900"
+                                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                                    proc.urgencia === "Crítica - Obra Parada"
+                                      ? "bg-rose-500 text-white"
+                                      : proc.urgencia === "Alta"
+                                      ? "bg-amber-500 text-white"
+                                      : isAtiva
+                                      ? "bg-slate-800 text-slate-300"
+                                      : "bg-slate-100 text-slate-700"
                                   }`}
                                 >
-                                  {proc.codigo}
+                                  {proc.urgencia || "Normal"}
                                 </span>
-                                <div className="font-bold text-xs mt-1 truncate max-w-[200px]">
-                                  {proc.titulo}
-                                </div>
                               </div>
-                              <span
-                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                                  proc.urgencia === "Crítica - Obra Parada"
-                                    ? "bg-red-500 text-white"
-                                    : proc.urgencia === "Alta"
-                                    ? "bg-amber-500 text-white"
-                                    : isAtiva
-                                    ? "bg-slate-800 text-slate-300"
-                                    : "bg-slate-100 text-slate-700"
-                                }`}
-                              >
-                                {proc.urgencia || "Normal"}
-                              </span>
-                            </div>
 
-                            <div className={`text-[11px] mb-2 ${isAtiva ? "text-slate-300" : "text-slate-600"}`}>
-                              <div>🏗️ {proc.obraNome}</div>
-                              <div>👤 {proc.solicitanteNome || "Almoxarifado"} • {proc.itens.length} itens solicitados</div>
-                            </div>
+                              <div className={`text-[11px] mb-2 ${isAtiva ? "text-slate-300" : "text-slate-600"}`}>
+                                <div>🏗️ {proc.obraNome}</div>
+                                <div>👤 {proc.solicitanteNome || "Almoxarifado"} • {proc.itens.length} itens</div>
+                              </div>
 
-                            <div className="flex items-center justify-between pt-2 border-t border-slate-200/40">
-                              <span className={`text-[10px] ${isAtiva ? "text-amber-300 font-bold" : "text-slate-500"}`}>
-                                {isAtiva ? "● Cotação Ativa no Mapa" : "Aguardando Cotação"}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setCotacaoAtivaId(proc.id);
-                                  setComparativoTitulo(proc.titulo);
-                                  setComparativoObraId(proc.obraId);
-                                  setComparativoCategoria(proc.categoria);
-                                  if (Array.isArray(proc.fornecedores) && proc.fornecedores.length >= 2) {
-                                    setComparativoFornecedores(proc.fornecedores);
-                                  }
-                                  setComparativoItens(proc.itens);
-                                  setModoCotacoes("comparativo_rapido");
-                                  dispararAviso(`Cotação ${proc.codigo} carregada na mesa de equalização com todos os ${proc.itens.length} itens!`);
-                                }}
-                                className={`px-2.5 py-1 rounded text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
-                                  isAtiva
-                                    ? "bg-amber-400 hover:bg-amber-300 text-slate-950 font-black"
-                                    : "bg-slate-900 hover:bg-slate-800 text-white"
-                                }`}
-                              >
-                                <span>⚡</span>
-                                <span>{isAtiva ? "Equalizando Agora" : "Equalizar nesta Cotação"}</span>
-                              </button>
+                              <div className="flex items-center justify-between pt-2 border-t border-slate-200/40">
+                                <span className={`text-[10px] ${isAtiva ? "text-amber-300 font-bold" : "text-slate-500"}`}>
+                                  {isAtiva ? "● Cotação Ativa" : "Aguardando"}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleTrocarCotacaoAtiva(proc.id)}
+                                  className={`px-2.5 py-1 rounded text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                                    isAtiva
+                                      ? "bg-amber-400 hover:bg-amber-300 text-slate-950 font-black"
+                                      : "bg-slate-900 hover:bg-slate-800 text-white"
+                                  }`}
+                                >
+                                  <span>⚡</span>
+                                  <span>{isAtiva ? "Equalizando Agora" : "Equalizar"}</span>
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
-              {/* Barra de Seleção de Modo: Comparativo Rápido (3 Orçamentos) vs Cotações de Obra */}
-              <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs mb-6 flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setModoCotacoes("comparativo_rapido")}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
-                      modoCotacoes === "comparativo_rapido"
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                    }`}
-                  >
-                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                    </svg>
-                    <span>{"Comparativo de 3 Or\u00E7amentos (R\u00E1pido)"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setModoCotacoes("painel_cotacoes")}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
-                      modoCotacoes === "painel_cotacoes"
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                    }`}
-                  >
-                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                    </svg>
-                    <span>{`Central de Cota\u00E7\u00F5es Salvas (${processosCotacoes.length})`}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setModoCotacoes("solicitacoes_obra")}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
-                      modoCotacoes === "solicitacoes_obra"
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                    }`}
-                  >
-                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                    </svg>
-                    <span>{`Cota\u00E7\u00F5es Vinculadas a Obras (${solicitacoes.length})`}</span>
-                  </button>
-                </div>
 
-                {modoCotacoes === "comparativo_rapido" && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      ref={comparativoFileInputRef}
-                      type="file"
-                      accept=".xlsx,.xls,.csv"
-                      className="hidden"
-                      onChange={(e) => {
-                        handleUploadItensComparativo(e.target.files);
-                        if (e.target) e.target.value = "";
-                      }}
-                    />
+              {/* CABEÇALHO UNIFICADO DO WORKSPACE DE COTAÇÕES */}
+              <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs mb-5 overflow-hidden">
+                {/* Linha Superior: Abas do Módulo + Ações Rápidas */}
+                <div className="px-4 py-2.5 bg-slate-50/60 border-b border-slate-200/70 flex flex-wrap items-center justify-between gap-3">
+                  <div className="inline-flex p-1 bg-slate-200/60 rounded-lg">
                     <button
                       type="button"
-                      onClick={() => comparativoFileInputRef.current?.click()}
-                      className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold flex items-center gap-1.5 transition"
-                      title="Importar lista de itens de uma planilha Excel"
+                      onClick={() => setModoCotacoes("comparativo_rapido")}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        modoCotacoes === "comparativo_rapido"
+                          ? "bg-white text-slate-900 shadow-2xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
                     >
-                      <span>📥</span> Importar Excel (.xlsx)
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                      </svg>
+                      <span>Comparativo (3 Orçamentos)</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => setShowModalComparativoPdf(true)}
-                      className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs font-semibold flex items-center gap-1.5 transition"
-                      title="Visualizar prévia executiva na tela"
+                      onClick={() => setModoCotacoes("painel_cotacoes")}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        modoCotacoes === "painel_cotacoes"
+                          ? "bg-white text-slate-900 shadow-2xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
                     >
-                      <span>👁️</span> Visualizar Prévia
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                      </svg>
+                      <span>Central de Cotações ({processosCotacoes.length})</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleGerarComparativoRapidoPDF()}
-                      className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
-                      title="Gerar mapa comparativo impresso ou em PDF"
+                      onClick={() => setModoCotacoes("solicitacoes_obra")}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        modoCotacoes === "solicitacoes_obra"
+                          ? "bg-white text-slate-900 shadow-2xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
                     >
-                      <span>🖨️</span> Imprimir Mapa (PDF)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowModalCompartilharCotacao(true)}
-                      className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow-sm transition transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
-                      title="Gerar links exclusivos para preenchimento de preços e envio no WhatsApp aos fornecedores"
-                    >
-                      <span>🔗</span>
-                      <span>Enviar Links / WhatsApp Fornecedores</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleLimparComparativo}
-                      className="px-3 py-1.5 rounded-lg bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 text-xs font-semibold flex items-center gap-1.5 transition"
-                      title="Limpar tabela e iniciar novo comparativo"
-                    >
-                      <span>🗑️</span> Limpar
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                      <span>Vinculadas a Obras ({solicitacoes.length})</span>
                     </button>
                   </div>
-                )}
-              </div>
 
-              {/* MODO 1: COMPARATIVO RÁPIDO DE 3 ORÇAMENTOS (SEM BUROCRACIA) */}
-              {modoCotacoes === "comparativo_rapido" && (
-                <div className="space-y-6">
-                  {/* Barra Superior de Gestão Multi-Cotações em Aberto */}
-                  <div className="bg-slate-900 border border-slate-800 text-white rounded-xl p-3.5 shadow-md flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+                  {modoCotacoes === "comparativo_rapido" && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCriarNovaCotacao}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
+                        title="Criar uma nova cotação em branco"
+                      >
+                        <span>➕</span> Nova Cotação
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSalvarCotacaoManual}
+                        className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
+                        title="Salvar alterações no banco de dados agora"
+                      >
+                        <span>💾</span> Salvar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleGerarComparativoRapidoPDF()}
+                        className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                        title="Gerar mapa comparativo impresso ou em PDF"
+                      >
+                        <span>🖨️</span>
+                        <span className="hidden sm:inline">Imprimir PDF</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowModalCompartilharCotacao(true)}
+                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                        title="Gerar links e enviar no WhatsApp aos fornecedores"
+                      >
+                        <span>🔗</span>
+                        <span className="hidden sm:inline">WhatsApp</span>
+                      </button>
+
+                      {/* Dropdown de Mais Opções */}
+                      <div className="relative">
+                        <input
+                          ref={comparativoFileInputRef}
+                          type="file"
+                          accept=".xlsx,.xls,.csv"
+                          className="hidden"
+                          onChange={(e) => {
+                            handleUploadItensComparativo(e.target.files);
+                            if (e.target) e.target.value = "";
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setMenuMaisAcoesCotacao(!menuMaisAcoesCotacao)}
+                          className="px-2 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
+                          title="Mais opções e ferramentas"
+                        >
+                          •••
+                        </button>
+                        {menuMaisAcoesCotacao && (
+                          <div className="absolute right-0 mt-1 w-52 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-30 text-xs">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                comparativoFileInputRef.current?.click();
+                                setMenuMaisAcoesCotacao(false);
+                              }}
+                              className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
+                            >
+                              <span>📥</span> Importar Excel (.xlsx)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowModalComparativoPdf(true);
+                                setMenuMaisAcoesCotacao(false);
+                              }}
+                              className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
+                            >
+                              <span>👁️</span> Visualizar Prévia
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleDuplicarCotacao(cotacaoAtivaId);
+                                setMenuMaisAcoesCotacao(false);
+                              }}
+                              className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
+                            >
+                              <span>📋</span> Duplicar Lista
+                            </button>
+                            <div className="border-t border-slate-100 my-1" />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleLimparComparativo();
+                                setMenuMaisAcoesCotacao(false);
+                              }}
+                              className="w-full text-left px-3 py-2 hover:bg-rose-50 flex items-center gap-2 text-rose-700"
+                            >
+                              <span>🗑️</span> Limpar Comparativo
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Linha Inferior: Metadados da Cotação Ativa (Integrados) */}
+                {modoCotacoes === "comparativo_rapido" && (
+                  <div className="p-3.5 grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-white">
+                    {/* Cotação Ativa + Título */}
+                    <div className="md:col-span-5 flex flex-col gap-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-amber-400 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
-                          <span>⚖️</span> Cotação Ativa:
-                        </span>
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Cotação Ativa:</span>
                         <select
                           value={cotacaoAtivaId}
                           onChange={(e) => handleTrocarCotacaoAtiva(e.target.value)}
-                          className="bg-slate-800 border border-slate-700 hover:border-slate-600 text-white text-xs font-bold rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-amber-400 outline-none max-w-xs md:max-w-md truncate"
+                          className="bg-slate-100 hover:bg-slate-200/80 border border-slate-300 font-bold text-xs text-slate-900 rounded-md px-2.5 py-1 outline-none cursor-pointer truncate max-w-[260px]"
                         >
                           {processosCotacoes.map((c) => (
                             <option key={c.id} value={c.id}>
@@ -12509,138 +13048,91 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           ))}
                         </select>
                       </div>
-
-                      {/* Seletor de Status Direto */}
-                      <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700">
-                        <span className="text-[11px] font-medium text-slate-400">Status:</span>
-                        <select
-                          value={
-                            processosCotacoes.find((p) => p.id === cotacaoAtivaId)?.status ||
-                            "Aguardando Fornecedores"
-                          }
-                          onChange={(e) =>
-                            handleMudarStatusCotacao(cotacaoAtivaId, e.target.value as any)
-                          }
-                          className="bg-transparent text-xs font-bold outline-none cursor-pointer text-amber-300"
-                        >
-                          <option
-                            value="Aguardando Fornecedores"
-                            className="bg-slate-900 text-amber-300"
-                          >
-                            🟡 Aguardando Fornecedores
-                          </option>
-                          <option value="Em Análise" className="bg-slate-900 text-sky-300">
-                            🔵 Em Análise
-                          </option>
-                          <option value="Rascunho" className="bg-slate-900 text-slate-300">
-                            ⚪ Rascunho
-                          </option>
-                          <option value="Concluída" className="bg-slate-900 text-emerald-300">
-                            🟢 Concluída / OC Gerada
-                          </option>
-                          <option value="Cancelada" className="bg-slate-900 text-rose-300">
-                            🔴 Cancelada
-                          </option>
-                        </select>
-                      </div>
-
-                      <span className="text-[11px] text-slate-400 hidden xl:inline">
-                        ({processosCotacoes.length} cotaç
-                        {processosCotacoes.length === 1 ? "ão" : "ões"} salva
-                        {processosCotacoes.length === 1 ? "" : "s"} simultaneamente)
-                      </span>
+                      <input
+                        type="text"
+                        value={comparativoTitulo}
+                        onChange={(e) => setComparativoTitulo(e.target.value)}
+                        placeholder="Título / Objeto da Cotação (Ex: Aço CA-50 e Vergalhões)"
+                        className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-slate-800 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-900 transition outline-none"
+                      />
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleCriarNovaCotacao}
-                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
-                        title="Criar uma nova cotação em branco sem fechar as outras"
+                    {/* Obra de Destino */}
+                    <div className="md:col-span-3">
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Obra de Destino:
+                      </label>
+                      <select
+                        value={comparativoObraId}
+                        onChange={(e) => setComparativoObraId(e.target.value)}
+                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none transition"
                       >
-                        <span>➕</span> Nova Cotação
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleDuplicarCotacao(cotacaoAtivaId)}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
-                        title="Duplicar a lista de insumos desta cotação para uma nova rodada"
-                      >
-                        <span>📋</span> Duplicar Lista
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleSalvarCotacaoManual}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
-                        title="Salvar alterações agora"
-                      >
-                        <span>💾</span> Salvar
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setModoCotacoes("painel_cotacoes")}
-                        className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
-                        title="Abrir o painel com todas as cotações em andamento"
-                      >
-                        <span>📂</span> Ver Painel de Cotações ({processosCotacoes.length})
-                      </button>
+                        <option value="">Todas as Obras / Canteiro Central</option>
+                        {obras.map((ob) => (
+                          <option key={ob.id} value={ob.id}>
+                            {ob.nome} ({ob.sigla})
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  </div>
-                  {/* Barra de Metadados da Cotação (Título, Obra, Categoria) */}
-                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Objeto / Título da Cotação:
-                        </label>
-                        <input
-                          type="text"
-                          value={comparativoTitulo}
-                          onChange={(e) => setComparativoTitulo(e.target.value)}
-                          placeholder="Ex: Cotação de Aço CA-50 e Vergalhões"
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Empreendimento / Obra de Destino:
-                        </label>
-                        <select
-                          value={comparativoObraId}
-                          onChange={(e) => setComparativoObraId(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
-                        >
-                          <option value="">Todas as Obras / Canteiro Central</option>
-                          {obras.map((ob) => (
-                            <option key={ob.id} value={ob.id}>
-                              {ob.nome} ({ob.sigla})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Categoria de Suprimentos:
-                        </label>
-                        <select
-                          value={comparativoCategoria}
-                          onChange={(e) =>
-                            setComparativoCategoria(e.target.value)
-                          }
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-slate-900"
-                        >
-                          {CATEGORIAS_CONSTRUCAO.map((cat) => (
-                            <option key={cat} value={cat}>
-                              {cat}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+
+                    {/* Categoria */}
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Categoria:
+                      </label>
+                      <select
+                        value={comparativoCategoria}
+                        onChange={(e) =>
+                          setComparativoCategoria(e.target.value)
+                        }
+                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none transition"
+                      >
+                        {CATEGORIAS_CONSTRUCAO.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Status da Cotação */}
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Status:
+                      </label>
+                      <select
+                        value={
+                          processosCotacoes.find((p) => p.id === cotacaoAtivaId)?.status ||
+                          "Aguardando Fornecedores"
+                        }
+                        onChange={(e) =>
+                          handleMudarStatusCotacao(cotacaoAtivaId, e.target.value as any)
+                        }
+                        className={`w-full border rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none cursor-pointer ${
+                          (processosCotacoes.find((p) => p.id === cotacaoAtivaId)?.status || "") === "Concluída"
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                            : (processosCotacoes.find((p) => p.id === cotacaoAtivaId)?.status || "") === "Cancelada"
+                            ? "bg-rose-50 text-rose-800 border-rose-300"
+                            : (processosCotacoes.find((p) => p.id === cotacaoAtivaId)?.status || "") === "Em Análise"
+                            ? "bg-sky-50 text-sky-800 border-sky-300"
+                            : "bg-amber-50 text-amber-900 border-amber-300"
+                        }`}
+                      >
+                        <option value="Aguardando Fornecedores">🟡 Aguardando</option>
+                        <option value="Em Análise">🔵 Em Análise</option>
+                        <option value="Rascunho">⚪ Rascunho</option>
+                        <option value="Concluída">🟢 Concluída</option>
+                        <option value="Cancelada">🔴 Cancelada</option>
+                      </select>
                     </div>
                   </div>
+                )}
+              </div>
+
+              {/* MODO 1: COMPARATIVO RÁPIDO DE 3 ORÇAMENTOS (SEM BUROCRACIA) */}
+              {modoCotacoes === "comparativo_rapido" && (
+                <div className="space-y-4">
                   {/* ALERTA PREDITIVO DE LEAD TIME & RUPTURA DE CANTEIRO (INTELIGÃŠNCIA SUPRIMENTOS) */}
                   {(() => {
                     const cat = comparativoCategoria || "";
@@ -12694,27 +13186,25 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                       : "bg-emerald-600 text-white";
 
                     return (
-                      <div className={`p-3.5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs ${corFundo}`}>
-                        <div className="flex items-start sm:items-center gap-3">
-                          <span className="text-xl">{"\u23F1\uFE0F"}</span>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <strong className="text-xs font-black uppercase tracking-wide">
-                                Alerta Preditivo de Lead Time & Ruptura de Canteiro
-                              </strong>
-                              <span className={`px-2 py-0.2 rounded text-[10px] font-black uppercase tracking-wider ${badgeCor}`}>
-                                Lead Time: ~{dias} Dias Ãšteis
-                              </span>
-                            </div>
-                            <p className="text-xs mt-0.5 opacity-90">
-                              Etapa Vinculada: <strong>{etapaObra}</strong> • {dica}
-                            </p>
+                      <div className={`px-3.5 py-2.5 rounded-lg border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs ${corFundo}`}>
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-base">⏱️</span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold">
+                              Lead Time Estimado:
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${badgeCor}`}>
+                              ~{dias} dias úteis
+                            </span>
+                            <span className="text-slate-600 hidden md:inline">
+                              • {etapaObra}: {dica}
+                            </span>
                           </div>
                         </div>
 
                         <div className="shrink-0 flex items-center gap-2">
-                          <span className="text-[11px] font-semibold text-slate-600 bg-white/80 border border-slate-200 px-2.5 py-1 rounded-lg">
-                            Obra: {obras.find((o) => o.id === comparativoObraId)?.nome || "Todas as Obras"}
+                          <span className="text-[11px] font-medium text-slate-600 bg-white/80 border border-slate-200/80 px-2 py-0.5 rounded">
+                            {obras.find((o) => o.id === comparativoObraId)?.nome || "Todas as Obras"}
                           </span>
                         </div>
                       </div>
@@ -13277,17 +13767,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                       </p>
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          setCotacaoAtivaId(pendenteAlmox.id);
-                                          setComparativoTitulo(pendenteAlmox.titulo);
-                                          setComparativoObraId(pendenteAlmox.obraId);
-                                          setComparativoCategoria(pendenteAlmox.categoria);
-                                          if (Array.isArray(pendenteAlmox.fornecedores) && pendenteAlmox.fornecedores.length >= 2) {
-                                            setComparativoFornecedores(pendenteAlmox.fornecedores);
-                                          }
-                                          setComparativoItens(pendenteAlmox.itens);
-                                          dispararAviso(`Carregados automaticamente ${pendenteAlmox.itens.length} itens do Almoxarifado!`);
-                                        }}
+                                        onClick={() => handleTrocarCotacaoAtiva(pendenteAlmox.id)}
                                         className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-xs transition cursor-pointer"
                                       >
                                         ⚡ Carregar {pendenteAlmox.itens.length} Itens do Almoxarifado no Mapa
@@ -16429,14 +16909,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                           (p) => p.solicitacaoOrigemId === sc.id
                                         );
                                         if (cotEncontrada) {
-                                          setCotacaoAtivaId(cotEncontrada.id);
-                                          setComparativoTitulo(cotEncontrada.titulo);
-                                          setComparativoObraId(cotEncontrada.obraId);
-                                          setComparativoCategoria(cotEncontrada.categoria);
-                                          if (Array.isArray(cotEncontrada.fornecedores) && cotEncontrada.fornecedores.length >= 2) {
-                                            setComparativoFornecedores(cotEncontrada.fornecedores);
-                                          }
-                                          setComparativoItens(cotEncontrada.itens);
+                                          handleTrocarCotacaoAtiva(cotEncontrada.id);
                                         } else {
                                           const itensCot = (sc.itens || []).map((it, idx) => ({
                                             id: `comp-it-${Date.now()}-${idx}`,
@@ -16481,6 +16954,15 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                         >
                           <span>✨</span>
                           <span>+ Cadastrar Material (SKU)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => sincronizarTodasCotacoesAoAlmoxarifado(processosCotacoes, false)}
+                          className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+                          title="Sincronizar todos os insumos das cotações salvas para o Almoxarifado com SKUs padronizados"
+                        >
+                          <span>🔄</span>
+                          <span>Sincronizar Insumos das Cotações</span>
                         </button>
                         <input
                           type="text"
@@ -16553,8 +17035,16 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                         Nenhum item em estoque registrado
                                       </p>
                                       <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                                        Cadastre insumos com SKU único ou aguarde o recebimento de ordens de compra no canteiro.
+                                        Cadastre insumos com SKU único ou sincronize diretamente os itens existentes das cotações.
                                       </p>
+                                      <button
+                                        type="button"
+                                        onClick={() => sincronizarTodasCotacoesAoAlmoxarifado(processosCotacoes, false)}
+                                        className="mt-3 px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-300 font-bold text-xs flex items-center gap-2 shadow transition cursor-pointer"
+                                      >
+                                        <span>🔄</span>
+                                        <span>Sincronizar Insumos do Mapa de Cotação ({processosCotacoes.reduce((acc, p) => acc + (p.itens?.length || 0), 0)} itens detectados)</span>
+                                      </button>
                                     </div>
                                   </td>
                                 </tr>
@@ -16694,14 +17184,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                                 p.obraId === item.obraId
                                             );
                                             if (procRelacionado) {
-                                              setCotacaoAtivaId(procRelacionado.id);
-                                              setComparativoTitulo(procRelacionado.titulo);
-                                              setComparativoObraId(procRelacionado.obraId);
-                                              setComparativoCategoria(procRelacionado.categoria);
-                                              if (Array.isArray(procRelacionado.fornecedores) && procRelacionado.fornecedores.length >= 2) {
-                                                setComparativoFornecedores(procRelacionado.fornecedores);
-                                              }
-                                              setComparativoItens(procRelacionado.itens);
+                                              handleTrocarCotacaoAtiva(procRelacionado.id);
                                             }
                                             setActiveTab("Cotacoes");
                                             setModoCotacoes("comparativo_rapido");
@@ -17755,6 +18238,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                 dataISO: carga.dataEntregaISO || hojeISOCal,
                 janela: ordem?.janelaEntrega || "",
                 veiculo: ordem?.veiculoEntrega || "",
+                status:
+                  carga.status === "Entregue"
+                    ? "Entregue"
+                    : carga.status === "Atrasado"
+                    ? "Atrasado"
+                    : "Agendado",
               });
             };
 
@@ -17772,7 +18261,11 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                   }}
                   onDragEnd={() => setCargaArrastandoId(null)}
                   className={`bg-slate-50 rounded-lg border p-3 space-y-2 transition ${
-                    carga.status === "Atrasado" ? "border-rose-300" : "border-slate-200"
+                    carga.status === "Atrasado"
+                      ? "border-rose-300 ring-1 ring-rose-200"
+                      : carga.status === "Entregue"
+                      ? "border-emerald-200 bg-emerald-50/20"
+                      : "border-slate-200"
                   } ${podeMover ? "cursor-grab active:cursor-grabbing hover:bg-slate-100/80" : ""} ${
                     cargaArrastandoId === carga.ordemId ? "opacity-50" : ""
                   }`}
@@ -17784,27 +18277,34 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                       </span>
                       <span className="text-[10px] text-slate-500">{carga.numeroOc}</span>
                     </div>
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${
-                        carga.status === "Entregue"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : carga.status === "Hoje"
-                          ? "bg-blue-100 text-blue-800"
-                          : carga.status === "Atrasado"
-                          ? "bg-rose-100 text-rose-800"
-                          : "bg-slate-200 text-slate-800"
-                      }`}
-                    >
-                      {carga.status === "Entregue"
-                        ? "Entregue"
-                        : carga.status === "Hoje"
-                        ? "Previsto Hoje"
-                        : carga.status === "Atrasado"
-                        ? "Atrasado"
-                        : carga.dataEntregaISO
-                        ? "Agendado"
-                        : "Sem data"}
-                    </span>
+
+                    {/* Seletor Rápido de Status no Cabeçalho */}
+                    <div className="relative shrink-0">
+                      <select
+                        value={carga.status === "Entregue" ? "Entregue" : carga.status === "Atrasado" ? "Atrasado" : "Agendado"}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleAlterarStatusCargaDireto(carga.ordemId, e.target.value as "Agendado" | "Atrasado" | "Entregue");
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        title="Clique para alterar status: Atrasado, Entregue ou Agendado"
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border cursor-pointer outline-none transition shadow-2xs ${
+                          carga.status === "Entregue"
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
+                            : carga.status === "Hoje"
+                            ? "bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200"
+                            : carga.status === "Atrasado"
+                            ? "bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200"
+                            : "bg-slate-200 text-slate-800 border-slate-300 hover:bg-slate-300"
+                        }`}
+                      >
+                        <option value="Agendado">
+                          ⏳ {carga.status === "Hoje" ? "Previsto Hoje" : carga.dataEntregaISO ? "Agendado" : "Sem data"}
+                        </option>
+                        <option value="Atrasado">🚨 Atrasado</option>
+                        <option value="Entregue">✅ Entregue</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div className="text-xs text-slate-700 font-medium">
@@ -17812,10 +18312,60 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                   </div>
 
                   {emEdicao && cargaEmEdicao ? (
-                    <div className="bg-white p-2.5 rounded border border-blue-300 space-y-2">
+                    <div className="bg-white p-3 rounded-lg border-2 border-blue-400 shadow-sm space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                        <span className="text-[11px] font-bold text-blue-900 flex items-center gap-1">
+                          <span>✏️</span> Ajustar Data &amp; Status
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">{carga.numeroOc}</span>
+                      </div>
+
+                      {/* Seletor de Status na Edição */}
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
-                          Data de entrega
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                          Status da Entrega
+                        </label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCargaEmEdicao({ ...cargaEmEdicao, status: "Agendado" })}
+                            className={`px-2 py-1.5 rounded text-[11px] font-bold border transition text-center cursor-pointer ${
+                              cargaEmEdicao.status === "Agendado"
+                                ? "bg-blue-600 text-white border-blue-700 shadow-xs"
+                                : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                            }`}
+                          >
+                            ⏳ Agendado
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCargaEmEdicao({ ...cargaEmEdicao, status: "Atrasado" })}
+                            className={`px-2 py-1.5 rounded text-[11px] font-bold border transition text-center cursor-pointer ${
+                              cargaEmEdicao.status === "Atrasado"
+                                ? "bg-rose-600 text-white border-rose-700 shadow-xs"
+                                : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                            }`}
+                          >
+                            🚨 Atrasado
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCargaEmEdicao({ ...cargaEmEdicao, status: "Entregue" })}
+                            className={`px-2 py-1.5 rounded text-[11px] font-bold border transition text-center cursor-pointer ${
+                              cargaEmEdicao.status === "Entregue"
+                                ? "bg-emerald-600 text-white border-emerald-700 shadow-xs"
+                                : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                            }`}
+                          >
+                            ✅ Entregue
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Data de entrega */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                          Data de entrega programada
                         </label>
                         <input
                           type="date"
@@ -17823,9 +18373,45 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           onChange={(e) =>
                             setCargaEmEdicao({ ...cargaEmEdicao, dataISO: e.target.value })
                           }
-                          className="w-full border border-slate-300 focus:border-blue-500 rounded px-2 py-1 text-xs outline-none"
+                          className="w-full border border-slate-300 focus:border-blue-500 rounded px-2.5 py-1.5 text-xs outline-none bg-slate-50/50 font-medium"
                         />
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <span className="text-[10px] text-slate-400 mr-0.5">Atalhos:</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const d = dataLocalISO(new Date());
+                              setCargaEmEdicao({ ...cargaEmEdicao, dataISO: d });
+                            }}
+                            className="px-2 py-0.5 rounded bg-slate-100 hover:bg-blue-100 hover:text-blue-700 text-[10px] font-medium transition cursor-pointer"
+                          >
+                            Hoje
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const am = new Date();
+                              am.setDate(am.getDate() + 1);
+                              setCargaEmEdicao({ ...cargaEmEdicao, dataISO: dataLocalISO(am) });
+                            }}
+                            className="px-2 py-0.5 rounded bg-slate-100 hover:bg-blue-100 hover:text-blue-700 text-[10px] font-medium transition cursor-pointer"
+                          >
+                            Amanhã
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const s = new Date();
+                              s.setDate(s.getDate() + 7);
+                              setCargaEmEdicao({ ...cargaEmEdicao, dataISO: dataLocalISO(s) });
+                            }}
+                            className="px-2 py-0.5 rounded bg-slate-100 hover:bg-blue-100 hover:text-blue-700 text-[10px] font-medium transition cursor-pointer"
+                          >
+                            +7 dias
+                          </button>
+                        </div>
                       </div>
+
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
@@ -17856,27 +18442,30 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           />
                         </div>
                       </div>
-                      <div className="flex justify-end gap-2 pt-1">
+
+                      <div className="flex justify-end gap-2 pt-1 border-t border-slate-100">
                         <button
                           type="button"
                           onClick={() => setCargaEmEdicao(null)}
-                          className="px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-[11px] font-semibold transition"
+                          className="px-3 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-[11px] font-semibold transition cursor-pointer"
                         >
                           Cancelar
                         </button>
                         <button
                           type="button"
                           onClick={() =>
-                            handleReagendarEntrega(
+                            handleSalvarEdicaoCarga(
                               carga.ordemId,
                               cargaEmEdicao.dataISO,
                               cargaEmEdicao.janela,
-                              cargaEmEdicao.veiculo
+                              cargaEmEdicao.veiculo,
+                              cargaEmEdicao.status
                             )
                           }
-                          className="px-3 py-1 rounded-md bg-blue-700 hover:bg-blue-800 text-white text-[11px] font-bold transition"
+                          className="px-3.5 py-1.5 rounded-md bg-blue-700 hover:bg-blue-800 text-white text-[11px] font-bold transition flex items-center gap-1 cursor-pointer shadow-xs"
                         >
-                          Salvar nova data
+                          <span>💾</span>
+                          <span>Salvar Alterações</span>
                         </button>
                       </div>
                     </div>
@@ -17912,19 +18501,60 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           Previsto para {formatarDataBR(carga.dataEntregaISO)} e ainda não recebido
                         </div>
                       )}
+                      {carga.status === "Entregue" && (
+                        <div className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                          <span>✅</span> Carga entregue e conferida no canteiro
+                        </div>
+                      )}
 
-                      {carga.status !== "Entregue" && (
+                      {/* Botões de Ação na Base do Cartão */}
+                      <div className="flex items-center gap-1.5 pt-1">
                         <button
                           type="button"
                           onClick={() => iniciarEdicaoCarga(carga)}
-                          className="w-full px-2 py-1.5 rounded-md bg-white hover:bg-blue-50 border border-slate-300 hover:border-blue-400 text-slate-800 text-[11px] font-bold flex items-center justify-center gap-1.5 transition"
+                          className="flex-1 px-2 py-1.5 rounded-md bg-white hover:bg-blue-50 border border-slate-300 hover:border-blue-400 text-slate-800 text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                          title="Alterar data, status, janela ou veículo da entrega"
                         >
-                          <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-3.5 h-3.5 shrink-0 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
-                          <span>{carga.dataEntregaISO ? "Alterar data de entrega" : "Definir data de entrega"}</span>
+                          <span>{carga.dataEntregaISO ? "Alterar data" : "Definir data"}</span>
                         </button>
-                      )}
+
+                        {carga.status !== "Entregue" ? (
+                          <button
+                            type="button"
+                            onClick={() => handleAlterarStatusCargaDireto(carga.ordemId, "Entregue")}
+                            className="px-2.5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-2xs"
+                            title="Confirmar entrega da carga na obra"
+                          >
+                            <span>✓</span>
+                            <span>Entregue</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleAlterarStatusCargaDireto(carga.ordemId, "Agendado")}
+                            className="px-2.5 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-[10px] font-semibold flex items-center justify-center gap-1 transition cursor-pointer"
+                            title="Reverter para Aguardando Entrega"
+                          >
+                            <span>↩</span>
+                            <span>Reabrir</span>
+                          </button>
+                        )}
+
+                        {carga.status !== "Atrasado" && carga.status !== "Entregue" && (
+                          <button
+                            type="button"
+                            onClick={() => handleAlterarStatusCargaDireto(carga.ordemId, "Atrasado")}
+                            className="px-2 py-1.5 rounded-md bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-[10px] font-bold flex items-center justify-center gap-0.5 transition cursor-pointer"
+                            title="Sinalizar Atraso na entrega"
+                          >
+                            <span>🚨</span>
+                            <span>Atrasado</span>
+                          </button>
+                        )}
+                      </div>
                     </>
                   )}
                 </div>
@@ -18022,17 +18652,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
 
                 {/* Banner de Aviso de Gargalo se houver */}
                 {conflitosPortao > 0 && (
-                  <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 flex items-center gap-3">
-                    <svg className="w-6 h-6 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                    <div>
-                      <h4 className="text-sm font-bold text-amber-950">
-                        Alerta Preventivo de Canteiro: Conflito de Acesso e Descarga Detectado
-                      </h4>
-                      <p className="text-xs text-amber-900 mt-0.5">
-                        Existem múltiplos veículos agendados para o mesmo dia. Arraste as cargas para outro dia ou ajuste a janela de descarga para evitar filas no portão.
-                      </p>
+                  <div className="bg-amber-50/80 border border-amber-200/90 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-amber-600 text-base">⚠️</span>
+                      <div>
+                        <strong className="text-amber-950 font-bold">
+                          Gargalo de Descarga Detectado ({conflitosPortao} dia{conflitosPortao > 1 ? "s" : ""} com sobreposição de veículos):
+                        </strong>
+                        <span className="text-amber-900 ml-1">
+                          Ajuste as datas ou janelas de entrega para evitar filas na portaria da obra.
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -24585,6 +25215,7 @@ function ModalEditarItemEstoque({
     const itemAtualizado: ItemEstoque = {
       ...item,
       codigo: codigo.trim().toUpperCase() || item.codigo,
+      sku: codigo.trim().toUpperCase() || item.sku || item.codigo,
       descricao: descricao.trim(),
       categoria,
       unidade: unidade.trim().toLowerCase(),
