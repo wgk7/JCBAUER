@@ -264,6 +264,11 @@ interface OrdemCompra {
   descontoValor?: number;
   valorTotal: number;
   savingGerado: number;
+  criterioSelecao?: string;
+  justificativaEscolha?: string;
+  menorCotadoNaEpoca?: number;
+  maiorCotadoNaEpoca?: number;
+  diferencaPrecoMenor?: number;
   alcadaAprovacao?: NivelAlcada;
   aprovadoPorDiretoria?: boolean;
   assinaturaDiretoria?: string;
@@ -421,6 +426,10 @@ export interface ProcessoCotacao {
   savingGerado?: number;
   menorValor?: number;
   melhorFornecedorNome?: string;
+  fornecedorContratadoNome?: string;
+  valorContratado?: number;
+  criterioSelecao?: string;
+  justificativaEscolha?: string;
   observacoes?: string;
   ordemCompraEmitidaId?: string;
   numeroOcEmitida?: string;
@@ -4561,7 +4570,10 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       </tfoot>
     </table>
 
-    <!-- Destaque de Saving Auditado -->
+    <!-- Destaque de Saving Auditado ou Critério de Homologação -->
+    ${
+      (oc.savingGerado || 0) > 0
+        ? `
     <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
       <div>
         <strong style="color: #166534;">💰 Economia Auditada na Negociação (Saving Direto):</strong>
@@ -4572,7 +4584,19 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       <span style="background: #166534; color: #ffffff; font-weight: 700; padding: 3px 8px; border-radius: 4px; font-size: 10px;">
         AUDITADO
       </span>
-    </div>
+    </div>`
+        : `
+    <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+      <div>
+        <strong style="color: #334155;">⚖️ Critério de Decisão Homologado:</strong>
+        <span style="color: #475569; margin-left: 6px; font-weight: 600;">${oc.criterioSelecao || "Decisão por Qualidade / Prazo de Atendimento"}</span>
+        <div style="color: #64748b; font-size: 10px; margin-top: 3px;">${oc.justificativaEscolha || "Fornecedor priorizado por padrão técnico de entrega e qualidade. Saving zerado no BI para fidelidade orçamentária."}</div>
+      </div>
+      <span style="background: #475569; color: #ffffff; font-weight: 700; padding: 3px 8px; border-radius: 4px; font-size: 10px;">
+        HOMOLOGADO
+      </span>
+    </div>`
+    }
 
     <!-- Cláusulas Gerais de Fornecimento no Canteiro -->
     <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; font-size: 10px; color: #475569; line-height: 1.5; margin-bottom: 24px;">
@@ -4889,6 +4913,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       totalGeral: 0,
     };
 
+    const isVencedorSc = calc.totalGeral <= resumoCotacaoAtiva.menorTotal + 0.01;
+    const agioQualidadeSc = !isVencedorSc
+      ? Math.max(0, calc.totalGeral - resumoCotacaoAtiva.menorTotal)
+      : 0;
+    const savingRealSc = isVencedorSc ? resumoCotacaoAtiva.savingGerado : 0;
+
     const novaOc: OrdemCompra = {
       id: `oc-${Date.now()}`,
       numeroOc: `OC-2026-00${91 + ordens.length}`,
@@ -4914,7 +4944,16 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       tipoFrete: prop.tipoFrete,
       freteValor: prop.freteValor,
       valorTotal: calc.totalGeral,
-      savingGerado: resumoCotacaoAtiva.savingGerado,
+      savingGerado: savingRealSc,
+      criterioSelecao: isVencedorSc
+        ? "Menor Preço Equalizado"
+        : `Qualidade / Prazo (Ágio: +${formatBRL(agioQualidadeSc)})`,
+      justificativaEscolha: isVencedorSc
+        ? "Homologado pelo menor valor da solicitação."
+        : `Contratado por critério de qualidade ou prazo (${formatBRL(calc.totalGeral)} vs menor ${formatBRL(resumoCotacaoAtiva.menorTotal)}). Saving zerado no financeiro.`,
+      menorCotadoNaEpoca: resumoCotacaoAtiva.menorTotal,
+      maiorCotadoNaEpoca: resumoCotacaoAtiva.maiorTotal,
+      diferencaPrecoMenor: agioQualidadeSc,
       alcadaAprovacao: obterAlcadaAprovacao(calc.totalGeral).nivel,
       status: "Emitida",
       itens: scAtiva.itens.map((it) => {
@@ -6034,7 +6073,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       `🏗️ *Empreendimento:* ${oc.obraNome}`,
       `🏢 *Fornecedor:* ${oc.fornecedorNome}`,
       `💰 *Valor Total:* ${formatBRL(oc.valorTotal)}`,
-      `📈 *Saving Conquistado:* ${formatBRL(oc.savingGerado)}`,
+      (oc.savingGerado || 0) > 0
+        ? `📈 *Saving Conquistado:* ${formatBRL(oc.savingGerado)}`
+        : `🎯 *Critério de Escolha:* ${oc.criterioSelecao || "Decisão por Qualidade / Prazo de Entrega"}`,
       `💳 *Condição:* ${oc.prazoPagamento} • Frete ${oc.tipoFrete}`,
       ``,
       `👉 *Clique no link abaixo para aprovar em 1 toque pelo celular:*`,
@@ -6173,6 +6214,40 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       "0"
     )}`;
 
+    // Identifica fornecedores com totais válidos e completos
+    const fornecedoresComTotais = (resumoComparativo.fornecedoresStatus || []).filter(
+      (f) => f.total > 0
+    );
+    const fornecedoresCompletos = fornecedoresComTotais.filter((f) => f.isCompleto);
+    const baseCotacao = fornecedoresCompletos.length > 0 ? fornecedoresCompletos : fornecedoresComTotais;
+
+    const menorTotalCotado = baseCotacao.length > 0
+      ? Math.min(...baseCotacao.map((f) => f.total))
+      : total;
+    const maiorTotalCotado = baseCotacao.length > 0
+      ? Math.max(...baseCotacao.map((f) => f.total))
+      : total;
+    const fornMenorPrecoObj = baseCotacao.find(
+      (f) => Math.abs(f.total - menorTotalCotado) < 0.01
+    );
+    const fornecedorMenorPrecoNome = fornMenorPrecoObj?.nome || forn.nome;
+
+    // Regra Contábil / Governança JC BAUER:
+    // Se o comprador escolheu um fornecedor que ficou mais caro (priorizando qualidade, prazo ou logística):
+    // O SAVING GERADO É RIGOROSAMENTE 0. Não existe economia positiva quando se opta por pagar mais caro que o menor preço do mercado!
+    // Isso evita o 'furo na conta final' do orçamento relatado pela diretoria.
+    const isMenorPreco = total <= menorTotalCotado + 0.01;
+    const agioQualidade = !isMenorPreco ? Math.max(0, total - menorTotalCotado) : 0;
+    const savingReal = isMenorPreco ? Math.max(0, maiorTotalCotado - total) : 0;
+
+    const criterioSelecao = isMenorPreco
+      ? "Menor Preço Equalizado"
+      : `Qualidade / Prazo (Ágio: +${formatBRL(agioQualidade)})`;
+
+    const justificativaEscolha = isMenorPreco
+      ? `Fornecedor homologado pelo menor valor global do mapa de cotações (${formatBRL(total)} vs teto de ${formatBRL(maiorTotalCotado)}).`
+      : `Decisão de suprimentos priorizando qualidade, prazo ou confiabilidade técnica. Fornecedor ${forn.nome} (${formatBRL(total)}) contratado com ágio de ${formatBRL(agioQualidade)} sobre a menor cotação (${fornecedorMenorPrecoNome}: ${formatBRL(menorTotalCotado)}). Saving zerado no BI para fidelidade orçamentária.`;
+
     const novaOc: OrdemCompra = {
       id: `oc-comp-${Date.now()}`,
       numeroOc: numeroOcFormatado,
@@ -6197,7 +6272,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       freteValor: forn.freteValor,
       descontoValor: forn.descontoValor || 0,
       valorTotal: total,
-      savingGerado: resumoComparativo.savingGlobal,
+      savingGerado: savingReal,
+      criterioSelecao,
+      justificativaEscolha,
+      menorCotadoNaEpoca: menorTotalCotado,
+      maiorCotadoNaEpoca: maiorTotalCotado,
+      diferencaPrecoMenor: agioQualidade,
       alcadaAprovacao: "Comprador Autorizado",
       status: "Emitida",
       itens: comparativoItens.map((it, idx) => {
@@ -6213,7 +6293,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       }),
     };
 
-    setOrdens((prev) => [novaOc, ...prev]);
+    const novasOrdens = [novaOc, ...ordens];
+    setOrdens(novasOrdens);
+    try {
+      window.localStorage.setItem(ORDENS_STORAGE_KEY, JSON.stringify(novasOrdens));
+      salvarChaveSupabase(ORDENS_STORAGE_KEY, novasOrdens).catch(() => {});
+    } catch {}
 
     // Marca a cotação ativa como Concluída no histórico mantendo todas as propostas intactas
     if (cotacaoAtivaId) {
@@ -6225,8 +6310,13 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                 status: "Concluída" as const,
                 ordemCompraEmitidaId: novaOc.id,
                 numeroOcEmitida: novaOc.numeroOc,
-                menorValor: total,
-                melhorFornecedorNome: forn.nome,
+                menorValor: menorTotalCotado,
+                melhorFornecedorNome: fornecedorMenorPrecoNome,
+                fornecedorContratadoNome: forn.nome,
+                valorContratado: total,
+                savingGerado: savingReal,
+                criterioSelecao,
+                justificativaEscolha,
                 dataAtualizacao:
                   new Date().toLocaleDateString("pt-BR") +
                   " " +
@@ -6250,9 +6340,15 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       });
     }
 
-    dispararAviso(
-      `Ordem de Compra ${novaOc.numeroOc} emitida com sucesso para "${forn.nome}"! O mapa comparativo foi salvo no histórico com todas as propostas.`
-    );
+    if (isMenorPreco) {
+      dispararAviso(
+        `Ordem de Compra ${novaOc.numeroOc} emitida para "${forn.nome}" pelo menor preço (${formatBRL(total)}). Saving de ${formatBRL(savingReal)} auditado!`
+      );
+    } else {
+      dispararAviso(
+        `Ordem de Compra ${novaOc.numeroOc} emitida para "${forn.nome}" (${formatBRL(total)}) por Qualidade/Prazo. Saving R$ 0,00 registrado para evitar distorção financeira no orçamento.`
+      );
+    }
     setActiveTab("Ordens");
     setOrdemVisualizarModal(novaOc);
   };
@@ -7447,6 +7543,13 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       });
     }
 
+    const isVencedorConc = resumoConcreteiras.vencedor?.id === concreteira.id;
+    const savingConc = isVencedorConc ? (resumoConcreteiras.saving || 0) : 0;
+    const menorTotalConc = resumoConcreteiras.vencedor?.valorTotal || total;
+    const agioConc = !isVencedorConc
+      ? Math.max(0, total - menorTotalConc)
+      : 0;
+
     const novaOc: OrdemCompra = {
       id: `oc-conc-${Date.now()}`,
       numeroOc,
@@ -7470,7 +7573,16 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       freteValor: 0,
       descontoValor: 0,
       valorTotal: total,
-      savingGerado: resumoConcreteiras.saving,
+      savingGerado: savingConc,
+      criterioSelecao: isVencedorConc
+        ? "Menor Preço Equalizado"
+        : `Qualidade / Logística (Ágio: +${formatBRL(agioConc)})`,
+      justificativaEscolha: isVencedorConc
+        ? "Concreteira homologada pelo menor valor total equalizado."
+        : `Contratação da concreteira ${concreteira.nome} priorizando capacidade de usina/bomba. Saving zerado para fidelidade contábil.`,
+      menorCotadoNaEpoca: menorTotalConc,
+      maiorCotadoNaEpoca: resumoConcreteiras.maior || total,
+      diferencaPrecoMenor: agioConc,
       alcadaAprovacao: "Comprador Autorizado",
       status: "Emitida",
       itens: itensOc,
@@ -13564,6 +13676,14 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                               </div>
                             </div>
 
+                            {/* Indicador de Ágio se fornecedor for mais caro que o 1º lugar */}
+                            {!isVencedor && total > 0 && resumoComparativo.vencedorGeral && resumoComparativo.vencedorGeral.total > 0 && total > resumoComparativo.vencedorGeral.total && (
+                              <div className="mb-2 px-2 py-1 rounded bg-amber-50 border border-amber-200 text-[10px] text-amber-800 flex items-center justify-between">
+                                <span className="font-semibold">Ágio Qualidade / Prazo:</span>
+                                <span className="font-bold text-amber-900">+{formatBRL(total - resumoComparativo.vencedorGeral.total)} (Saving R$ 0)</span>
+                              </div>
+                            )}
+
                             <button
                               type="button"
                               onClick={() => handleEmitirOrdemComparativo(idx)}
@@ -13573,7 +13693,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                   : "bg-slate-900 hover:bg-slate-800 text-white"
                               }`}
                             >
-                              <span>📦</span> Emitir Ordem de Compra
+                              <span>📦</span> {isVencedor ? "Emitir Ordem de Compra" : "Emitir Ordem (Opção Qualidade/Prazo)"}
                             </button>
                           </div>
                         </div>
@@ -16606,8 +16726,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                           <td className="py-3.5 px-4 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums">
                             {formatBRL(oc.valorTotal)}
                           </td>
-                          <td className="py-3.5 px-4 text-right font-semibold text-emerald-700 whitespace-nowrap tabular-nums">
-                            {formatBRL(oc.savingGerado)}
+                          <td className="py-3.5 px-4 text-right font-semibold whitespace-nowrap tabular-nums">
+                            {(oc.savingGerado || 0) > 0 ? (
+                              <span className="text-emerald-700">{formatBRL(oc.savingGerado)}</span>
+                            ) : (
+                              <span
+                                className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200 cursor-help"
+                                title={oc.justificativaEscolha || "Decisão por Qualidade / Prazo. Saving R$ 0,00 registrado para fidelidade orçamentária."}
+                              >
+                                R$ 0,00 <span className="ml-1 text-[9px] text-slate-500 font-normal">({oc.criterioSelecao?.includes("Qualidade") ? "Qualidade" : "Sem Saving"})</span>
+                              </span>
+                            )}
                           </td>
                           <td className="py-3.5 px-4 text-center">
                             <span
@@ -20018,19 +20147,37 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               </tfoot>
             </table>
 
-            {/* Destaque de Saving Auditado */}
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center justify-between text-xs">
-              <div className="text-emerald-900">
-                💰 <strong>Saving Gerado na Negociação:</strong> Esta compra economizou{" "}
-                <strong className="text-emerald-700 text-sm">
-                  {formatBRL(ordemVisualizarModal.savingGerado)}
-                </strong>{" "}
-                em relação ao teto orçado.
+            {/* Destaque de Saving Auditado ou Decisão por Qualidade */}
+            {(ordemVisualizarModal.savingGerado || 0) > 0 ? (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center justify-between text-xs">
+                <div className="text-emerald-900">
+                  💰 <strong>Saving Gerado na Negociação:</strong> Esta compra economizou{" "}
+                  <strong className="text-emerald-700 text-sm">
+                    {formatBRL(ordemVisualizarModal.savingGerado)}
+                  </strong>{" "}
+                  em relação ao teto orçado.
+                </div>
+                <span className="px-2 py-0.5 rounded bg-emerald-700 text-white font-bold text-[10px]">
+                  Auditado
+                </span>
               </div>
-              <span className="px-2 py-0.5 rounded bg-emerald-700 text-white font-bold text-[10px]">
-                Auditado
-              </span>
-            </div>
+            ) : (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center justify-between text-xs">
+                <div className="text-slate-800">
+                  ⚖️ <strong>Critério de Homologação:</strong>{" "}
+                  <span className="font-bold text-slate-900">
+                    {ordemVisualizarModal.criterioSelecao || "Decisão por Qualidade / Prazo de Atendimento"}
+                  </span>
+                  <div className="text-[11px] text-slate-500 mt-1">
+                    {ordemVisualizarModal.justificativaEscolha ||
+                      "Fornecedor priorizado por padrão técnico, prazo ou confiabilidade de entrega. Saving zerado no BI para fidelidade orçamentária."}
+                  </div>
+                </div>
+                <span className="px-2 py-0.5 rounded bg-slate-700 text-white font-bold text-[10px] whitespace-nowrap">
+                  Qualidade / Prazo
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}

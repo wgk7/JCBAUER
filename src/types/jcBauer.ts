@@ -174,6 +174,11 @@ export interface OrdemCompra {
   descontoValor?: number;
   valorTotal: number;
   savingGerado: number;
+  criterioSelecao?: string;
+  justificativaEscolha?: string;
+  menorCotadoNaEpoca?: number;
+  maiorCotadoNaEpoca?: number;
+  diferencaPrecoMenor?: number;
   alcadaAprovacao?: NivelAlcada;
   aprovadoPorDiretoria?: boolean;
   assinaturaDiretoria?: string;
@@ -511,6 +516,10 @@ export interface ProcessoCotacao {
   savingGerado?: number;
   menorValor?: number;
   melhorFornecedorNome?: string;
+  fornecedorContratadoNome?: string;
+  valorContratado?: number;
+  criterioSelecao?: string;
+  justificativaEscolha?: string;
   observacoes?: string;
   ordemCompraEmitidaId?: string;
   numeroOcEmitida?: string;
