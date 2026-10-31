@@ -10743,18 +10743,18 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               onClick={handleToggleTema}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 border ${
                 temaEscuro
-                  ? "bg-[#1c3322] hover:bg-[#25422d] text-[#b4e6c3] border-[#34593e] shadow-xs"
+                  ? "bg-amber-400 hover:bg-amber-300 text-slate-950 border-amber-500 shadow-md font-extrabold"
                   : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200"
               }`}
               title={
                 temaEscuro
-                  ? "Alternar para Modo Claro"
+                  ? "Clique para voltar imediatamente ao Modo Claro Tradicional"
                   : "Ativar Modo Noturno Verde Militar (Descanso visual no padrão JC Bauer)"
               }
             >
               <span>{temaEscuro ? "☀️" : "🌙"}</span>
-              <span className="hidden xl:inline">
-                {temaEscuro ? "Modo Claro" : "Verde Militar"}
+              <span className="font-bold">
+                {temaEscuro ? "☀️ Voltar ao Modo Claro" : "🌙 Verde Militar"}
               </span>
             </button>
 
@@ -21344,15 +21344,19 @@ function TelaLoginCorporativa({
         <button
           type="button"
           onClick={onToggleTema}
-          className="absolute top-4 right-4 z-20 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700 backdrop-blur-sm transition flex items-center gap-1.5 cursor-pointer"
+          className={`absolute top-4 right-4 z-20 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border ${
+            temaEscuro
+              ? "bg-amber-400 hover:bg-amber-300 text-slate-950 border-amber-500 shadow-md font-extrabold"
+              : "bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700 backdrop-blur-sm"
+          }`}
           title={
             temaEscuro
-              ? "Alternar para Modo Claro"
+              ? "Clique para voltar imediatamente ao Modo Claro Tradicional"
               : "Ativar Modo Noturno Verde Militar"
           }
         >
           <span>{temaEscuro ? "☀️" : "🌙"}</span>
-          <span>{temaEscuro ? "Modo Claro" : "Verde Militar"}</span>
+          <span className="font-bold">{temaEscuro ? "☀️ Voltar ao Modo Claro" : "🌙 Verde Militar"}</span>
         </button>
       )}
 
@@ -22251,18 +22255,18 @@ function VisaoRestritaObra({
                 onClick={onToggleTema}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border ${
                   temaEscuro
-                    ? "bg-[#1c3322] hover:bg-[#25422d] text-[#b4e6c3] border-[#34593e]"
+                    ? "bg-amber-400 hover:bg-amber-300 text-slate-950 border-amber-500 shadow-md font-extrabold"
                     : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200"
                 }`}
                 title={
                   temaEscuro
-                    ? "Alternar para Modo Claro"
+                    ? "Clique para voltar imediatamente ao Modo Claro Tradicional"
                     : "Ativar Modo Noturno Verde Militar"
                 }
               >
                 <span>{temaEscuro ? "☀️" : "🌙"}</span>
-                <span className="hidden md:inline">
-                  {temaEscuro ? "Modo Claro" : "Verde Militar"}
+                <span className="font-bold">
+                  {temaEscuro ? "☀️ Voltar ao Modo Claro" : "🌙 Verde Militar"}
                 </span>
               </button>
             )}
