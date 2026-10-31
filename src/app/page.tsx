@@ -136,6 +136,8 @@ const ESTOQUE_ALMOXARIFADO_STORAGE_KEY = "jc_bauer_estoque_almoxarifado_v1";
 const REMEMBER_ME_STORAGE_KEY = "jc_bauer_remember_me_v3";
 const SAVED_LOGIN_STORAGE_KEY = "jc_bauer_saved_login_v3";
 const SAVED_PASSWORD_STORAGE_KEY = "jc_bauer_saved_password_v3";
+const THEME_STORAGE_KEY = "jc_bauer_theme_v3";
+const DENSITY_STORAGE_KEY = "jc_bauer_density_v3";
 
 interface DiarioObraRegistro {
   id: string;
@@ -1723,6 +1725,10 @@ export default function HomePage() {
   const [lembrarConectado, setLembrarConectado] = useState<boolean>(true);
   const [erroLogin, setErroLogin] = useState<string | null>(null);
 
+  // Tema Noturno Executivo (Verde Militar JC Bauer) e Densidade Visual
+  const [temaEscuro, setTemaEscuro] = useState<boolean>(false);
+  const [densidadeCompacta, setDensidadeCompacta] = useState<boolean>(false);
+
   // Navegação de Abas do Administrador (6 Abas Independentes)
   const [activeTab, setActiveTab] = useState<TabId>("Painel");
   const [menuLateralAberto, setMenuLateralAberto] = useState<boolean>(false);
@@ -2786,6 +2792,24 @@ export default function HomePage() {
           }
         }
       } catch {}
+
+      const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (savedTheme === "dark") {
+        setTemaEscuro(true);
+        document.documentElement.classList.add("dark");
+      } else {
+        setTemaEscuro(false);
+        document.documentElement.classList.remove("dark");
+      }
+
+      const savedDensity = window.localStorage.getItem(DENSITY_STORAGE_KEY);
+      if (savedDensity === "compacto") {
+        setDensidadeCompacta(true);
+        document.documentElement.classList.add("density-compact");
+      } else {
+        setDensidadeCompacta(false);
+        document.documentElement.classList.remove("density-compact");
+      }
 
       const savedRemember = window.localStorage.getItem(REMEMBER_ME_STORAGE_KEY);
       const deveLembrar = savedRemember !== "false"; // padrão ativo para conforto do usuário
@@ -8649,6 +8673,39 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     setErroLogin(null);
   };
 
+  const handleToggleTema = () => {
+    setTemaEscuro((prev) => {
+      const novo = !prev;
+      try {
+        window.localStorage.setItem(THEME_STORAGE_KEY, novo ? "dark" : "light");
+        if (novo) {
+          document.documentElement.classList.add("dark");
+        } else {
+          document.documentElement.classList.remove("dark");
+        }
+      } catch {}
+      return novo;
+    });
+  };
+
+  const handleToggleDensidade = () => {
+    setDensidadeCompacta((prev) => {
+      const novo = !prev;
+      try {
+        window.localStorage.setItem(
+          DENSITY_STORAGE_KEY,
+          novo ? "compacto" : "confortavel"
+        );
+        if (novo) {
+          document.documentElement.classList.add("density-compact");
+        } else {
+          document.documentElement.classList.remove("density-compact");
+        }
+      } catch {}
+      return novo;
+    });
+  };
+
   const handleSalvarNovaObra = (novaObra: Obra) => {
     const novasObras = [...obras, novaObra];
     setObras(novasObras);
@@ -10250,6 +10307,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         onSubmit={handleLoginSubmit}
         lembrarConectado={lembrarConectado}
         setLembrarConectado={setLembrarConectado}
+        temaEscuro={temaEscuro}
+        onToggleTema={handleToggleTema}
       />
     );
   }
@@ -10287,6 +10346,10 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         onGerarRomaneioRecebimentoPDF={handleGerarRomaneioRecebimentoPDF}
         onImprimirRelatorioEntregas={handleImprimirRelatorioEntregas}
         onCadastrarNovoItemEstoque={handleCadastrarNovoItemEstoque}
+        temaEscuro={temaEscuro}
+        onToggleTema={handleToggleTema}
+        densidadeCompacta={densidadeCompacta}
+        onToggleDensidade={handleToggleDensidade}
       />
     );
   }
@@ -10672,6 +10735,48 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             >
               <span>📑</span>
               <span className="hidden xl:inline">One-Pager</span>
+            </button>
+
+            {/* Alternador de Modo Noturno Verde Militar */}
+            <button
+              type="button"
+              onClick={handleToggleTema}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 border ${
+                temaEscuro
+                  ? "bg-[#1c3322] hover:bg-[#25422d] text-[#b4e6c3] border-[#34593e] shadow-xs"
+                  : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200"
+              }`}
+              title={
+                temaEscuro
+                  ? "Alternar para Modo Claro"
+                  : "Ativar Modo Noturno Verde Militar (Descanso visual no padrão JC Bauer)"
+              }
+            >
+              <span>{temaEscuro ? "☀️" : "🌙"}</span>
+              <span className="hidden xl:inline">
+                {temaEscuro ? "Modo Claro" : "Verde Militar"}
+              </span>
+            </button>
+
+            {/* Alternador de Densidade Visual (Compacto vs Confortável) */}
+            <button
+              type="button"
+              onClick={handleToggleDensidade}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shrink-0 border ${
+                densidadeCompacta
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-[#1a3020] dark:text-[#a4d4b4] dark:border-[#2f5538]"
+                  : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200 dark:bg-[#132217] dark:text-slate-300 dark:border-[#243b2a]"
+              }`}
+              title={
+                densidadeCompacta
+                  ? "Alternar para Densidade Confortável"
+                  : "Alternar para Densidade Compacta (Mais itens por tela sem rolagem)"
+              }
+            >
+              <span>{densidadeCompacta ? "📐" : "🪟"}</span>
+              <span className="hidden xl:inline">
+                {densidadeCompacta ? "Compacto" : "Conforto"}
+              </span>
             </button>
 
             {renderBotaoPrimarioHeader()}
@@ -21215,6 +21320,8 @@ function TelaLoginCorporativa({
   onSubmit,
   lembrarConectado,
   setLembrarConectado,
+  temaEscuro = false,
+  onToggleTema,
 }: {
   companyName: string;
   loginInput: string;
@@ -21225,11 +21332,30 @@ function TelaLoginCorporativa({
   onSubmit: (e: React.FormEvent) => void;
   lembrarConectado: boolean;
   setLembrarConectado: (v: boolean) => void;
+  temaEscuro?: boolean;
+  onToggleTema?: () => void;
 }) {
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
   return (
     <div className="min-h-screen w-full bg-slate-900 text-slate-900 font-sans flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      {/* Botão de Alternar Modo Noturno Verde Militar no Login */}
+      {onToggleTema && (
+        <button
+          type="button"
+          onClick={onToggleTema}
+          className="absolute top-4 right-4 z-20 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700 backdrop-blur-sm transition flex items-center gap-1.5 cursor-pointer"
+          title={
+            temaEscuro
+              ? "Alternar para Modo Claro"
+              : "Ativar Modo Noturno Verde Militar"
+          }
+        >
+          <span>{temaEscuro ? "☀️" : "🌙"}</span>
+          <span>{temaEscuro ? "Modo Claro" : "Verde Militar"}</span>
+        </button>
+      )}
+
       {/* Background Decorativo Sutil Corporativo */}
       <div className="absolute inset-0 bg-radial from-slate-800 to-slate-950 opacity-90 pointer-events-none" />
       <div className="absolute -top-40 -right-40 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -21724,6 +21850,10 @@ function VisaoRestritaObra({
   onGerarRomaneioRecebimentoPDF,
   onImprimirRelatorioEntregas,
   onCadastrarNovoItemEstoque,
+  temaEscuro = false,
+  onToggleTema,
+  densidadeCompacta = false,
+  onToggleDensidade,
 }: {
   usuarioLogado: UsuarioSistema;
   companyName: string;
@@ -21759,6 +21889,10 @@ function VisaoRestritaObra({
     obraNomeFiltro: string
   ) => void;
   onCadastrarNovoItemEstoque?: (novoItem: ItemEstoque) => void;
+  temaEscuro?: boolean;
+  onToggleTema?: () => void;
+  densidadeCompacta?: boolean;
+  onToggleDensidade?: () => void;
 }) {
   // Estado local para modais do Canteiro
   const [novoBmModalContrato, setNovoBmModalContrato] =
@@ -22110,6 +22244,52 @@ function VisaoRestritaObra({
           </h1>
 
           <div className="flex items-center gap-3 shrink-0">
+            {/* Alternador de Modo Noturno Verde Militar */}
+            {onToggleTema && (
+              <button
+                type="button"
+                onClick={onToggleTema}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border ${
+                  temaEscuro
+                    ? "bg-[#1c3322] hover:bg-[#25422d] text-[#b4e6c3] border-[#34593e]"
+                    : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200"
+                }`}
+                title={
+                  temaEscuro
+                    ? "Alternar para Modo Claro"
+                    : "Ativar Modo Noturno Verde Militar"
+                }
+              >
+                <span>{temaEscuro ? "☀️" : "🌙"}</span>
+                <span className="hidden md:inline">
+                  {temaEscuro ? "Modo Claro" : "Verde Militar"}
+                </span>
+              </button>
+            )}
+
+            {/* Alternador de Densidade Visual (Compacto vs Confortável) */}
+            {onToggleDensidade && (
+              <button
+                type="button"
+                onClick={onToggleDensidade}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer border ${
+                  densidadeCompacta
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-[#1a3020] dark:text-[#a4d4b4] dark:border-[#2f5538]"
+                    : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200 dark:bg-[#132217] dark:text-slate-300 dark:border-[#243b2a]"
+                }`}
+                title={
+                  densidadeCompacta
+                    ? "Alternar para Densidade Confortável"
+                    : "Alternar para Densidade Compacta"
+                }
+              >
+                <span>{densidadeCompacta ? "📐" : "🪟"}</span>
+                <span className="hidden md:inline">
+                  {densidadeCompacta ? "Compacto" : "Conforto"}
+                </span>
+              </button>
+            )}
+
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs">
               <span className="font-bold text-slate-900">
                 {usuarioLogado.nome}

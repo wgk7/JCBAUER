@@ -20,6 +20,7 @@ body {
   color: #0F172A;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Barras de rolagem visíveis, grossas e fáceis de usar */
@@ -41,6 +42,233 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
+}
+
+/* ========================================================================= */
+/* TEMA NOTURNO EXECUTIVO VERDE MILITAR (JC BAUER ARMY GREEN DARK MODE)     */
+/* ========================================================================= */
+
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark,
+html.dark body {
+  background-color: #0c150e !important;
+  color: #f0f5f1 !important;
+}
+
+/* Backgrounds fundamentais em Verde Militar Noturno */
+html.dark .bg-\[\#F4F6F8\] {
+  background-color: #0c150e !important;
+}
+
+html.dark .bg-white {
+  background-color: #132217 !important;
+  border-color: #243b2a !important;
+  color: #f0f5f1 !important;
+}
+
+html.dark header.bg-white {
+  background-color: #0f1c13 !important;
+  border-color: #203525 !important;
+}
+
+html.dark .bg-slate-50 {
+  background-color: #17281c !important;
+  border-color: #28422e !important;
+}
+
+html.dark .bg-slate-100 {
+  background-color: #1c3022 !important;
+  border-color: #2d4834 !important;
+  color: #e4eee6 !important;
+}
+
+html.dark .bg-slate-200 {
+  background-color: #26402e !important;
+  border-color: #35573f !important;
+}
+
+/* Textos e Tipografia */
+html.dark .text-slate-900,
+html.dark .text-slate-800 {
+  color: #f2f7f4 !important;
+}
+
+html.dark .text-slate-700,
+html.dark .text-slate-600 {
+  color: #c9dbcd !important;
+}
+
+html.dark .text-slate-500,
+html.dark .text-slate-400 {
+  color: #8da493 !important;
+}
+
+/* Bordas Gerais */
+html.dark .border-slate-200,
+html.dark .border-slate-300 {
+  border-color: #233a29 !important;
+}
+
+html.dark .border-slate-100 {
+  border-color: #1a2c1f !important;
+}
+
+html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #203626 !important;
+}
+
+/* Tabelas e Linhas de Dados */
+html.dark table thead tr {
+  background-color: #101d14 !important;
+  border-color: #263e2c !important;
+}
+
+html.dark table thead th {
+  color: #b8cec0 !important;
+}
+
+html.dark table tbody tr:hover,
+html.dark tr.hover\:bg-slate-50:hover,
+html.dark .hover\:bg-slate-50:hover {
+  background-color: #1a2c1f !important;
+}
+
+/* Inputs, Selects e Formulários */
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  background-color: #101c13 !important;
+  border-color: #2b4532 !important;
+  color: #f1f6f3 !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #6a8270 !important;
+}
+
+html.dark input:focus,
+html.dark select:focus,
+html.dark textarea:focus {
+  border-color: #4ade80 !important;
+  box-shadow: 0 0 0 1px #4ade80 !important;
+}
+
+/* Badges e Destaques em Verde / Militar / Ouro */
+html.dark .bg-emerald-50,
+html.dark .bg-emerald-50\/70,
+html.dark .bg-emerald-50\/80,
+html.dark .bg-emerald-50\/90 {
+  background-color: #152c1c !important;
+  border-color: #285536 !important;
+}
+
+html.dark .bg-emerald-100 {
+  background-color: #1d3e28 !important;
+  border-color: #366d48 !important;
+}
+
+html.dark .text-emerald-700,
+html.dark .text-emerald-800,
+html.dark .text-emerald-900,
+html.dark .text-emerald-950 {
+  color: #8ce49f !important;
+}
+
+html.dark .border-emerald-200,
+html.dark .border-emerald-300 {
+  border-color: #285536 !important;
+}
+
+/* Badges de Atenção / Amarelo / Ouro */
+html.dark .bg-amber-50,
+html.dark .bg-amber-50\/80 {
+  background-color: #29200f !important;
+  border-color: #59441a !important;
+}
+
+html.dark .bg-amber-100 {
+  background-color: #3b2e14 !important;
+  border-color: #73571e !important;
+}
+
+html.dark .text-amber-800,
+html.dark .text-amber-900,
+html.dark .text-amber-950 {
+  color: #fde68a !important;
+}
+
+/* Badges de Alerta / Vermelho */
+html.dark .bg-rose-50,
+html.dark .bg-red-50 {
+  background-color: #311316 !important;
+  border-color: #612228 !important;
+}
+
+html.dark .text-rose-800,
+html.dark .text-red-800 {
+  color: #fca5a5 !important;
+}
+
+/* Badges de Logística / Azul / Indigo */
+html.dark .bg-blue-50,
+html.dark .bg-indigo-50,
+html.dark .bg-indigo-50\/60 {
+  background-color: #122131 !important;
+  border-color: #203c58 !important;
+}
+
+html.dark .text-blue-800,
+html.dark .text-indigo-900 {
+  color: #93c5fd !important;
+}
+
+/* Modais e Caixas Flutuantes */
+html.dark .shadow-sm,
+html.dark .shadow-md,
+html.dark .shadow-lg,
+html.dark .shadow-xl,
+html.dark .shadow-2xl {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Scrollbar no Tema Noturno Verde Militar */
+html.dark ::-webkit-scrollbar-track {
+  background: #0f1c13;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #2b4534;
+  border: 2px solid #0f1c13;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #3e634a;
+}
+
+/* ========================================================================= */
+/* DENSIDADE VISUAL COMPACTA (ALTA PRODUTIVIDADE / MAIS DADOS NA TELA)      */
+/* ========================================================================= */
+
+html.density-compact table th,
+html.density-compact table td {
+  padding-top: 5px !important;
+  padding-bottom: 5px !important;
+  font-size: 11.5px !important;
+}
+
+html.density-compact table input {
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  font-size: 11px !important;
+}
+
+html.density-compact .compact-card-spacing {
+  gap: 8px !important;
+  padding: 10px !important;
 }
 
 /* Regras de Impressão A4 para Relatório Executivo e Ordem de Compra */
