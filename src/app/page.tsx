@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { ModalCompartilharCotacao } from "../components/cotacoes/ModalCompartilharCotacao";
+import { ModalImportarCotacaoMultiFormato } from "../components/cotacoes/ModalImportarCotacaoMultiFormato";
 import { ModalOnePagerExecutivoPdf } from "../components/modals/ModalOnePagerExecutivoPdf";
 import { ModalVisualizarComparativoPdf } from "../components/modals/ModalVisualizarComparativoPdf";
 import { TelaoExecutivoDiretoria } from "../components/views/TelaoExecutivoDiretoria";
@@ -1913,6 +1914,8 @@ export default function HomePage() {
   const [comparativoItens, setComparativoItens] = useState<
     ItemComparativoRapido[]
   >([]);
+  const [showModalImportarCotacao, setShowModalImportarCotacao] = useState<boolean>(false);
+  const [importarCotacaoFornecedorIdx, setImportarCotacaoFornecedorIdx] = useState<number>(0);
   const [itemAjustarEstoqueModal, setItemAjustarEstoqueModal] =
     useState<ItemEstoque | null>(null);
 
@@ -6229,6 +6232,116 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         proposta.valorTotalProposta
       )} do fornecedor "${proposta.fornecedorNome}" aplicada à coluna ${fornIdx + 1} com sucesso!`
     );
+  };
+
+  const handleAbrirImportadorCotacao = (fornIdx: number = 0) => {
+    setImportarCotacaoFornecedorIdx(fornIdx);
+    setShowModalImportarCotacao(true);
+  };
+
+  const handleAplicarPrecosMultiFormato = (
+    fornIdx: number,
+    dados: {
+      precos: Record<string, number>;
+      freteTipo?: "CIF" | "FOB";
+      freteValor?: number;
+      prazo?: string;
+      condicao?: string;
+      descontoValor?: number;
+      nomeFornecedor?: string;
+    }
+  ) => {
+    setComparativoFornecedores((prev) => {
+      const copia = [...prev];
+      if (copia[fornIdx]) {
+        copia[fornIdx] = {
+          ...copia[fornIdx],
+          nome: dados.nomeFornecedor || copia[fornIdx].nome,
+          freteTipo: dados.freteTipo || copia[fornIdx].freteTipo,
+          freteValor:
+            dados.freteValor !== undefined
+              ? dados.freteValor
+              : copia[fornIdx].freteValor,
+          prazo: dados.prazo || copia[fornIdx].prazo,
+          condicao: dados.condicao || copia[fornIdx].condicao,
+          descontoValor:
+            dados.descontoValor !== undefined
+              ? dados.descontoValor
+              : copia[fornIdx].descontoValor,
+        };
+      }
+      return copia;
+    });
+
+    setComparativoItens((prev) => {
+      return prev.map((item) => {
+        const novoPreco = dados.precos[item.id] || 0;
+        if (novoPreco <= 0) return item;
+
+        const precosAtuais = Array.isArray(item.precos)
+          ? [...item.precos]
+          : [item.preco1 || 0, item.preco2 || 0, item.preco3 || 0];
+
+        while (precosAtuais.length <= fornIdx) {
+          precosAtuais.push(0);
+        }
+        precosAtuais[fornIdx] = novoPreco;
+
+        return {
+          ...item,
+          [`preco${fornIdx + 1}`]: novoPreco,
+          precos: precosAtuais,
+        };
+      });
+    });
+  };
+
+  const handleDispararCotacaoWhatsApp = (fornIdx: number) => {
+    const forn = comparativoFornecedores[fornIdx];
+    if (!forn) return;
+
+    const obraSel = obras.find((o) => o.id === comparativoObraId) || obras[0];
+    const fornCrm = fornecedores.find(
+      (f) => f.empresa.toLowerCase() === (forn.nome || "").toLowerCase()
+    );
+    const tel = fornCrm?.whatsapp || fornCrm?.telefone || forn.telefone || "";
+
+    const listaItens = (comparativoItens || [])
+      .filter((it) => it && it.nome && it.nome.trim() !== "")
+      .map((it, i) => `${i + 1}. ${it.nome} - ${it.quantidade} ${it.unidade}`)
+      .join("\n");
+
+    const msg = `Olá ${forn.vendedor || forn.nome || "Amigo"}, aqui é da ${settings.companyName}.\n\nSolicito cotação para a Obra ${obraSel?.nome || "Canteiro de Obras"}:\n\n${listaItens}\n\nPor favor, nos informe:\n• Valor unitário de cada item\n• Frete CIF (incluso/entregue) ou FOB\n• Prazo de entrega\n• Condição de faturamento\n\nAgradeço a atenção!`;
+
+    const cleanTel = tel.replace(/\D/g, "");
+    const url = cleanTel
+      ? `https://wa.me/55${cleanTel}?text=${encodeURIComponent(msg)}`
+      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+
+    window.open(url, "_blank");
+    dispararAviso(`Cotação enviada para o WhatsApp de ${forn.nome || `Fornecedor #${fornIdx + 1}`}!`);
+  };
+
+  const handlePedirDescontoWhatsApp = (fornIdx: number) => {
+    const forn = comparativoFornecedores[fornIdx];
+    if (!forn) return;
+
+    const totalForn = resumoComparativo.totais?.[fornIdx] ?? 0;
+    const menorGeral = resumoComparativo.vencedorGeral?.total ?? 0;
+    const obraSel = obras.find((o) => o.id === comparativoObraId) || obras[0];
+    const fornCrm = fornecedores.find(
+      (f) => f.empresa.toLowerCase() === (forn.nome || "").toLowerCase()
+    );
+    const tel = fornCrm?.whatsapp || fornCrm?.telefone || forn.telefone || "";
+
+    const msg = `Olá ${forn.vendedor || forn.nome || "Amigo"}, tudo bem? Aqui é da ${settings.companyName}.\n\nRecebemos sua proposta para a Obra ${obraSel?.nome || "Canteiro de Obras"} no valor total de ${formatBRL(totalForn)}.\n\nTemos uma proposta concorrente completa de ${formatBRL(menorGeral)}.\n\nComo priorizamos fechar com você pela qualidade e parceria, você consegue cobrir ou melhorar a condição para emitirmos a Ordem de Compra agora?\n\nFico no aguardo!`;
+
+    const cleanTel = tel.replace(/\D/g, "");
+    const url = cleanTel
+      ? `https://wa.me/55${cleanTel}?text=${encodeURIComponent(msg)}`
+      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+
+    window.open(url, "_blank");
   };
 
   const handleEmitirOrdemComparativo = (fornIndex: number) => {
@@ -13150,6 +13263,17 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                         <span className="hidden sm:inline">WhatsApp</span>
                       </button>
 
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirImportadorCotacao(0)}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+                        title="Importar orçamento colando texto do WhatsApp ou arrastando arquivo (Excel, PDF, Word)"
+                      >
+                        <span>⚡</span>
+                        <span className="hidden md:inline">Colar WhatsApp / Arquivo</span>
+                        <span className="md:hidden">Importar</span>
+                      </button>
+
                       {/* Dropdown de Mais Opções */}
                       <div className="relative">
                         <input
@@ -13551,6 +13675,26 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                               )}
                             </div>
 
+                            {/* Ações Rápidas: Importar do WhatsApp/Arquivo & Pedir Cotação */}
+                            <div className="grid grid-cols-2 gap-1.5 mb-2.5">
+                              <button
+                                type="button"
+                                onClick={() => handleAbrirImportadorCotacao(idx)}
+                                className="py-1 px-1.5 rounded-md bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 text-[10px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                                title="Importar orçamento colando texto do WhatsApp ou arrastando arquivo (Excel, PDF, Word)"
+                              >
+                                <span>⚡</span> Colar / Arquivo
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDispararCotacaoWhatsApp(idx)}
+                                className="py-1 px-1.5 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-[10px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                                title="Enviar lista de insumos formatada no WhatsApp deste fornecedor"
+                              >
+                                <span>📲</span> Pedir Cotação
+                              </button>
+                            </div>
+
                             {/* Alerta de Cotação Parcial/Incompleta */}
                             {statusForn && !statusForn.isCompleto && (statusForn.cotados ?? 0) > 0 && (
                               <div className="mb-2.5 px-2 py-1 bg-amber-50 border border-amber-200 rounded-lg text-[10px] text-amber-900 font-semibold flex items-center justify-between">
@@ -13761,6 +13905,18 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                 <span className="font-semibold">Ágio Qualidade / Prazo:</span>
                                 <span className="font-bold text-amber-900">+{formatBRL(total - resumoComparativo.vencedorGeral.total)} (Saving R$ 0)</span>
                               </div>
+                            )}
+
+                            {/* Botão de Pedir Desconto no WhatsApp se for 2º/3º colocado */}
+                            {!isVencedor && total > 0 && resumoComparativo.vencedorGeral && total > (resumoComparativo.vencedorGeral?.total || 0) && (
+                              <button
+                                type="button"
+                                onClick={() => handlePedirDescontoWhatsApp(idx)}
+                                className="w-full mb-2 py-1 px-2 rounded-md bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-950 text-[10px] font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                                title="Enviar mensagem no WhatsApp pedindo para o fornecedor cobrir o menor valor da cotação"
+                              >
+                                <span>💬</span> Pedir Desconto no WhatsApp
+                              </button>
                             )}
 
                             <button
@@ -20537,6 +20693,23 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           fornecedores={comparativoFornecedores}
           itens={comparativoItens}
           onAplicarPropostaFornecedor={handleAplicarPropostaFornecedorOnline}
+          dispararAviso={dispararAviso}
+        />
+      )}
+
+      {showModalImportarCotacao && (
+        <ModalImportarCotacaoMultiFormato
+          isOpen={showModalImportarCotacao}
+          onClose={() => setShowModalImportarCotacao(false)}
+          fornecedorIndexPadrao={importarCotacaoFornecedorIdx}
+          fornecedores={comparativoFornecedores}
+          itens={comparativoItens}
+          fornecedoresCadastrados={fornecedores}
+          obraNome={
+            obras.find((o) => o.id === comparativoObraId)?.nome ||
+            "Canteiro de Obras JC Bauer"
+          }
+          onAplicarPrecos={handleAplicarPrecosMultiFormato}
           dispararAviso={dispararAviso}
         />
       )}
