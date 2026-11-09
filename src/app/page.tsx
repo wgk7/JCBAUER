@@ -2824,7 +2824,53 @@ export default function HomePage() {
       const savedCronogramas = window.localStorage.getItem(CRONOGRAMA_ENTREGA_STORAGE_KEY);
       if (savedCronogramas) {
         try {
-          setCronogramasEntrega(JSON.parse(savedCronogramas));
+          const parsed = JSON.parse(savedCronogramas) as Record<string, CronogramaEntregaEmpreendimento>;
+          const demoOcs = [
+            "OC-2026-038",
+            "OC-2026-041",
+            "OC-2026-044",
+            "OC-2026-047",
+            "OC-2026-050",
+            "OC-2026-053",
+            "OC-2026-056",
+            "OC-2026-059",
+          ];
+          const demoForns = [
+            "Portobello Shop / Eliane",
+            "Deca / Docol Distribuidora",
+            "Pormade / Sincol Portas",
+            "Suvinil / Tintas Coral",
+            "Stella / Schneider Electric",
+            "Vidraçaria & Esquadrias Alumilux",
+            "Paisagismo & Móveis Corporativos",
+            "Equipe Especializada Limpeza Fina",
+          ];
+          let limpou = false;
+          const limpo: Record<string, CronogramaEntregaEmpreendimento> = {};
+
+          Object.entries(parsed).forEach(([obraId, crono]) => {
+            const pacotesLimpos = (crono.pacotes || []).filter(
+              (p) =>
+                !demoOcs.includes(p.numeroOc || "") &&
+                !demoForns.includes(p.fornecedorNome || "") &&
+                !(p.id?.startsWith("pac-") && Boolean(p.observacoes?.includes("1º Lote de 600m²")))
+            );
+            if (pacotesLimpos.length !== (crono.pacotes || []).length) {
+              limpou = true;
+            }
+            limpo[obraId] = {
+              ...crono,
+              pacotes: pacotesLimpos,
+            };
+          });
+
+          setCronogramasEntrega(limpo);
+          if (limpou) {
+            window.localStorage.setItem(
+              CRONOGRAMA_ENTREGA_STORAGE_KEY,
+              JSON.stringify(limpo)
+            );
+          }
         } catch {}
       }
 
