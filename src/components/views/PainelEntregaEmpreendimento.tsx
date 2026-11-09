@@ -254,6 +254,239 @@ export function PainelEntregaEmpreendimento({
     dispararAviso("Pacote removido do cronograma.");
   };
 
+  const gerarRelatorioHtmlLocal = (cron: CronogramaEntregaEmpreendimento) => {
+    const hojeStr = new Date().toLocaleDateString("pt-BR");
+    const horaStr = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const pacotes = cron.pacotes || [];
+    const total = pacotes.length;
+    const entregues = pacotes.filter((p) => p.status === "Entregue" || p.status === "Instalado").length;
+    const emTransito = pacotes.filter((p) => p.status === "Em Transito").length;
+    const somaPerc = pacotes.reduce((acc, p) => acc + (Number(p.percentualConcluido) || 0), 0);
+    const percGeral = total > 0 ? Math.round(somaPerc / total) : 0;
+    const valorTotal = pacotes.reduce((acc, p) => acc + (Number(p.valorTotal) || 0), 0);
+
+    let diasRestantesStr = "Data não definida";
+    let diasNum = 0;
+    if (cron.dataEntregaChaves) {
+      diasNum = calcularDiferencaDias(cron.dataEntregaChaves);
+      diasRestantesStr = diasNum >= 0 ? `Faltam ${diasNum} dias para as Chaves` : `Prazo expirou há ${Math.abs(diasNum)} dias`;
+    }
+
+    const logoUrl = typeof window !== "undefined" ? `${window.location.origin}/logo.png` : "/logo.png";
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>JC BAUER - Cronograma de Entrega do Empreendimento & Acabamentos</title>
+  <style>
+    @page { size: A4 landscape; margin: 8mm; }
+    * { box-sizing: border-box; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; padding: 12px; background: #f8fafc; color: #0f172a; font-size: 11px; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    .no-print { position: sticky; top: 0; background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 8px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; z-index: 9999; border-bottom: 2px solid #059669; }
+    .header { border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .logo-container { display: flex; align-items: center; gap: 12px; }
+    .logo-img { height: 48px; width: auto; object-fit: contain; }
+    .logo-title { font-size: 17px; font-weight: 900; letter-spacing: -0.5px; color: #0f172a; text-transform: uppercase; }
+    .sub-title { font-size: 11px; color: #059669; font-weight: 800; text-transform: uppercase; margin-top: 1px; }
+    .badge-fase { background: #0f172a; color: #fbbf24; border: 1px solid #d97706; padding: 5px 10px; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; text-align: right; }
+    
+    .meta-grid { display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 1fr; gap: 10px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; }
+    .meta-item { font-size: 11px; }
+    .meta-item strong { color: #0f172a; }
+    .meta-item span { color: #475569; display: block; font-size: 10px; text-transform: uppercase; font-weight: 700; margin-bottom: 2px; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+    .kpi-card { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; }
+    .kpi-label { font-size: 9.5px; font-weight: 800; color: #64748b; text-transform: uppercase; }
+    .kpi-val { font-size: 16px; font-weight: 900; color: #0f172a; margin-top: 2px; }
+    .kpi-sub { font-size: 10px; color: #475569; margin-top: 2px; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 12px; background: #ffffff; }
+    th { background: #0f172a; color: #ffffff; padding: 6px 8px; text-align: left; font-size: 9.5px; text-transform: uppercase; border: 1px solid #0f172a; }
+    td { padding: 6px 8px; border: 1px solid #cbd5e1; font-size: 10px; vertical-align: middle; }
+    tr:nth-child(even) { background: #f8fafc; }
+
+    .status-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+    .status-instalado { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+    .status-entregue { background: #ccfbf1; color: #115e59; border: 1px solid #5eead4; }
+    .status-transito { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .status-producao { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+    .status-programado { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+    .status-atrasado { background: #ffe4e6; color: #9f1239; border: 1px solid #fda4af; }
+
+    .signature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 20px; }
+    .sig-line { border-top: 1px solid #0f172a; text-align: center; padding-top: 4px; font-size: 9.5px; font-weight: 700; color: #0f172a; }
+    .footer { margin-top: 15px; border-top: 1px solid #cbd5e1; padding-top: 8px; display: flex; justify-content: space-between; font-size: 9px; color: #64748b; }
+
+    @media print {
+      .no-print { display: none !important; }
+      body { padding: 0; background: #ffffff !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <div><strong>JC BAUER • Cronograma de Entrega do Empreendimento & Acabamentos</strong> (A4 Paisagem)</div>
+    <div style="display: flex; gap: 8px;">
+      <button onclick="window.print()" style="background: #059669; color: #fff; border: none; padding: 6px 16px; border-radius: 6px; font-weight: 800; cursor: pointer;">🖨️ Imprimir / Salvar PDF</button>
+      <button onclick="window.close()" style="background: #334155; color: #fff; border: 1px solid #64748b; padding: 6px 12px; border-radius: 6px; font-weight: 600; cursor: pointer;">Fechar</button>
+    </div>
+  </div>
+
+  <div class="header">
+    <div class="logo-container">
+      <img src="${logoUrl}" alt="JC Bauer" class="logo-img" onerror="this.style.display='none'" />
+      <div>
+        <div class="logo-title">JC BAUER EMPREENDIMENTOS</div>
+        <div class="sub-title">Cronograma Oficial de Materiais de Finalização & Entrega das Chaves</div>
+      </div>
+    </div>
+    <div class="badge-fase">
+      <div>FASE FINAL DE ACABAMENTOS</div>
+      <div style="color: #ffffff; font-size: 9px; margin-top: 2px;">Relatório de Diretoria & Canteiro</div>
+    </div>
+  </div>
+
+  <div class="meta-grid">
+    <div class="meta-item">
+      <span>Empreendimento / Obra:</span>
+      <strong>${cron.obraNome}</strong>
+    </div>
+    <div class="meta-item">
+      <span>Engenheiro Responsável:</span>
+      <strong>${cron.responsavelEngenheiro || "Engenharia JC Bauer"}</strong>
+    </div>
+    <div class="meta-item">
+      <span>Data Entrega das Chaves:</span>
+      <strong style="color: #0369a1;">${formatarDataBR(cron.dataEntregaChaves)}</strong>
+      <div style="font-size: 9px; color: ${diasNum >= 0 ? "#059669" : "#dc2626"}; font-weight: 800;">
+        ${diasRestantesStr}
+      </div>
+    </div>
+    <div class="meta-item">
+      <span>Emissão do Relatório:</span>
+      <strong>${hojeStr}</strong> às ${horaStr}
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Avanço Físico Geral</div>
+      <div class="kpi-val" style="color: #059669;">${percGeral}%</div>
+      <div class="kpi-sub">${entregues} de ${total} pacotes entregues/instalados</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Materiais em Trânsito</div>
+      <div class="kpi-val" style="color: #0284c7;">${emTransito} cargas</div>
+      <div class="kpi-sub">A caminho do canteiro</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Total de Pacotes</div>
+      <div class="kpi-val">${total} frentes</div>
+      <div class="kpi-sub">Mapeadas para finalização</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Comprometido Acabamentos</div>
+      <div class="kpi-val" style="font-size: 15px;">${formatBRL(valorTotal)}</div>
+      <div class="kpi-sub">Total investido na fase</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 18%;">Disciplina / Categoria</th>
+        <th style="width: 25%;">Material de Finalização</th>
+        <th style="width: 18%;">Fornecedor & Nº OC</th>
+        <th style="width: 10%; text-align: center;">Início Chegada</th>
+        <th style="width: 10%; text-align: center;">Limite Instalação</th>
+        <th style="width: 9%; text-align: center;">Status</th>
+        <th style="width: 10%; text-align: right;">Valor Contratado</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${pacotes.length === 0 ? `
+        <tr><td colspan="7" style="text-align: center; padding: 24px; color: #64748b;">Nenhum pacote de acabamento cadastrado no momento para esta obra.</td></tr>
+      ` : pacotes.map((p) => {
+        let statusClass = "status-programado";
+        if (p.status === "Instalado") statusClass = "status-instalado";
+        else if (p.status === "Entregue") statusClass = "status-entregue";
+        else if (p.status === "Em Transito") statusClass = "status-transito";
+        else if (p.status === "Em Producao") statusClass = "status-producao";
+        else if (p.status === "Atrasado") statusClass = "status-atrasado";
+
+        return `
+          <tr>
+            <td><strong>${p.categoria}</strong></td>
+            <td>
+              <div style="font-weight: 700; color: #0f172a;">${p.nomeMaterial}</div>
+              ${p.localPavimento ? `<div style="font-size: 9px; color: #64748b; margin-top: 2px;">📍 ${p.localPavimento}</div>` : ""}
+            </td>
+            <td>
+              <div><strong>${p.fornecedorNome}</strong></div>
+              <div style="font-size: 9px; color: #64748b; font-family: monospace;">${p.numeroOc || "OC a vincular"}</div>
+            </td>
+            <td style="text-align: center; font-weight: 700; color: #0284c7;">${formatarDataBR(p.dataInicioEntrega)}</td>
+            <td style="text-align: center; font-weight: 700;">${formatarDataBR(p.dataLimiteConclusao)}</td>
+            <td style="text-align: center;">
+              <span class="status-badge ${statusClass}">${p.status}</span>
+              <div style="font-size: 9px; color: #64748b; margin-top: 2px;">${p.percentualConcluido}% concluído</div>
+            </td>
+            <td style="text-align: right; font-weight: 700; font-family: monospace;">${formatBRL(p.valorTotal)}</td>
+          </tr>
+        `;
+      }).join("")}
+    </tbody>
+  </table>
+
+  <div class="signature-grid">
+    <div>
+      <div class="sig-line">Engenharia Residente / Gestão da Obra</div>
+      <div style="text-align: center; font-size: 8.5px; color: #64748b; margin-top: 2px;">Validação dos Prazos & Instalações de Campo</div>
+    </div>
+    <div>
+      <div class="sig-line">Suprimentos & Logística de Materiais</div>
+      <div style="text-align: center; font-size: 8.5px; color: #64748b; margin-top: 2px;">Follow-up dos Fornecedores & Chegadas</div>
+    </div>
+    <div>
+      <div class="sig-line">Diretoria Executiva / CFO</div>
+      <div style="text-align: center; font-size: 8.5px; color: #64748b; margin-top: 2px;">Aprovação da Entrega das Chaves</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>JC Bauer Empreendimentos • Sistema Integrado de Suprimentos & Engenharia Civil</div>
+    <div>Documento gerado em conformidade com o cronograma executivo de obras • Página 1 de 1</div>
+  </div>
+  <script>
+    window.onload = function() {
+      setTimeout(function() { window.print(); }, 400);
+    };
+  </script>
+</body>
+</html>`;
+
+    try {
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const blobUrl = URL.createObjectURL(blob);
+      const win = window.open(blobUrl, "_blank");
+      if (win) {
+        win.focus();
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        return;
+      }
+    } catch {}
+
+    const win = window.open("", "_blank");
+    if (win && win.document) {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+    }
+  };
+
   const handleAbrirWhatsAppFornecedor = (pacote: PacoteFinalizacao) => {
     const tel = (pacote.fornecedorTelefone || "").replace(/\D/g, "");
     const prazoChaves = cronogramaAtual.dataEntregaChaves
@@ -339,7 +572,7 @@ export function PainelEntregaEmpreendimento({
                 if (onImprimirCronogramaPDF) {
                   onImprimirCronogramaPDF(cronogramaAtual);
                 } else {
-                  window.print();
+                  gerarRelatorioHtmlLocal(cronogramaAtual);
                 }
               }}
               className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
