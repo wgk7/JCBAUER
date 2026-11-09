@@ -14,6 +14,7 @@ export type TabId =
   | "Medicoes"
   | "Orcamento"
   | "Logistica"
+  | "EntregaObra"
   | "Importacao"
   | "Configuracoes";
 
@@ -24,7 +25,8 @@ export type ObraTabId =
   | "Recebimento"
   | "Estoque"
   | "Medicoes"
-  | "Logistica";
+  | "Logistica"
+  | "EntregaObra";
 
 export type PerfilAcesso =
   | "Administrador"
@@ -622,4 +624,42 @@ export interface PropostaFornecedorOnline {
   valorTotalInsumos: number;
   valorTotalProposta: number;
   statusEnvio: "Submetida" | "Em Rascunho";
+}
+
+/* ========================================================================= */
+/* PAINEL DE ENTREGA DO EMPREENDIMENTO & CRONOGRAMA DE ACABAMENTOS          */
+/* ========================================================================= */
+
+export type StatusPacoteFinalizacao =
+  | "Programado"
+  | "Em Producao"
+  | "Em Transito"
+  | "Entregue"
+  | "Instalado"
+  | "Atrasado";
+
+export interface PacoteFinalizacao {
+  id: string;
+  categoria: string;
+  nomeMaterial: string;
+  fornecedorNome: string;
+  fornecedorTelefone?: string;
+  numeroOc?: string;
+  dataInicioEntrega: string; // YYYY-MM-DD
+  dataLimiteConclusao: string; // YYYY-MM-DD
+  localPavimento?: string;
+  status: StatusPacoteFinalizacao;
+  percentualConcluido: number; // 0 a 100
+  valorTotal?: number;
+  observacoes?: string;
+  responsavelRecebimento?: string;
+}
+
+export interface CronogramaEntregaEmpreendimento {
+  obraId: string;
+  obraNome: string;
+  dataEntregaChaves: string; // YYYY-MM-DD
+  responsavelEngenheiro: string;
+  observacoesGerais?: string;
+  pacotes: PacoteFinalizacao[];
 }

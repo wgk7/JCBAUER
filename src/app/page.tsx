@@ -7,7 +7,8 @@ import { ModalImportarCotacaoMultiFormato } from "../components/cotacoes/ModalIm
 import { ModalOnePagerExecutivoPdf } from "../components/modals/ModalOnePagerExecutivoPdf";
 import { ModalVisualizarComparativoPdf } from "../components/modals/ModalVisualizarComparativoPdf";
 import { TelaoExecutivoDiretoria } from "../components/views/TelaoExecutivoDiretoria";
-import type { PropostaFornecedorOnline } from "../types/jcBauer";
+import { PainelEntregaEmpreendimento } from "../components/views/PainelEntregaEmpreendimento";
+import type { PropostaFornecedorOnline, CronogramaEntregaEmpreendimento } from "../types/jcBauer";
 import {
   SUPABASE_URL,
   SUPABASE_ANON_KEY,
@@ -37,6 +38,7 @@ type TabId =
   | "Medicoes"
   | "Orcamento"
   | "Logistica"
+  | "EntregaObra"
   | "Importacao"
   | "Configuracoes";
 
@@ -47,7 +49,8 @@ type ObraTabId =
   | "Recebimento"
   | "Estoque"
   | "Medicoes"
-  | "Logistica";
+  | "Logistica"
+  | "EntregaObra";
 
 type PerfilAcesso =
   | "Administrador"
@@ -139,6 +142,7 @@ const SAVED_LOGIN_STORAGE_KEY = "jc_bauer_saved_login_v3";
 const SAVED_PASSWORD_STORAGE_KEY = "jc_bauer_saved_password_v3";
 const THEME_STORAGE_KEY = "jc_bauer_theme_v3";
 const DENSITY_STORAGE_KEY = "jc_bauer_density_v3";
+const CRONOGRAMA_ENTREGA_STORAGE_KEY = "jc_bauer_entrega_empreendimento_v1";
 
 interface DiarioObraRegistro {
   id: string;
@@ -1918,6 +1922,9 @@ export default function HomePage() {
   const [importarCotacaoFornecedorIdx, setImportarCotacaoFornecedorIdx] = useState<number>(0);
   const [itemAjustarEstoqueModal, setItemAjustarEstoqueModal] =
     useState<ItemEstoque | null>(null);
+  const [cronogramasEntrega, setCronogramasEntrega] = useState<
+    Record<string, CronogramaEntregaEmpreendimento>
+  >({});
 
   // -----------------------------------------------------------------------
   // ESTADOS DO MÓDULO ESPECIALIZADO DE CONCRETEIRAS (USINADO & BOMBA)
@@ -2812,6 +2819,13 @@ export default function HomePage() {
       } else {
         setDensidadeCompacta(false);
         document.documentElement.classList.remove("density-compact");
+      }
+
+      const savedCronogramas = window.localStorage.getItem(CRONOGRAMA_ENTREGA_STORAGE_KEY);
+      if (savedCronogramas) {
+        try {
+          setCronogramasEntrega(JSON.parse(savedCronogramas));
+        } catch {}
       }
 
       const savedRemember = window.localStorage.getItem(REMEMBER_ME_STORAGE_KEY);
@@ -6342,6 +6356,22 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       : `https://wa.me/?text=${encodeURIComponent(msg)}`;
 
     window.open(url, "_blank");
+  };
+
+  const handleSalvarCronogramaEntrega = (
+    obraId: string,
+    cronograma: CronogramaEntregaEmpreendimento
+  ) => {
+    setCronogramasEntrega((prev) => {
+      const novo = { ...prev, [obraId]: cronograma };
+      try {
+        window.localStorage.setItem(
+          CRONOGRAMA_ENTREGA_STORAGE_KEY,
+          JSON.stringify(novo)
+        );
+      } catch {}
+      return novo;
+    });
   };
 
   const handleEmitirOrdemComparativo = (fornIndex: number) => {
@@ -10463,6 +10493,9 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         onToggleTema={handleToggleTema}
         densidadeCompacta={densidadeCompacta}
         onToggleDensidade={handleToggleDensidade}
+        cronogramasSalvos={cronogramasEntrega}
+        onSalvarCronograma={handleSalvarCronogramaEntrega}
+        dispararAviso={dispararAviso}
       />
     );
   }
@@ -10577,6 +10610,12 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                       id: "ComprasColetivas" as TabId,
                       label: "Compras Coletivas",
                       iconPath: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z",
+                    },
+                    {
+                      id: "EntregaObra" as TabId,
+                      label: "Entrega do Empreendimento",
+                      badge: "NOVO",
+                      iconPath: "M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9",
                     },
                   ],
                 },
@@ -19119,6 +19158,21 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           })()}
 
           {/* ============================================================= */}
+          {/* ABA: PAINEL DE ENTREGA DO EMPREENDIMENTO & ACABAMENTOS        */}
+          {/* ============================================================= */}
+          {activeTab === "EntregaObra" && (
+            <PainelEntregaEmpreendimento
+              obras={obras}
+              obraFiltro={obraFiltro}
+              setObraFiltro={setObraFiltro}
+              ordens={ordens}
+              cronogramasSalvos={cronogramasEntrega}
+              onSalvarCronograma={handleSalvarCronogramaEntrega}
+              dispararAviso={dispararAviso}
+            />
+          )}
+
+          {/* ============================================================= */}
           {/* ABA 5: IMPORTAR PLANILHAS (`Importacao`)                      */}
           {/* ============================================================= */}
           {activeTab === "Importacao" && (
@@ -22031,6 +22085,9 @@ function VisaoRestritaObra({
   onToggleTema,
   densidadeCompacta = false,
   onToggleDensidade,
+  cronogramasSalvos = {},
+  onSalvarCronograma,
+  dispararAviso = () => {},
 }: {
   usuarioLogado: UsuarioSistema;
   companyName: string;
@@ -22070,6 +22127,12 @@ function VisaoRestritaObra({
   onToggleTema?: () => void;
   densidadeCompacta?: boolean;
   onToggleDensidade?: () => void;
+  cronogramasSalvos?: Record<string, CronogramaEntregaEmpreendimento>;
+  onSalvarCronograma?: (
+    obraId: string,
+    cronograma: CronogramaEntregaEmpreendimento
+  ) => void;
+  dispararAviso?: (msg: string) => void;
 }) {
   // Estado local para modais do Canteiro
   const [novoBmModalContrato, setNovoBmModalContrato] =
@@ -22250,6 +22313,7 @@ function VisaoRestritaObra({
     Estoque: "🧱 Estoque do Canteiro & Almoxarifado",
     Medicoes: "📐 Contratos de Subempreitada & Boletins de Medição (BM)",
     Logistica: "🚚 Calendário de Cargas & Descargas no Canteiro",
+    EntregaObra: "🏁 Entrega da Obra & Acabamentos (Contagem Regressiva)",
   };
 
   return (
@@ -22282,6 +22346,7 @@ function VisaoRestritaObra({
                 { id: "MeusPedidos", label: "📋 Meus Pedidos & Status da Diretoria" },
                 { id: "Recebimento", label: "🚚 Previsão de Entregas & Chegadas ('Quando Vai Chegar')" },
                 { id: "Estoque", label: "🧱 Almoxarifado da Obra (SKUs)" },
+                { id: "EntregaObra", label: "🏁 Materiais de Finalização & Acabamentos" },
               ];
 
               const itensPadrao: { id: ObraTabId; label: string }[] = [
@@ -22306,6 +22371,10 @@ function VisaoRestritaObra({
                 {
                   id: "Logistica",
                   label: "🚚 Calendário de Cargas",
+                },
+                {
+                  id: "EntregaObra",
+                  label: "🏁 Entrega da Obra & Acabamentos",
                 },
               ];
 
@@ -24299,6 +24368,21 @@ function VisaoRestritaObra({
                 </div>
               );
           })()}
+
+          {/* ============================================================= */}
+          {/* ABA RESTRITA DA OBRA: CRONOGRAMA DE ENTREGA & ACABAMENTOS     */}
+          {/* ============================================================= */}
+          {obraActiveTab === "EntregaObra" && (
+            <PainelEntregaEmpreendimento
+              obras={obras}
+              obraFiltro={obraIdEfetivo}
+              setObraFiltro={() => {}}
+              ordens={ordens}
+              cronogramasSalvos={cronogramasSalvos}
+              onSalvarCronograma={onSalvarCronograma || (() => {})}
+              dispararAviso={dispararAviso}
+            />
+          )}
         </main>
       </div>
 
