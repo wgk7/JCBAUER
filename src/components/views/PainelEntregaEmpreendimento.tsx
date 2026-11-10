@@ -7,6 +7,7 @@ import {
   StatusPacoteFinalizacao,
   CronogramaEntregaEmpreendimento,
   OrdemCompra,
+  DadosNotificacaoCargaWhatsApp,
 } from "../../types/jcBauer";
 
 interface PainelEntregaEmpreendimentoProps {
@@ -21,6 +22,7 @@ interface PainelEntregaEmpreendimentoProps {
   ) => void;
   dispararAviso: (msg: string) => void;
   onImprimirCronogramaPDF?: (cronograma: CronogramaEntregaEmpreendimento) => void;
+  onNotificarCargaWhatsApp?: (dados: DadosNotificacaoCargaWhatsApp) => void;
 }
 
 const CATEGORIAS_PADRAO = [
@@ -100,6 +102,7 @@ export function PainelEntregaEmpreendimento({
   onSalvarCronograma,
   dispararAviso,
   onImprimirCronogramaPDF,
+  onNotificarCargaWhatsApp,
 }: PainelEntregaEmpreendimentoProps) {
   // Obra Ativa para o Painel
   const obraAtivaId = obraFiltro !== "ALL" ? obraFiltro : obras[0]?.id || "";
@@ -500,6 +503,65 @@ export function PainelEntregaEmpreendimento({
     window.open(url, "_blank");
   };
 
+  const handleNotificarEquipe = (pacote: PacoteFinalizacao) => {
+    if (onNotificarCargaWhatsApp) {
+      onNotificarCargaWhatsApp({
+        tipo: "PACOTE_FINALIZACAO",
+        id: pacote.id,
+        obraId: cronogramaAtual.obraId,
+        obraNome: cronogramaAtual.obraNome,
+        numeroOc: pacote.numeroOc,
+        fornecedorNome: pacote.fornecedorNome,
+        fornecedorTelefone: pacote.fornecedorTelefone,
+        descricaoMaterial: `${pacote.nomeMaterial} (${pacote.categoria})`,
+        dataEntregaFormatada: formatarDataBR(pacote.dataInicioEntrega),
+        horarioJanela: "Horário de Obra (07:30 - 17:30)",
+        tipoVeiculo: "Caminhão / Frete Fornecedor",
+        tipoFrete: "CIF",
+        localPavimento: pacote.localPavimento,
+        status: pacote.status,
+        observacoes: pacote.observacoes,
+        pacotesDisponiveis: pacotesValidos,
+      });
+      return;
+    }
+
+    const msg = `🚚 *AVISO DE CHEGADA DE ACABAMENTO - JC BAUER*\n📍 *Obra:* ${cronogramaAtual.obraNome}\n📦 *Material:* ${pacote.nomeMaterial} (${pacote.categoria})\n🏢 *Fornecedor:* ${pacote.fornecedorNome}\n📄 *Ordem de Compra:* ${pacote.numeroOc || "Direto"}\n📅 *Previsão de Chegada:* ${formatarDataBR(pacote.dataInicioEntrega)}\n⏱️ *Limite Término:* ${formatarDataBR(pacote.dataLimiteConclusao)}\n📍 *Local / Pavimento:* ${pacote.localPavimento || "Obra"}\n\n⚠️ *Atenção Almoxarifado:* Manter equipe e pátio preparados para descarregamento e conferência de NF.`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+    dispararAviso("WhatsApp aberto para notificar a equipe da obra!");
+  };
+
+  const handleAbrirDisparoRapidoHeader = () => {
+    const proximoPacote =
+      pacotesValidos.find((p) => p.status === "Em Transito") ||
+      pacotesValidos.find((p) => p.status === "Programado") ||
+      pacotesValidos[0];
+
+    if (proximoPacote) {
+      handleNotificarEquipe(proximoPacote);
+    } else {
+      if (onNotificarCargaWhatsApp) {
+        onNotificarCargaWhatsApp({
+          tipo: "PACOTE_FINALIZACAO",
+          id: `aviso-${Date.now()}`,
+          obraId: cronogramaAtual.obraId,
+          obraNome: cronogramaAtual.obraNome,
+          descricaoMaterial: "Materiais de Finalização & Acabamentos",
+          fornecedorNome: "Fornecedor Programado",
+          dataEntregaFormatada: "Hoje",
+          horarioJanela: "Horário de Obra (07:30 - 17:30)",
+          tipoVeiculo: "Caminhão / Frete Fornecedor",
+          tipoFrete: "CIF",
+          status: "Em Transito",
+          observacoes: "Manter portão e pátio desimpedidos para descarregamento",
+          pacotesDisponiveis: pacotesValidos,
+        });
+      } else {
+        dispararAviso("Nenhum pacote cadastrado para disparo no momento.");
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* ===================================================================== */}
@@ -554,6 +616,17 @@ export function PainelEntregaEmpreendimento({
                 <span>📦</span> Puxar de OCs ({ordensDestaObra.length})
               </button>
             )}
+
+            {/* Botão de Disparo Rápido de Notificação WhatsApp */}
+            <button
+              type="button"
+              onClick={handleAbrirDisparoRapidoHeader}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition flex items-center gap-1.5 shadow-sm hover:shadow-md cursor-pointer"
+              title="Disparo Rápido de WhatsApp: Notificar celulares do Engenheiro, Almoxarife e Diretoria sobre a chegada dos materiais deste empreendimento"
+            >
+              <span>📲</span>
+              <span>Disparo Rápido WhatsApp</span>
+            </button>
 
             <button
               type="button"
@@ -951,11 +1024,12 @@ export function PainelEntregaEmpreendimento({
 
                       <button
                         type="button"
-                        onClick={() => handleAbrirWhatsAppFornecedor(pacote)}
-                        className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition cursor-pointer shrink-0"
-                        title="Cobrar ou alinhar prazo no WhatsApp do fornecedor"
+                        onClick={() => handleNotificarEquipe(pacote)}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs"
+                        title="Disparar WhatsApp para Engenheiro, Almoxarife, Diretoria ou Fornecedor"
                       >
-                        📲
+                        <span>📲</span>
+                        <span>Notificar WhatsApp</span>
                       </button>
 
                       <button
@@ -1119,11 +1193,12 @@ export function PainelEntregaEmpreendimento({
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleAbrirWhatsAppFornecedor(p)}
-                            className="p-1 rounded text-emerald-600 hover:text-emerald-800"
-                            title="WhatsApp"
+                            onClick={() => handleNotificarEquipe(p)}
+                            className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold transition flex items-center gap-1 border border-emerald-300"
+                            title="Notificar WhatsApp: Engenheiro, Almoxarife, Diretoria ou Fornecedor"
                           >
-                            📲
+                            <span>📲</span>
+                            <span>WhatsApp</span>
                           </button>
                           <button
                             type="button"

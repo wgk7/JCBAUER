@@ -6,9 +6,14 @@ import { ModalCompartilharCotacao } from "../components/cotacoes/ModalCompartilh
 import { ModalImportarCotacaoMultiFormato } from "../components/cotacoes/ModalImportarCotacaoMultiFormato";
 import { ModalOnePagerExecutivoPdf } from "../components/modals/ModalOnePagerExecutivoPdf";
 import { ModalVisualizarComparativoPdf } from "../components/modals/ModalVisualizarComparativoPdf";
+import { ModalNotificarCargaWhatsApp } from "../components/modals/ModalNotificarCargaWhatsApp";
 import { TelaoExecutivoDiretoria } from "../components/views/TelaoExecutivoDiretoria";
 import { PainelEntregaEmpreendimento } from "../components/views/PainelEntregaEmpreendimento";
-import type { PropostaFornecedorOnline, CronogramaEntregaEmpreendimento } from "../types/jcBauer";
+import type {
+  PropostaFornecedorOnline,
+  CronogramaEntregaEmpreendimento,
+  DadosNotificacaoCargaWhatsApp,
+} from "../types/jcBauer";
 import {
   SUPABASE_URL,
   SUPABASE_ANON_KEY,
@@ -19463,6 +19468,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
               onSalvarCronograma={handleSalvarCronogramaEntrega}
               dispararAviso={dispararAviso}
               onImprimirCronogramaPDF={handleGerarCronogramaEntregaPDF}
+              onNotificarCargaWhatsApp={handleNotificarPacoteEntrega}
             />
           )}
 
@@ -20763,6 +20769,20 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             )}
           </div>
         </div>
+      )}
+
+      {/* MODAL NOTIFICAR CHEGADA DE CARGA VIA WHATSAPP */}
+      {cargaNotificarModal && (
+        <ModalNotificarCargaWhatsApp
+          isOpen={Boolean(cargaNotificarModal)}
+          onClose={() => setCargaNotificarModal(null)}
+          dados={cargaNotificarModal}
+          obra={obras.find((o) => o.id === cargaNotificarModal.obraId)}
+          settings={settings}
+          usuarios={usuarios}
+          onSalvarContatosObra={handleSalvarContatosObra}
+          dispararAviso={dispararAviso}
+        />
       )}
 
       {/* MODAL CADASTRAR NOVO EMPREENDIMENTO / OBRA */}
@@ -22436,6 +22456,32 @@ function VisaoRestritaObra({
   const [scChatModal, setScChatModal] = useState<SolicitacaoCompra | null>(null);
   const [showModalCadastrarEstoqueObra, setShowModalCadastrarEstoqueObra] =
     useState<boolean>(false);
+  const [cargaNotificarModal, setCargaNotificarModal] =
+    useState<DadosNotificacaoCargaWhatsApp | null>(null);
+
+  const handleAbrirNotificacaoCarga = (carga: CargaItemLogistica) => {
+    setCargaNotificarModal({
+      tipo: "CARGA_LOGISTICA",
+      id: carga.id,
+      obraId: carga.obraId,
+      obraNome: carga.obraNome,
+      ordemId: carga.ordemId,
+      numeroOc: carga.numeroOc,
+      fornecedorNome: carga.fornecedorNome,
+      descricaoMaterial: carga.insumoDescricao,
+      dataEntregaFormatada: carga.dataEntregaISO
+        ? formatarDataBR(carga.dataEntregaISO)
+        : carga.dataPrevistaTexto || "Hoje",
+      horarioJanela: carga.horarioJanela,
+      tipoVeiculo: carga.tipoVeiculo,
+      tipoFrete: carga.tipoFrete,
+      status: carga.status,
+    });
+  };
+
+  const handleNotificarPacoteEntrega = (dados: DadosNotificacaoCargaWhatsApp) => {
+    setCargaNotificarModal(dados);
+  };
 
   // Estados locais para a Rotina Diária do Canteiro & Checklist
   const [baixaItemEstoqueId, setBaixaItemEstoqueId] = useState<string>("");
@@ -24411,19 +24457,19 @@ function VisaoRestritaObra({
                                     Frete {carga.tipoFrete}
                                   </span>
                                   {!jaEntregue && ocAlvo && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setNotaFiscalInput("");
-                                        setCondicaoInput("Material descarregado e sem avarias");
-                                        setOcConfirmarRecebimentoModal(ocAlvo);
-                                      }}
-                                      className="px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold transition shadow-xs"
-                                    >
-                                      📦 Dar Entrada na Obra
-                                    </button>
-                                  )}
-                                  {jaEntregue && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setNotaFiscalInput("");
+                                          setCondicaoInput("Material descarregado e sem avarias");
+                                          setOcConfirmarRecebimentoModal(ocAlvo);
+                                        }}
+                                        className="px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold transition shadow-xs"
+                                      >
+                                        📦 Dar Entrada na Obra
+                                      </button>
+                                    )}
+                                    {jaEntregue && (
                                     <span className="text-[11px] font-semibold text-emerald-800">
                                       ✓ Recebido no Canteiro
                                     </span>
@@ -24678,6 +24724,7 @@ function VisaoRestritaObra({
               onSalvarCronograma={onSalvarCronograma || (() => {})}
               dispararAviso={dispararAviso}
               onImprimirCronogramaPDF={onImprimirCronogramaPDF}
+              onNotificarCargaWhatsApp={handleNotificarPacoteEntrega}
             />
           )}
         </main>
@@ -24786,6 +24833,25 @@ function VisaoRestritaObra({
           onEnviar={(texto) => onEnviarMensagemSC(scChatModal.id, texto)}
         />
       )}
+
+      {/* MODAL NOTIFICAR CHEGADA DE CARGA VIA WHATSAPP NO CANTEIRO */}
+      {cargaNotificarModal && (
+        <ModalNotificarCargaWhatsApp
+          isOpen={Boolean(cargaNotificarModal)}
+          onClose={() => setCargaNotificarModal(null)}
+          dados={cargaNotificarModal}
+          obra={obras.find((o) => o.id === cargaNotificarModal.obraId)}
+          settings={{
+            userName: usuarioLogado.nome,
+            userRole: usuarioLogado.cargo,
+            userEmail: usuarioLogado.email,
+            userPhone: "47 997810384",
+            companyName: companyName,
+            companyCnpj: "",
+          }}
+          dispararAviso={dispararAviso}
+        />
+      )}
     </div>
   );
 }
@@ -24806,6 +24872,10 @@ function ModalNovaObra({
   const [sigla, setSigla] = useState("");
   const [endereco, setEndereco] = useState("");
   const [engenheiro, setEngenheiro] = useState("");
+  const [telefoneEngenheiro, setTelefoneEngenheiro] = useState("");
+  const [telefoneAlmoxarife, setTelefoneAlmoxarife] = useState("");
+  const [telefoneDiretor, setTelefoneDiretor] = useState("");
+  const [grupoWhatsapp, setGrupoWhatsapp] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -24817,6 +24887,10 @@ function ModalNovaObra({
       sigla: sigla.trim().toUpperCase() || nome.trim().substring(0, 3).toUpperCase(),
       endereco: endereco.trim() || "A Definir",
       engenheiro: engenheiro.trim() || "A Definir",
+      telefoneEngenheiro: telefoneEngenheiro.trim(),
+      telefoneAlmoxarife: telefoneAlmoxarife.trim(),
+      telefoneDiretor: telefoneDiretor.trim(),
+      grupoWhatsapp: grupoWhatsapp.trim(),
     };
 
     onSalvar(novaObra);
@@ -24898,6 +24972,64 @@ function ModalNovaObra({
             />
           </div>
 
+          {/* Telefones para Notificação de Cargas & Canteiro */}
+          <div className="bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200/80 space-y-2.5">
+            <div className="flex items-center gap-1.5 text-emerald-900 font-bold text-xs">
+              <span>📲</span>
+              <span>Contatos de WhatsApp da Obra (Notificações de Cargas)</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block font-semibold text-slate-700 text-[10px] mb-0.5">
+                  WhatsApp Engenheiro
+                </label>
+                <input
+                  type="text"
+                  value={telefoneEngenheiro}
+                  onChange={(e) => setTelefoneEngenheiro(e.target.value)}
+                  placeholder="Ex: 47 9xxxx-xxxx"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 text-[10px] mb-0.5">
+                  WhatsApp Almoxarife
+                </label>
+                <input
+                  type="text"
+                  value={telefoneAlmoxarife}
+                  onChange={(e) => setTelefoneAlmoxarife(e.target.value)}
+                  placeholder="Ex: 47 9xxxx-xxxx"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 text-[10px] mb-0.5">
+                  WhatsApp Diretoria
+                </label>
+                <input
+                  type="text"
+                  value={telefoneDiretor}
+                  onChange={(e) => setTelefoneDiretor(e.target.value)}
+                  placeholder="Ex: 47 997810384"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 text-[10px] mb-0.5">
+                  Link Grupo WhatsApp
+                </label>
+                <input
+                  type="text"
+                  value={grupoWhatsapp}
+                  onChange={(e) => setGrupoWhatsapp(e.target.value)}
+                  placeholder="chat.whatsapp.com/..."
+                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
             <button
               type="button"
@@ -24939,6 +25071,10 @@ function ModalEditarObra({
   const [sigla, setSigla] = useState(obra.sigla || "");
   const [endereco, setEndereco] = useState(obra.endereco || "");
   const [engenheiro, setEngenheiro] = useState(obra.engenheiro || "");
+  const [telefoneEngenheiro, setTelefoneEngenheiro] = useState(obra.telefoneEngenheiro || "");
+  const [telefoneAlmoxarife, setTelefoneAlmoxarife] = useState(obra.telefoneAlmoxarife || "");
+  const [telefoneDiretor, setTelefoneDiretor] = useState(obra.telefoneDiretor || "");
+  const [grupoWhatsapp, setGrupoWhatsapp] = useState(obra.grupoWhatsapp || "");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -24950,6 +25086,10 @@ function ModalEditarObra({
       sigla: sigla.trim().toUpperCase() || nome.trim().substring(0, 3).toUpperCase(),
       endereco: endereco.trim() || "A Definir",
       engenheiro: engenheiro.trim() || "A Definir",
+      telefoneEngenheiro: telefoneEngenheiro.trim(),
+      telefoneAlmoxarife: telefoneAlmoxarife.trim(),
+      telefoneDiretor: telefoneDiretor.trim(),
+      grupoWhatsapp: grupoWhatsapp.trim(),
     };
 
     onSalvar(obraAtualizada);
@@ -25024,6 +25164,64 @@ function ModalEditarObra({
               onChange={(e) => setEndereco(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-slate-900"
             />
+          </div>
+
+          {/* Telefones para Notificação de Cargas & Canteiro */}
+          <div className="bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200/80 space-y-2.5">
+            <div className="flex items-center gap-1.5 text-emerald-900 font-bold text-xs">
+              <span>📲</span>
+              <span>Contatos de WhatsApp da Obra (Notificações de Cargas)</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block font-semibold text-slate-700 text-[10px] mb-0.5">
+                  WhatsApp Engenheiro
+                </label>
+                <input
+                  type="text"
+                  value={telefoneEngenheiro}
+                  onChange={(e) => setTelefoneEngenheiro(e.target.value)}
+                  placeholder="Ex: 47 9xxxx-xxxx"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 text-[10px] mb-0.5">
+                  WhatsApp Almoxarife
+                </label>
+                <input
+                  type="text"
+                  value={telefoneAlmoxarife}
+                  onChange={(e) => setTelefoneAlmoxarife(e.target.value)}
+                  placeholder="Ex: 47 9xxxx-xxxx"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 text-[10px] mb-0.5">
+                  WhatsApp Diretoria
+                </label>
+                <input
+                  type="text"
+                  value={telefoneDiretor}
+                  onChange={(e) => setTelefoneDiretor(e.target.value)}
+                  placeholder="Ex: 47 997810384"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 text-[10px] mb-0.5">
+                  Link Grupo WhatsApp
+                </label>
+                <input
+                  type="text"
+                  value={grupoWhatsapp}
+                  onChange={(e) => setGrupoWhatsapp(e.target.value)}
+                  placeholder="chat.whatsapp.com/..."
+                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="pt-3 border-t border-slate-200 flex items-center justify-between">

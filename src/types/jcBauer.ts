@@ -60,6 +60,7 @@ export interface UsuarioSistema {
   email: string;
   senha: string;
   status: "Ativo" | "Bloqueado";
+  telefone?: string;
 }
 
 export interface UserSettings {
@@ -77,6 +78,30 @@ export interface Obra {
   sigla: string;
   endereco: string;
   engenheiro: string;
+  telefoneEngenheiro?: string;
+  telefoneAlmoxarife?: string;
+  telefoneDiretor?: string;
+  grupoWhatsapp?: string;
+}
+
+export interface DadosNotificacaoCargaWhatsApp {
+  tipo: "CARGA_LOGISTICA" | "PACOTE_FINALIZACAO";
+  id: string;
+  obraId: string;
+  obraNome: string;
+  ordemId?: string;
+  numeroOc?: string;
+  fornecedorNome: string;
+  fornecedorTelefone?: string;
+  descricaoMaterial: string;
+  dataEntregaFormatada: string;
+  horarioJanela?: string;
+  tipoVeiculo?: string;
+  tipoFrete?: string;
+  localPavimento?: string;
+  status?: string;
+  observacoes?: string;
+  pacotesDisponiveis?: PacoteFinalizacao[];
 }
 
 export interface ItemSolicitacao {
