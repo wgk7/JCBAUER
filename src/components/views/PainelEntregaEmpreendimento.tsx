@@ -122,7 +122,7 @@ export function PainelEntregaEmpreendimento({
   // Ordens de Compra Reais desta Obra
   const ordensDestaObra = useMemo(() => {
     return ordens.filter(
-      (o) => (o.obraId === obraAtivaId || obraAtivaId === "ALL") && o.status !== "Cancelada"
+      (o) => (o.obraId === obraAtivaId || obraAtivaId === "ALL") && o.status !== ("Cancelada" as any)
     );
   }, [ordens, obraAtivaId]);
 
@@ -139,7 +139,7 @@ export function PainelEntregaEmpreendimento({
     return {
       obraId: obraAtivaId,
       obraNome: obraAtual?.nome || "Empreendimento JC Bauer",
-      dataEntregaChaves: obraAtual?.dataFim || "",
+      dataEntregaChaves: (obraAtual as any)?.dataFim || "",
       responsavelEngenheiro: obraAtual?.engenheiro || "",
       observacoesGerais: "",
       pacotes: [],
@@ -436,7 +436,7 @@ export function PainelEntregaEmpreendimento({
               <span class="status-badge ${statusClass}">${p.status}</span>
               <div style="font-size: 9px; color: #64748b; margin-top: 2px;">${p.percentualConcluido}% concluído</div>
             </td>
-            <td style="text-align: right; font-weight: 700; font-family: monospace;">${formatBRL(p.valorTotal)}</td>
+            <td style="text-align: right; font-weight: 700; font-family: monospace;">${formatBRL(p.valorTotal || 0)}</td>
           </tr>
         `;
       }).join("")}
@@ -502,6 +502,8 @@ export function PainelEntregaEmpreendimento({
       : `https://wa.me/?text=${encodeURIComponent(msg)}`;
     window.open(url, "_blank");
   };
+
+  const pacotesValidos = cronogramaAtual.pacotes || [];
 
   const handleNotificarEquipe = (pacote: PacoteFinalizacao) => {
     if (onNotificarCargaWhatsApp) {
@@ -1176,7 +1178,7 @@ export function PainelEntregaEmpreendimento({
                         </span>
                       </td>
                       <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-800">
-                        {formatBRL(p.valorTotal)}
+                        {formatBRL(p.valorTotal || 0)}
                       </td>
                       <td className="py-2.5 px-3 text-center">
                         <div className="flex items-center justify-center gap-1">

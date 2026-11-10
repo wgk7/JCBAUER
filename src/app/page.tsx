@@ -180,6 +180,10 @@ interface Obra {
   sigla: string;
   endereco: string;
   engenheiro: string;
+  telefoneEngenheiro?: string;
+  telefoneAlmoxarife?: string;
+  telefoneDiretor?: string;
+  grupoWhatsapp?: string;
 }
 
 interface ItemSolicitacao {
@@ -1930,6 +1934,35 @@ export default function HomePage() {
   const [cronogramasEntrega, setCronogramasEntrega] = useState<
     Record<string, CronogramaEntregaEmpreendimento>
   >({});
+
+  const [cargaNotificarModal, setCargaNotificarModal] =
+    useState<DadosNotificacaoCargaWhatsApp | null>(null);
+
+  const handleNotificarPacoteEntrega = (dados: DadosNotificacaoCargaWhatsApp) => {
+    setCargaNotificarModal(dados);
+  };
+
+  const handleSalvarContatosObra = (
+    obraId: string,
+    contatos: {
+      telefoneEngenheiro?: string;
+      telefoneAlmoxarife?: string;
+      telefoneDiretor?: string;
+      grupoWhatsapp?: string;
+    }
+  ) => {
+    setObras((prev) => {
+      const atualizadas = prev.map((o) =>
+        o.id === obraId ? { ...o, ...contatos } : o
+      );
+      try {
+        window.localStorage.setItem(OBRAS_STORAGE_KEY, JSON.stringify(atualizadas));
+        salvarChaveSupabase(OBRAS_STORAGE_KEY, atualizadas).catch(() => {});
+      } catch {}
+      return atualizadas;
+    });
+    dispararAviso("Contatos de WhatsApp da obra atualizados com sucesso!");
+  };
 
   // -----------------------------------------------------------------------
   // ESTADOS DO MÓDULO ESPECIALIZADO DE CONCRETEIRAS (USINADO & BOMBA)
