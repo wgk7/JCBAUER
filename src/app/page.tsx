@@ -2451,7 +2451,17 @@ export default function HomePage() {
         try {
           const parsedObras = JSON.parse(savedObras) as Obra[];
           if (Array.isArray(parsedObras) && parsedObras.length > 0) {
-            setObras(parsedObras);
+            const saneadas = parsedObras.map((o) => {
+              if (o.telefoneDiretor && o.telefoneDiretor.replace(/\D/g, "").includes("988978179")) {
+                return {
+                  ...o,
+                  telefoneAlmoxarife: o.telefoneAlmoxarife || "47 988978179",
+                  telefoneDiretor: "47 997810384",
+                };
+              }
+              return o;
+            });
+            setObras(saneadas);
           } else {
             setObras(OBRAS_INICIAIS);
             window.localStorage.setItem(OBRAS_STORAGE_KEY, JSON.stringify(OBRAS_INICIAIS));
@@ -25026,25 +25036,25 @@ function ModalNovaObra({
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 text-[10px] mb-0.5">
-                  WhatsApp Almoxarife
+                  WhatsApp Almoxarife (Henrique)
                 </label>
                 <input
                   type="text"
                   value={telefoneAlmoxarife}
                   onChange={(e) => setTelefoneAlmoxarife(e.target.value)}
-                  placeholder="Ex: 47 9xxxx-xxxx"
+                  placeholder="Ex: 47 98897-8179"
                   className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
                 />
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 text-[10px] mb-0.5">
-                  WhatsApp Diretoria
+                  WhatsApp Diretoria (Welliton Schmidt)
                 </label>
                 <input
                   type="text"
                   value={telefoneDiretor}
                   onChange={(e) => setTelefoneDiretor(e.target.value)}
-                  placeholder="Ex: 47 997810384"
+                  placeholder="Ex: 47 99781-0384"
                   className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-mono"
                 />
               </div>
@@ -25220,25 +25230,25 @@ function ModalEditarObra({
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 text-[10px] mb-0.5">
-                  WhatsApp Almoxarife
+                  WhatsApp Almoxarife (Henrique)
                 </label>
                 <input
                   type="text"
                   value={telefoneAlmoxarife}
                   onChange={(e) => setTelefoneAlmoxarife(e.target.value)}
-                  placeholder="Ex: 47 9xxxx-xxxx"
+                  placeholder="Ex: 47 98897-8179"
                   className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
                 />
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 text-[10px] mb-0.5">
-                  WhatsApp Diretoria
+                  WhatsApp Diretoria (Welliton Schmidt)
                 </label>
                 <input
                   type="text"
                   value={telefoneDiretor}
                   onChange={(e) => setTelefoneDiretor(e.target.value)}
-                  placeholder="Ex: 47 997810384"
+                  placeholder="Ex: 47 99781-0384"
                   className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-mono"
                 />
               </div>

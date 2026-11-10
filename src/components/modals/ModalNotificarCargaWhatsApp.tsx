@@ -163,10 +163,22 @@ export function ModalNotificarCargaWhatsApp({
     );
 
     const engenheiroPadrao = obra?.telefoneEngenheiro || "";
+
+    // Detecção e correção caso o telefone de Henrique (47 988978179) tenha sido salvo no campo de Diretor por engano:
+    const diretorSalvoTemNumeroHenrique = Boolean(
+      obra?.telefoneDiretor?.replace(/\D/g, "").includes("988978179") ||
+      obra?.telefoneDiretor?.replace(/\D/g, "").includes("88978179")
+    );
+
     const almoxarifePadrao =
-      obra?.telefoneAlmoxarife || almoxarifeUsuario?.telefone || "";
-    const diretorPadrao =
-      obra?.telefoneDiretor || settings?.userPhone || "47 997810384";
+      (diretorSalvoTemNumeroHenrique ? "47 988978179" : obra?.telefoneAlmoxarife) ||
+      almoxarifeUsuario?.telefone ||
+      "47 988978179";
+
+    const diretorPadrao = diretorSalvoTemNumeroHenrique
+      ? "47 997810384"
+      : obra?.telefoneDiretor || "47 997810384";
+
     const grupoPadrao = obra?.grupoWhatsapp || "";
     const fornPadrao = dados.fornecedorTelefone || "";
 
@@ -175,6 +187,15 @@ export function ModalNotificarCargaWhatsApp({
     setTelDiretor(diretorPadrao);
     setLinkGrupo(grupoPadrao);
     setTelFornecedor(fornPadrao);
+
+    if (diretorSalvoTemNumeroHenrique && onSalvarContatosObra && dados.obraId) {
+      onSalvarContatosObra(dados.obraId, {
+        telefoneEngenheiro: engenheiroPadrao,
+        telefoneAlmoxarife: "47 988978179",
+        telefoneDiretor: "47 997810384",
+        grupoWhatsapp: grupoPadrao,
+      });
+    }
 
     setPacoteIdAtivo(dados.id);
     setMaterialNome(dados.descricaoMaterial);
@@ -345,7 +366,8 @@ export function ModalNotificarCargaWhatsApp({
   };
 
   const nomeEngenheiro = obra?.engenheiro || "Engenheiro Responsável";
-  const nomeDiretor = settings?.userName || "Diretoria (Welliton Schmidt)";
+  const nomeAlmoxarife = "Henrique";
+  const nomeDiretor = "Welliton Schmidt";
 
   // Lista dos contatos selecionados para envio em lote
   const listaDestinosAtivos: {
@@ -368,7 +390,7 @@ export function ModalNotificarCargaWhatsApp({
   if (incAlmoxarife) {
     listaDestinosAtivos.push({
       id: "almox",
-      titulo: "Almoxarife / Canteiro",
+      titulo: `Almoxarife (${nomeAlmoxarife})`,
       icone: "📦",
       telefone: telAlmoxarife,
     });
@@ -556,7 +578,7 @@ export function ModalNotificarCargaWhatsApp({
                   onChange={(e) => setIncAlmoxarife(e.target.checked)}
                   className="rounded text-emerald-600 focus:ring-0 cursor-pointer"
                 />
-                <span>📦 Almoxarife</span>
+                <span>📦 Almoxarife ({nomeAlmoxarife})</span>
               </label>
 
               <label className="flex items-center gap-1.5 cursor-pointer bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded-lg transition">
@@ -566,7 +588,7 @@ export function ModalNotificarCargaWhatsApp({
                   onChange={(e) => setIncDiretor(e.target.checked)}
                   className="rounded text-emerald-600 focus:ring-0 cursor-pointer"
                 />
-                <span>🏢 Diretoria</span>
+                <span>🏢 Diretoria ({nomeDiretor})</span>
               </label>
 
               {linkGrupo.trim() && (
@@ -736,7 +758,7 @@ export function ModalNotificarCargaWhatsApp({
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                     <span>📦</span>
-                    <span className="truncate">Almoxarife / Portaria</span>
+                    <span className="truncate">Almoxarife: {nomeAlmoxarife}</span>
                   </span>
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">
                     Recebimento
@@ -747,12 +769,12 @@ export function ModalNotificarCargaWhatsApp({
                     type="text"
                     value={telAlmoxarife}
                     onChange={(e) => setTelAlmoxarife(e.target.value)}
-                    placeholder="WhatsApp do Almoxarife"
+                    placeholder="WhatsApp do Almoxarife (Henrique)"
                     className="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
                   />
                   <button
                     type="button"
-                    onClick={() => handleDispararPara(telAlmoxarife, "Almoxarife do Canteiro")}
+                    onClick={() => handleDispararPara(telAlmoxarife, `Almoxarife ${nomeAlmoxarife}`)}
                     className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer shrink-0"
                     title="Disparar aviso para o Almoxarife da Obra"
                   >
@@ -778,12 +800,12 @@ export function ModalNotificarCargaWhatsApp({
                     type="text"
                     value={telDiretor}
                     onChange={(e) => setTelDiretor(e.target.value)}
-                    placeholder="WhatsApp do Diretor"
+                    placeholder="WhatsApp da Diretoria (Welliton Schmidt)"
                     className="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-mono"
                   />
                   <button
                     type="button"
-                    onClick={() => handleDispararPara(telDiretor, `Diretor ${nomeDiretor}`)}
+                    onClick={() => handleDispararPara(telDiretor, `Diretoria ${nomeDiretor}`)}
                     className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer shrink-0"
                     title="Disparar aviso para a Diretoria"
                   >
