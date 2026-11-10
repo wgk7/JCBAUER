@@ -68,6 +68,26 @@ export function ModalNotificarCargaWhatsApp({
   const [telAvulso, setTelAvulso] = useState("");
   const [nomeAvulso, setNomeAvulso] = useState("");
 
+  // Seleção para disparo em lote simultâneo ("Enviar para Todos ao Mesmo Tempo")
+  const [incEngenheiro, setIncEngenheiro] = useState<boolean>(true);
+  const [incAlmoxarife, setIncAlmoxarife] = useState<boolean>(true);
+  const [incDiretor, setIncDiretor] = useState<boolean>(true);
+  const [incGrupo, setIncGrupo] = useState<boolean>(false);
+  const [incFornecedor, setIncFornecedor] = useState<boolean>(false);
+  const [incAvulso, setIncAvulso] = useState<boolean>(false);
+
+  // Status visual do disparo em lote
+  const [disparoEmAndamento, setDisparoEmAndamento] = useState<boolean>(false);
+  const [destinosDisparados, setDestinosDisparados] = useState<
+    {
+      id: string;
+      titulo: string;
+      icone: string;
+      telefone: string;
+      url: string;
+    }[]
+  >([]);
+
   const [salvarNoCadastro, setSalvarNoCadastro] = useState(true);
   const [textoMensagem, setTextoMensagem] = useState("");
   const [copiado, setCopiado] = useState(false);
@@ -182,6 +202,12 @@ export function ModalNotificarCargaWhatsApp({
 
     setTextoMensagem(t);
     setCopiado(false);
+    setDisparoEmAndamento(false);
+    setDestinosDisparados([]);
+
+    if (grupoPadrao.trim()) {
+      setIncGrupo(true);
+    }
   }, [dados, obra, settings, usuarios]);
 
   if (!isOpen || !dados) return null;
@@ -321,6 +347,127 @@ export function ModalNotificarCargaWhatsApp({
   const nomeEngenheiro = obra?.engenheiro || "Engenheiro Responsável";
   const nomeDiretor = settings?.userName || "Diretoria (Welliton Schmidt)";
 
+  // Lista dos contatos selecionados para envio em lote
+  const listaDestinosAtivos: {
+    id: string;
+    titulo: string;
+    icone: string;
+    telefone: string;
+    link?: string;
+    msgCustom?: string;
+  }[] = [];
+
+  if (incEngenheiro) {
+    listaDestinosAtivos.push({
+      id: "eng",
+      titulo: `Eng. ${nomeEngenheiro}`,
+      icone: "👷‍♂️",
+      telefone: telEngenheiro,
+    });
+  }
+  if (incAlmoxarife) {
+    listaDestinosAtivos.push({
+      id: "almox",
+      titulo: "Almoxarife / Canteiro",
+      icone: "📦",
+      telefone: telAlmoxarife,
+    });
+  }
+  if (incDiretor) {
+    listaDestinosAtivos.push({
+      id: "dir",
+      titulo: `Diretoria (${nomeDiretor})`,
+      icone: "🏢",
+      telefone: telDiretor,
+    });
+  }
+  if (incGrupo && linkGrupo.trim()) {
+    listaDestinosAtivos.push({
+      id: "grupo",
+      titulo: "Grupo da Obra",
+      icone: "👥",
+      telefone: linkGrupo,
+      link: linkGrupo,
+    });
+  }
+  if (incFornecedor && telFornecedor.trim()) {
+    const msgForn = gerarTemplateFornecedor({
+      obraNome: dados.obraNome || obra?.nome || "Canteiro Central",
+      material: materialNome,
+      fornecedor: fornecedorNome,
+      oc: numeroOc,
+      data: dataEntrega,
+      local: localPavimento,
+    });
+    listaDestinosAtivos.push({
+      id: "forn",
+      titulo: `Fornecedor (${fornecedorNome})`,
+      icone: "🏭",
+      telefone: telFornecedor,
+      msgCustom: msgForn,
+    });
+  }
+  if (incAvulso && telAvulso.trim()) {
+    listaDestinosAtivos.push({
+      id: "avulso",
+      titulo: nomeAvulso || "Contato Avulso",
+      icone: "📱",
+      telefone: telAvulso,
+    });
+  }
+
+  // DISPARAR PARA TODOS AO MESMO TEMPO
+  const handleDispararTodosAoMesmoTempo = () => {
+    salvarContatosSeNecessario();
+
+    if (listaDestinosAtivos.length === 0) {
+      if (dispararAviso) {
+        dispararAviso("Marque ao menos um destinatário para o envio simultâneo.");
+      }
+      return;
+    }
+
+    // Copia a mensagem para a área de transferência no momento do clique do usuário
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(textoMensagem).catch(() => {});
+    }
+
+    // Monta as URLs finais de cada destinatário
+    const listaComUrl = listaDestinosAtivos.map((dest) => {
+      const msg = dest.msgCustom || textoMensagem;
+      if (dest.link?.trim().startsWith("http")) {
+        return { ...dest, url: dest.link.trim() };
+      }
+      const limpo = sanitizarTelefone(dest.telefone);
+      const url = limpo
+        ? `https://wa.me/${limpo}?text=${encodeURIComponent(msg)}`
+        : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+      return { ...dest, url };
+    });
+
+    setDestinosDisparados(listaComUrl);
+    setDisparoEmAndamento(true);
+
+    // Abre o primeiro destinatário instantaneamente
+    if (listaComUrl[0]) {
+      window.open(listaComUrl[0].url, "_blank");
+    }
+
+    // Abre os demais com pequeno espaçamento para o navegador processar as abas
+    for (let i = 1; i < listaComUrl.length; i++) {
+      const item = listaComUrl[i];
+      setTimeout(() => {
+        window.open(item.url, "_blank");
+      }, i * 450);
+    }
+
+    if (dispararAviso) {
+      dispararAviso(
+        `Disparo iniciado para ${listaComUrl.length} contatos! O WhatsApp está abrindo os destinatários.`
+      );
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden my-auto animate-in fade-in zoom-in duration-150">
@@ -333,14 +480,14 @@ export function ModalNotificarCargaWhatsApp({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-base text-white">
-                  Painel de Entregas — Disparo de Notificações WhatsApp
+                  Painel de Entregas — Disparo Rápido WhatsApp
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/30 text-emerald-100 border border-emerald-400/40 uppercase">
-                  Equipe & Fornecedor
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-amber-950 uppercase shadow-xs">
+                  Envio Simultâneo
                 </span>
               </div>
               <p className="text-xs text-emerald-100/90 mt-0.5">
-                Notifique celulares do Engenheiro, Almoxarife, Diretoria, Grupo da Obra ou Fornecedor
+                Envie para o Engenheiro, Almoxarife e Diretoria de uma só vez ou individualmente
               </p>
             </div>
           </div>
@@ -354,17 +501,142 @@ export function ModalNotificarCargaWhatsApp({
         </div>
 
         <div className="p-6 space-y-5">
+          {/* =============================================================== */}
+          {/* DESTAQUE PRINCIPAL: ENVIAR PARA TODOS AO MESMO TEMPO           */}
+          {/* =============================================================== */}
+          <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 rounded-2xl p-4 text-white shadow-md border border-emerald-500/40 space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-lg bg-amber-400 text-amber-950 flex items-center justify-center text-sm font-black shadow-xs">
+                    ⚡
+                  </span>
+                  <h4 className="font-black text-sm text-white uppercase tracking-wide">
+                    Enviar para Todos ao Mesmo Tempo
+                  </h4>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/20 text-white">
+                    Super Rápido
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-100 mt-1">
+                  Dispara a notificação desta carga para todos os contatos marcados abaixo em 1 só clique:
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDispararTodosAoMesmoTempo}
+                className="w-full md:w-auto px-6 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 active:scale-95 text-emerald-950 text-xs font-black transition flex items-center justify-center gap-2 shadow-lg cursor-pointer shrink-0"
+              >
+                <span className="text-base">🚀</span>
+                <span>ENVIAR PARA TODOS AGORA ({listaDestinosAtivos.length})</span>
+              </button>
+            </div>
+
+            {/* Checkboxes de quem entra no envio simultâneo */}
+            <div className="pt-2.5 border-t border-white/20 flex flex-wrap items-center gap-2 text-xs font-bold">
+              <span className="text-emerald-200 text-[11px] font-medium mr-1">
+                Destinatários:
+              </span>
+
+              <label className="flex items-center gap-1.5 cursor-pointer bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded-lg transition">
+                <input
+                  type="checkbox"
+                  checked={incEngenheiro}
+                  onChange={(e) => setIncEngenheiro(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 cursor-pointer"
+                />
+                <span>👷‍♂️ Engenheiro</span>
+              </label>
+
+              <label className="flex items-center gap-1.5 cursor-pointer bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded-lg transition">
+                <input
+                  type="checkbox"
+                  checked={incAlmoxarife}
+                  onChange={(e) => setIncAlmoxarife(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 cursor-pointer"
+                />
+                <span>📦 Almoxarife</span>
+              </label>
+
+              <label className="flex items-center gap-1.5 cursor-pointer bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded-lg transition">
+                <input
+                  type="checkbox"
+                  checked={incDiretor}
+                  onChange={(e) => setIncDiretor(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-0 cursor-pointer"
+                />
+                <span>🏢 Diretoria</span>
+              </label>
+
+              {linkGrupo.trim() && (
+                <label className="flex items-center gap-1.5 cursor-pointer bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded-lg transition">
+                  <input
+                    type="checkbox"
+                    checked={incGrupo}
+                    onChange={(e) => setIncGrupo(e.target.checked)}
+                    className="rounded text-emerald-600 focus:ring-0 cursor-pointer"
+                  />
+                  <span>👥 Grupo da Obra</span>
+                </label>
+              )}
+
+              {telFornecedor.trim() && (
+                <label className="flex items-center gap-1.5 cursor-pointer bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded-lg transition">
+                  <input
+                    type="checkbox"
+                    checked={incFornecedor}
+                    onChange={(e) => setIncFornecedor(e.target.checked)}
+                    className="rounded text-emerald-600 focus:ring-0 cursor-pointer"
+                  />
+                  <span>🏭 Fornecedor</span>
+                </label>
+              )}
+            </div>
+          </div>
+
+          {/* Painel Informativo pós-disparo simultâneo com links rápidos */}
+          {disparoEmAndamento && destinosDisparados.length > 0 && (
+            <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-emerald-950">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse" />
+                  <span>Disparo executado para {destinosDisparados.length} contatos:</span>
+                </div>
+                <span className="text-[11px] font-normal text-emerald-700">
+                  Dica: Se o navegador bloquear alguma aba, clique abaixo para abrir direto:
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                {destinosDisparados.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => window.open(item.url, "_blank")}
+                    className="px-2.5 py-1 rounded-lg bg-white hover:bg-emerald-100 border border-emerald-300 text-xs font-bold text-emerald-900 flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
+                    title={`Abrir conversa de ${item.titulo}`}
+                  >
+                    <span>{item.icone}</span>
+                    <span>{item.titulo}</span>
+                    <span className="text-emerald-700 text-[10px]">📲 Abrir</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Seletor de Pacote quando houver múltiplos acabamentos no empreendimento */}
           {dados.pacotesDisponiveis && dados.pacotesDisponiveis.length > 1 && (
-            <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-2.5 shadow-2xs">
-              <div className="text-xs font-bold text-emerald-950 flex items-center gap-1.5 shrink-0">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-2.5 shadow-2xs">
+              <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5 shrink-0">
                 <span>📦</span>
-                <span>Material de Acabamento a Notificar:</span>
+                <span>Material de Acabamento Selecionado:</span>
               </div>
               <select
                 value={pacoteIdAtivo}
                 onChange={(e) => handleTrocarPacote(e.target.value)}
-                className="bg-white border border-emerald-400 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-900 focus:outline-none cursor-pointer w-full md:w-auto flex-1 max-w-md shadow-2xs"
+                className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-900 focus:outline-none cursor-pointer w-full md:w-auto flex-1 max-w-md shadow-2xs"
               >
                 {dados.pacotesDisponiveis.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -409,12 +681,12 @@ export function ModalNotificarCargaWhatsApp({
             </div>
           </div>
 
-          {/* Seleção e Disparo por Destinatário */}
+          {/* Seleção e Disparo Individual por Destinatário (Caso queira enviar separado) */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                 <span>🎯</span>
-                <span>Escolha o Destinatário para Envio Imediato:</span>
+                <span>Contatos da Obra & Disparo Individual (Opcional):</span>
               </label>
               <label className="text-[11px] text-slate-600 flex items-center gap-1.5 cursor-pointer font-medium">
                 <input
@@ -423,7 +695,7 @@ export function ModalNotificarCargaWhatsApp({
                   onChange={(e) => setSalvarNoCadastro(e.target.checked)}
                   className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                 />
-                <span>Salvar números para as próximas entregas desta obra</span>
+                <span>Salvar números digitados na Obra</span>
               </label>
             </div>
 
@@ -560,7 +832,7 @@ export function ModalNotificarCargaWhatsApp({
                     <span className="truncate">Fornecedor: {fornecedorNome}</span>
                   </span>
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-50 text-cyan-700">
-                    Cobrança / Alinhamento
+                    Cobrança / Prazo
                   </span>
                 </div>
                 <div className="flex gap-1.5">
@@ -620,7 +892,7 @@ export function ModalNotificarCargaWhatsApp({
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                 <span>📝</span>
-                <span>Texto Oficial da Mensagem (Você pode editar antes de enviar):</span>
+                <span>Texto Oficial da Notificação (Edição permitida):</span>
               </label>
               <button
                 type="button"
@@ -633,7 +905,7 @@ export function ModalNotificarCargaWhatsApp({
             </div>
 
             <textarea
-              rows={8}
+              rows={7}
               value={textoMensagem}
               onChange={(e) => setTextoMensagem(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs text-slate-900 font-mono leading-relaxed focus:outline-none focus:border-emerald-600 focus:bg-white transition"
@@ -658,26 +930,16 @@ export function ModalNotificarCargaWhatsApp({
               className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
             >
               <span>{copiado ? "✅" : "📋"}</span>
-              <span>{copiado ? "Copiado!" : "Copiar Mensagem"}</span>
+              <span>{copiado ? "Copiado!" : "Copiar Texto"}</span>
             </button>
 
             <button
               type="button"
-              onClick={() => {
-                if (telEngenheiro.trim()) {
-                  handleDispararPara(telEngenheiro, `Eng. ${nomeEngenheiro}`);
-                } else if (telAlmoxarife.trim()) {
-                  handleDispararPara(telAlmoxarife, "Almoxarife");
-                } else if (telDiretor.trim()) {
-                  handleDispararPara(telDiretor, "Diretoria");
-                } else {
-                  handleDispararPara("", "Equipe");
-                }
-              }}
-              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition flex items-center gap-2 shadow-md cursor-pointer"
+              onClick={handleDispararTodosAoMesmoTempo}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black transition flex items-center gap-2 shadow-md cursor-pointer"
             >
-              <span>📲</span>
-              <span>Abrir WhatsApp & Enviar</span>
+              <span>🚀</span>
+              <span>Enviar para Todos ao Mesmo Tempo ({listaDestinosAtivos.length})</span>
             </button>
           </div>
         </div>

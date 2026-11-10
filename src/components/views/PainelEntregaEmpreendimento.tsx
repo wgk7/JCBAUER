@@ -627,7 +627,7 @@ export function PainelEntregaEmpreendimento({
               title="Disparo Rápido de WhatsApp: Notificar celulares do Engenheiro, Almoxarife e Diretoria sobre a chegada dos materiais deste empreendimento"
             >
               <span>📲</span>
-              <span>Disparo Rápido WhatsApp</span>
+              <span>Disparar para Todos (WhatsApp)</span>
             </button>
 
             <button
@@ -1031,7 +1031,7 @@ export function PainelEntregaEmpreendimento({
                         title="Disparar WhatsApp para Engenheiro, Almoxarife, Diretoria ou Fornecedor"
                       >
                         <span>📲</span>
-                        <span>Notificar WhatsApp</span>
+                        <span>Enviar p/ Todos</span>
                       </button>
 
                       <button
@@ -1200,7 +1200,7 @@ export function PainelEntregaEmpreendimento({
                             title="Notificar WhatsApp: Engenheiro, Almoxarife, Diretoria ou Fornecedor"
                           >
                             <span>📲</span>
-                            <span>WhatsApp</span>
+                            <span>Enviar p/ Todos</span>
                           </button>
                           <button
                             type="button"
