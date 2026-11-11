@@ -9,6 +9,9 @@ const nextConfig = {
     // Evita interrupção do build de produção por regras estritas de linting
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    serverComponentsExternalPackages: ["pdfjs-dist", "mammoth"],
+  },
 };
 
 export default nextConfig;

@@ -103,13 +103,14 @@ function extrairCondicoesComerciais(texto: string): {
 
   // Condição de Pagamento
   const matchPagto = texto.match(
-    /(?:condicao\s*de\s*pagamento|pagamento|condicao|faturamento)[\s:]*([^\n,.;]+?(?:dias|ddl|vista|boleto|pix|14|28|30|60))/i
+    /(?:condicao\s*de\s*pagamento|pagamento|condicao|faturamento)[\s:]*([^\n\r,.;]+?(?:dias|ddl|vista|boleto|pix|14|28|30|60))/i
   );
   if (matchPagto && matchPagto[1]) {
     condicao = matchPagto[1].trim();
   } else {
-    const matchPagtoSimples = texto.match(
-      /(\d+\s*(?:dias|ddl)|\d+\/\d+|\d+\/\d+\/\d+|a vista|à vista|boleto\s*\d+\s*dias|pix)/i
+    const textoSemCnpj = texto.replace(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{3}\/\d{4}/g, "");
+    const matchPagtoSimples = textoSemCnpj.match(
+      /(\d+\s*(?:dias|ddl)|\b(?:14|21|28|30|45|60)\s*\/\s*(?:28|35|42|60|90)\b|a vista|à vista|boleto\s*\d+\s*dias|pix)/i
     );
     if (matchPagtoSimples && matchPagtoSimples[1]) {
       condicao = matchPagtoSimples[1].trim();
@@ -126,7 +127,7 @@ function extrairCondicoesComerciais(texto: string): {
 
   // Fornecedor / Razão Social (captura apenas na mesma linha)
   const matchForn = texto.match(
-    /(?:fornecedor|empresa|razao\s*social|vendedor|emitente)[\t ]*[:=-]?[\t ]*([^\r\n,.;]{3,50})/i
+    /(?:denominacao|denominação|fornecedor|empresa|razao\s*social|vendedor|emitente)[\t ]*[:=-]?[\t ]*([^\r\n,.;]{3,60})/i
   );
   if (matchForn && matchForn[1]) {
     const fn = matchForn[1].trim();
@@ -151,15 +152,41 @@ function parseLinhaERP(linha: string): ItemExtraido | null {
 
   // Tenta várias configurações de final de linha comuns em ERPs brasileiros
   const configs = [
-    { qtdIdx: n - 3, unitIdx: n - 2, totIdx: n - 1, undIdx: isUnit(tokens[n - 4]) ? n - 4 : -1, nameEnd: isUnit(tokens[n - 4]) ? n - 4 : n - 3 },
+    // Formato 0 (DAV com Unidade no final): [nome...] [qtd] [unit] [total] [und]
+    {
+      qtdIdx: n - 4,
+      unitIdx: n - 3,
+      totIdx: n - 2,
+      undIdx: isUnit(tokens[n - 1]) ? n - 1 : -1,
+      nameEnd: isUnit(tokens[n - 1]) ? n - 4 : -1,
+    },
+    // Formato 1: [nome...] [qtd] [unit] [total] (com unidade antes se houver)
+    {
+      qtdIdx: n - 3,
+      unitIdx: n - 2,
+      totIdx: n - 1,
+      undIdx: isUnit(tokens[n - 4]) ? n - 4 : -1,
+      nameEnd: isUnit(tokens[n - 4]) ? n - 4 : n - 3,
+    },
+    // Formato 2: [nome...] [qtd] [und] [unit] [total]
     { qtdIdx: n - 4, undIdx: n - 3, unitIdx: n - 2, totIdx: n - 1, nameEnd: n - 4 },
+    // Formato 3: [nome...] [und] [qtd] [unit] [total]
     { undIdx: n - 4, qtdIdx: n - 3, unitIdx: n - 2, totIdx: n - 1, nameEnd: n - 4 },
+    // Formato 4: [nome...] [qtd] [und] [unit] [desc] [total]
     { qtdIdx: n - 5, undIdx: n - 4, unitIdx: n - 3, descIdx: n - 2, totIdx: n - 1, nameEnd: n - 5 },
-    { qtdIdx: n - 4, unitIdx: n - 3, descIdx: n - 2, totIdx: n - 1, undIdx: isUnit(tokens[n - 5]) ? n - 5 : -1, nameEnd: isUnit(tokens[n - 5]) ? n - 5 : n - 4 },
+    // Formato 5: [nome...] [qtd] [unit] [desc] [total]
+    {
+      qtdIdx: n - 4,
+      unitIdx: n - 3,
+      descIdx: n - 2,
+      totIdx: n - 1,
+      undIdx: isUnit(tokens[n - 5]) ? n - 5 : -1,
+      nameEnd: isUnit(tokens[n - 5]) ? n - 5 : n - 4,
+    },
   ];
 
   for (const c of configs) {
-    if (c.qtdIdx < 0 || c.unitIdx < 0 || c.totIdx < 0) continue;
+    if (c.qtdIdx < 0 || c.unitIdx < 0 || c.totIdx < 0 || c.nameEnd < 0) continue;
     const vQtd = parseMoedaBR(tokens[c.qtdIdx]);
     const vUnit = parseMoedaBR(tokens[c.unitIdx]);
     const vTot = parseMoedaBR(tokens[c.totIdx]);
@@ -183,12 +210,19 @@ function parseLinhaERP(linha: string): ItemExtraido | null {
           codigo = nameTokens.shift();
         }
 
-        const nome = nameTokens
+        let nome = nameTokens
           .join(" ")
           .replace(/^[\s\-–—:;*•.,]+|[\s\-–—:;*•.,]+$/g, "")
           .trim();
 
-        if (nome.length >= 2 && !/^(item|codigo|descricao|total|valor|subtotal)/i.test(normalizar(nome))) {
+        // Se o nome vier no padrão "009304 - DUALE-UP...", separa código e nome
+        const matchCodHifen = nome.match(/^(\d{3,15})\s*[-–—]\s*(.+)$/);
+        if (matchCodHifen) {
+          if (!codigo) codigo = matchCodHifen[1];
+          nome = matchCodHifen[2].trim();
+        }
+
+        if (nome.length >= 2 && !/^(item|codigo|descricao|total|valor|subtotal|produto)/i.test(normalizar(nome))) {
           return {
             codigo,
             nome,
@@ -368,6 +402,9 @@ function extrairItensDeTexto(textoBruto: string): ItemExtraido[] {
     const linhaNorm = normalizar(linha);
     if (stopWords.test(linhaNorm)) continue;
     if (linha.length < 5) continue;
+    if (/\b(?:cnpj|cpf|inscricao|inscrição|ie|im|telefone|fone|email|e-mail|endereco|endereço|destinatario|destinatário|estabelecimento|emissao|emissão|denominacao|denominação)\b/i.test(linhaNorm)) {
+      continue;
+    }
 
     // 1. Tenta extrair pelo parser especializado de ERP / DAV
     const itemERP = parseLinhaERP(linha);
@@ -489,7 +526,19 @@ export async function POST(req: NextRequest) {
         if (ext === "pdf") {
           // Extrai texto estruturado de documento PDF usando pdfjs-dist com reconstrução posicional de tabelas
           try {
+            const path = await import("path");
+            const url = await import("url");
+            const fs = await import("fs");
             const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+
+            // Configura worker do pdfjs de forma segura para ambiente Node.js / Next.js
+            const localWorker = path.resolve(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
+            if (fs.existsSync(localWorker)) {
+              pdfjs.GlobalWorkerOptions.workerSrc = url.pathToFileURL(localWorker).href;
+            } else {
+              pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version || "6.5.438"}/legacy/build/pdf.worker.min.mjs`;
+            }
+
             const loadingTask = pdfjs.getDocument({
               data: new Uint8Array(arrayBuffer),
               useSystemFonts: true,
@@ -503,7 +552,6 @@ export async function POST(req: NextRequest) {
               const page = await pdfDoc.getPage(i);
               const textContent = await page.getTextContent();
 
-              // Agrupa itens pela coordenada Y (mesma linha da tabela do orçamento)
               const rowGroups: { y: number; items: { x: number; text: string }[] }[] = [];
               for (const item of textContent.items) {
                 const str = (item as any)?.str || "";
@@ -520,10 +568,8 @@ export async function POST(req: NextRequest) {
                 group.items.push({ x, text: str });
               }
 
-              // Ordena as linhas do topo para o rodapé (Y decrescente)
               rowGroups.sort((a, b) => b.y - a.y);
 
-              // Para cada linha, ordena da esquerda para a direita (X crescente)
               const pageLines = rowGroups
                 .map((g) => {
                   g.items.sort((a, b) => a.x - b.x);
@@ -534,19 +580,17 @@ export async function POST(req: NextRequest) {
               if (pageLines.length > 0) {
                 pdfText += pageLines.join("\n") + "\n";
               } else {
-                // Fallback simples se transform não estiver preenchido
                 const fallbackLine = textContent.items.map((item: any) => item.str).join(" ");
                 pdfText += fallbackLine + "\n";
               }
             }
 
-            textoCompleto = pdfText;
-            itensDetectados = extrairItensDeTexto(pdfText);
+            if (pdfText.trim().length > 0) {
+              textoCompleto = pdfText;
+              itensDetectados = extrairItensDeTexto(pdfText);
+            }
           } catch (pdfErr) {
-            console.error("Erro ao ler PDF:", pdfErr);
-            const fallbackText = buffer.toString("latin1").replace(/[^\x20-\x7E\xC0-\xFF\n\r\t]/g, " ");
-            textoCompleto = fallbackText;
-            itensDetectados = extrairItensDeTexto(fallbackText);
+            console.error("Erro ao ler PDF via pdfjs:", pdfErr);
           }
         } else if (ext === "docx" || ext === "doc") {
           // Extrai texto de documento Word usando mammoth
