@@ -10,7 +10,7 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   experimental: {
-    serverComponentsExternalPackages: ["pdfjs-dist", "mammoth"],
+    serverComponentsExternalPackages: ["pdf-parse", "pdfjs-dist", "mammoth"],
   },
 };
 

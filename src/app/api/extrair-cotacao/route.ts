@@ -387,78 +387,81 @@ function extrairItensDeExcel(workbook: XLSX.WorkBook): ItemExtraido[] {
   return itens;
 }
 
-function decodePdfOctal(str: string): string {
-  return str
-    .replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)))
-    .replace(/\\r/g, "\r")
-    .replace(/\\n/g, "\n")
-    .replace(/\\t/g, "\t")
-    .replace(/\\\(/g, "(")
-    .replace(/\\\)/g, ")")
-    .replace(/\\\\/g, "\\");
-}
-
-// Extrator PDF nativo com Node zlib (Zero dependências externas, 100% compatível com Vercel Serverless)
-function extrairTextoPDFNativo(buffer: Buffer): string {
+// Extrator de texto de PDF com múltiplos motores (PDFParse como prioritário e PDF.js como contingência)
+async function extrairTextoPDF(arrayBuffer: ArrayBuffer): Promise<string> {
+  // 1. Motor Primário: PDFParse (analisa fontes, coordenadas de texto e tabulações com exatidão)
   try {
-    const zlib = require("zlib");
-    const content = buffer.toString("latin1");
-    const streamRegex = /stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g;
-    let match: RegExpExecArray | null;
-    const allLines: string[] = [];
+    const { PDFParse } = require("pdf-parse");
+    const parser = new PDFParse(new Uint8Array(arrayBuffer));
+    const res = await parser.getText();
+    if (res && res.text && res.text.trim().length > 30) {
+      return res.text;
+    }
+  } catch (pdfParseErr) {
+    console.warn("Aviso ao tentar motor primário PDFParse:", pdfParseErr);
+  }
 
-    while ((match = streamRegex.exec(content)) !== null) {
-      const rawStream = Buffer.from(match[1], "latin1");
-      try {
-        const decompressed = zlib.inflateSync(rawStream).toString("latin1");
-        if (!decompressed.includes("BT")) continue;
+  // 2. Motor Secundário: PDF.js legado com agrupamento espacial de linhas
+  try {
+    const [pdfjs] = await Promise.all([
+      import("pdfjs-dist/legacy/build/pdf.mjs"),
+      import("pdfjs-dist/legacy/build/pdf.worker.mjs").catch(() => null),
+    ]);
 
-        const pageBlocks: { x: number; y: number; text: string }[] = [];
-        // Varredura sequencial exata de comandos de posição Td e comandos de texto Tj/'/"
-        const tokenRegex = /(?:([-\d.]+)\s+([-\d.]+)\s+Td)|\(([^)]*)\)\s*(?:Tj|'|")/g;
-        let currX = 0;
-        let currY = 0;
-        let tm: RegExpExecArray | null;
+    const loadingTask = pdfjs.getDocument({
+      data: new Uint8Array(arrayBuffer),
+      useSystemFonts: true,
+      disableFontFace: true,
+      isEvalSupported: false,
+    });
+    const pdfDoc = await loadingTask.promise;
+    let pdfText = "";
 
-        while ((tm = tokenRegex.exec(decompressed)) !== null) {
-          if (tm[1] !== undefined && tm[2] !== undefined) {
-            currX = parseFloat(tm[1]);
-            currY = parseFloat(tm[2]);
-          } else if (tm[3] !== undefined) {
-            const text = decodePdfOctal(tm[3]);
-            if (text.trim()) {
-              pageBlocks.push({ x: currX, y: currY, text: text.trim() });
-            }
-          }
+    for (let i = 1; i <= pdfDoc.numPages; i++) {
+      const page = await pdfDoc.getPage(i);
+      const textContent = await page.getTextContent();
+
+      const rowGroups: { y: number; items: { x: number; text: string }[] }[] = [];
+      for (const item of textContent.items) {
+        const str = (item as any)?.str || "";
+        if (!str.trim()) continue;
+        const transform = (item as any)?.transform || [];
+        const x = transform[4] !== undefined ? transform[4] : 0;
+        const y = transform[5] !== undefined ? Math.round(transform[5]) : 0;
+
+        let group = rowGroups.find((g) => Math.abs(g.y - y) <= 3.5);
+        if (!group) {
+          group = { y, items: [] };
+          rowGroups.push(group);
         }
+        group.items.push({ x, text: str });
+      }
 
-        const rowGroups: { y: number; items: { x: number; text: string }[] }[] = [];
-        for (const b of pageBlocks) {
-          let g = rowGroups.find((gr) => Math.abs(gr.y - b.y) <= 3.5);
-          if (!g) {
-            g = { y: b.y, items: [] };
-            rowGroups.push(g);
-          }
-          g.items.push(b);
-        }
+      rowGroups.sort((a, b) => b.y - a.y);
 
-        rowGroups.sort((a, b) => b.y - a.y);
-        const pl = rowGroups
-          .map((g) => {
-            g.items.sort((a, b) => a.x - b.x);
-            return g.items.map((i) => i.text).join(" ").trim();
-          })
-          .filter((l) => l.length > 0);
+      const pageLines = rowGroups
+        .map((g) => {
+          g.items.sort((a, b) => a.x - b.x);
+          return g.items.map((it) => it.text).join(" ").trim();
+        })
+        .filter((l) => l.length > 0);
 
-        allLines.push(...pl);
-      } catch {}
+      if (pageLines.length > 0) {
+        pdfText += pageLines.join("\n") + "\n";
+      } else {
+        const fallbackLine = textContent.items.map((item: any) => item.str).join(" ");
+        pdfText += fallbackLine + "\n";
+      }
     }
 
-    return allLines.join("\n");
-  } catch (err) {
-    console.warn("Erro no extrator PDF nativo:", err);
-    return "";
+    if (pdfText.trim().length > 30) {
+      return pdfText;
+    }
+  } catch (pdfErr) {
+    console.error("Aviso ao tentar motor secundário PDF.js:", pdfErr);
   }
+
+  return "";
 }
 
 // Extrai insumos a partir de linhas de texto (PDF, Word, WhatsApp, TXT)
@@ -480,15 +483,27 @@ function extrairItensDeTexto(textoBruto: string): ItemExtraido[] {
       continue;
     }
 
-    // 1. Tenta extrair pelo parser especializado de ERP / DAV
+    // 1. Tenta extrair pelo parser especializado de ERP / DAV (conferência matemática exata Qtd * Unit ≈ Total)
     const itemERP = parseLinhaERP(linha);
     if (itemERP) {
       itens.push(itemERP);
       continue;
     }
 
-    // 2. Tenta extrair pelo padrão comum brasileiro (WhatsApp / Orçamento Livre)
-    const matchesValores = linha.match(/(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2}|\d+[.,]\d{2})/g);
+    // 2. Tenta extrair pelo padrão comum livre (WhatsApp / Orçamento Livre)
+    // Se a linha começar com código de produto (ex: 005596 - ), extrai o código e remove da linha
+    let linhaTratada = linha;
+    let codigoExtraido: string | undefined = undefined;
+    const matchCod = linhaTratada.match(/^(\d{4,15})\s*[-–—]\s*/);
+    if (matchCod) {
+      codigoExtraido = matchCod[1];
+      linhaTratada = linhaTratada.replace(matchCod[0], "");
+    }
+
+    // Busca valores monetários reais, ignorando medidas técnicas (ex: 16,00MM, 750V, 20A, 6500K)
+    const matchesValores = linhaTratada.match(
+      /(?:R\$\s*)?(\b\d{1,3}(?:\.\d{3})+,\d{2}\b|\b\d+,\d{2}\b)(?!\s*(?:mm|cm|pol|polegadas|v\b|w\b|a\b|k\b|hz|ma\b|ka\b|kva))/gi
+    );
     if (!matchesValores || matchesValores.length === 0) continue;
 
     const valoresNum = matchesValores
@@ -498,7 +513,7 @@ function extrairItensDeTexto(textoBruto: string): ItemExtraido[] {
     if (valoresNum.length === 0) continue;
 
     // Busca padrões de quantidade e unidade na linha (ex: "100 m", "50 un", "10 pç", "2 cx", "5 sc", "15 kg", "12 m2")
-    const matchQtdUnd = linha.match(
+    const matchQtdUnd = linhaTratada.match(
       /(\d+(?:[.,]\d+)?)\s*(un|und|unid|pc|pç|peca|m|mt|metro|metros|kg|kilo|kilos|cx|caixa|sc|saco|sacos|rolo|rolos|br|barra|barras|l|lt|litro|litros|m2|m²|m3|m³)\b/i
     );
 
@@ -509,7 +524,8 @@ function extrairItensDeTexto(textoBruto: string): ItemExtraido[] {
       qtd = parseMoedaBR(matchQtdUnd[1]) || 1;
       und = matchQtdUnd[2].toLowerCase();
     } else {
-      const matchQtdSolta = linha.match(/^(\d+(?:[.,]\d+)?)\s*[-xX*]?\s+([A-Za-z])/);
+      // Quantidade solta tipo "10x", "5 *" - nunca números soltos com hífen que são códigos
+      const matchQtdSolta = linhaTratada.match(/^(\d+(?:[.,]\d+)?)\s*[xX*]\s+([A-Za-z])/);
       if (matchQtdSolta) {
         qtd = parseMoedaBR(matchQtdSolta[1]) || 1;
       }
@@ -537,10 +553,10 @@ function extrairItensDeTexto(textoBruto: string): ItemExtraido[] {
     }
 
     // Extrai o nome do material limpando preços, códigos e termos da linha
-    let nomeMaterial = linha;
+    let nomeMaterial = linhaTratada;
 
-    // Remove códigos iniciais tipo "01. ", "001 - ", "Item 1: "
-    nomeMaterial = nomeMaterial.replace(/^(?:item\s*\d+|[\d]{1,8}[\s.-]+)/i, "");
+    // Remove códigos iniciais tipo "01. ", "Item 1: "
+    nomeMaterial = nomeMaterial.replace(/^(?:item\s*\d+|[\d]{1,3}[\s.-]+)/i, "");
 
     // Remove menções de preços da descrição
     nomeMaterial = nomeMaterial.replace(/(?:R\$\s*)?\d{1,3}(?:\.\d{3})*,\d{2}/g, " ");
@@ -561,6 +577,7 @@ function extrairItensDeTexto(textoBruto: string): ItemExtraido[] {
 
     if (nomeMaterial.length >= 3 && unit > 0 && !stopWords.test(normalizar(nomeMaterial))) {
       itens.push({
+        codigo: codigoExtraido,
         nome: nomeMaterial,
         quantidade: qtd,
         unidade: und,
@@ -598,74 +615,11 @@ export async function POST(req: NextRequest) {
         const buffer = Buffer.from(arrayBuffer);
 
         if (ext === "pdf") {
-          // 1. Extração Nativa de PDF com Node zlib (Zero dependências externas, 100% garantido no Vercel)
-          const textoNativo = extrairTextoPDFNativo(buffer);
-          if (textoNativo && textoNativo.trim().length > 30) {
-            textoCompleto = textoNativo;
-            itensDetectados = extrairItensDeTexto(textoNativo);
-          }
-
-          // 2. Se a extração nativa não pegou itens, utiliza pdfjs com worker em memória
-          if (itensDetectados.length === 0) {
-            try {
-              const [pdfjs] = await Promise.all([
-                import("pdfjs-dist/legacy/build/pdf.mjs"),
-                import("pdfjs-dist/legacy/build/pdf.worker.mjs").catch(() => null),
-              ]);
-
-              const loadingTask = pdfjs.getDocument({
-                data: new Uint8Array(arrayBuffer),
-                useSystemFonts: true,
-                disableFontFace: true,
-                isEvalSupported: false,
-              });
-              const pdfDoc = await loadingTask.promise;
-              let pdfText = "";
-
-              for (let i = 1; i <= pdfDoc.numPages; i++) {
-                const page = await pdfDoc.getPage(i);
-                const textContent = await page.getTextContent();
-
-                const rowGroups: { y: number; items: { x: number; text: string }[] }[] = [];
-                for (const item of textContent.items) {
-                  const str = (item as any)?.str || "";
-                  if (!str.trim()) continue;
-                  const transform = (item as any)?.transform || [];
-                  const x = transform[4] !== undefined ? transform[4] : 0;
-                  const y = transform[5] !== undefined ? Math.round(transform[5]) : 0;
-
-                  let group = rowGroups.find((g) => Math.abs(g.y - y) <= 3.5);
-                  if (!group) {
-                    group = { y, items: [] };
-                    rowGroups.push(group);
-                  }
-                  group.items.push({ x, text: str });
-                }
-
-                rowGroups.sort((a, b) => b.y - a.y);
-
-                const pageLines = rowGroups
-                  .map((g) => {
-                    g.items.sort((a, b) => a.x - b.x);
-                    return g.items.map((it) => it.text).join(" ").trim();
-                  })
-                  .filter((l) => l.length > 0);
-
-                if (pageLines.length > 0) {
-                  pdfText += pageLines.join("\n") + "\n";
-                } else {
-                  const fallbackLine = textContent.items.map((item: any) => item.str).join(" ");
-                  pdfText += fallbackLine + "\n";
-                }
-              }
-
-              if (pdfText.trim().length > 0) {
-                textoCompleto = pdfText;
-                itensDetectados = extrairItensDeTexto(pdfText);
-              }
-            } catch (pdfErr) {
-              console.error("Aviso ao tentar motor secundário PDF:", pdfErr);
-            }
+          // Extração multi-motor para PDFs (PDFParse com prioridade absoluta + PDF.js de contingência)
+          const textoPDF = await extrairTextoPDF(arrayBuffer);
+          if (textoPDF && textoPDF.trim().length > 30) {
+            textoCompleto = textoPDF;
+            itensDetectados = extrairItensDeTexto(textoPDF);
           }
         } else if (ext === "docx" || ext === "doc") {
           // Extrai texto de documento Word usando mammoth
