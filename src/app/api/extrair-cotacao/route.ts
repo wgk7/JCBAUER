@@ -222,13 +222,17 @@ function parseLinhaERP(linha: string): ItemExtraido | null {
           nome = matchCodHifen[2].trim();
         }
 
+        // Garante que o preço unitário reflita exatamente as casas decimais internas do ERP (ex: 6.555 impresso como 6.56 no PDF)
+        // para que a multiplicação Quantidade * Preço Unitário feche 100% no centavo com o Total do documento
+        const precoUnitarioCalculado = vQtd > 0 && vTot > 0 ? vTot / vQtd : vUnit;
+
         if (nome.length >= 2 && !/^(item|codigo|descricao|total|valor|subtotal|produto)/i.test(normalizar(nome))) {
           return {
             codigo,
             nome,
             quantidade: vQtd,
             unidade: und,
-            precoUnitario: vUnit,
+            precoUnitario: precoUnitarioCalculado,
             precoTotal: vTot,
             confianca: 0.98,
           };

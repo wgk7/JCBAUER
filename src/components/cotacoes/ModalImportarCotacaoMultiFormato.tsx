@@ -44,6 +44,7 @@ interface ItemReconhecido {
   quantidade: number;
   unidade: string;
   precoDetectado: number;
+  precoTotal?: number;
   status: "encontrado" | "faltante" | "manual";
   textoOrigem?: string;
   isNovo?: boolean;
@@ -194,6 +195,7 @@ export function ModalImportarCotacaoMultiFormato({
             quantidade: item.quantidade || melhorMatch.quantidade || 1,
             unidade: item.unidade || melhorMatch.unidade || "un",
             precoDetectado: melhorMatch.precoUnitario,
+            precoTotal: melhorMatch.precoTotal,
             status: "encontrado" as const,
             textoOrigem: melhorMatch.nome,
           };
@@ -225,6 +227,7 @@ export function ModalImportarCotacaoMultiFormato({
             quantidade: ext.quantidade || 1,
             unidade: ext.unidade || "un",
             precoDetectado: ext.precoUnitario,
+            precoTotal: ext.precoTotal,
             status: "encontrado",
             textoOrigem: ext.codigo ? `Cód: ${ext.codigo}` : "Extraído do Arquivo",
             isNovo: true,
@@ -250,6 +253,7 @@ export function ModalImportarCotacaoMultiFormato({
         quantidade: ext.quantidade || 1,
         unidade: ext.unidade || "un",
         precoDetectado: ext.precoUnitario || 0,
+        precoTotal: ext.precoTotal,
         status: (ext.precoUnitario > 0 ? "encontrado" : "faltante") as const,
         textoOrigem: ext.codigo ? `Cód: ${ext.codigo}` : undefined,
         isNovo: true,
@@ -378,6 +382,7 @@ export function ModalImportarCotacaoMultiFormato({
           ? {
               ...i,
               precoDetectado: novoValor,
+              precoTotal: undefined, // remove precoTotal fixo do PDF para recalcular Qtd * novoValor
               status: novoValor > 0 ? "manual" : "faltante",
             }
           : i
@@ -388,7 +393,15 @@ export function ModalImportarCotacaoMultiFormato({
   // Atualização de quantidade manual
   const handleAtualizarQtdManual = (itemId: string, novaQtd: number) => {
     setItensReconhecidos((prev) =>
-      prev.map((i) => (i.itemId === itemId ? { ...i, quantidade: novaQtd } : i))
+      prev.map((i) =>
+        i.itemId === itemId
+          ? {
+              ...i,
+              quantidade: novaQtd,
+              precoTotal: undefined, // remove precoTotal fixo do PDF para recalcular novaQtd * preco
+            }
+          : i
+      )
     );
   };
 
@@ -408,10 +421,13 @@ export function ModalImportarCotacaoMultiFormato({
 
   // Cálculo de Totais da Prévia
   const subtotalItens = useMemo(() => {
-    return itensReconhecidos.reduce(
-      (acc, it) => acc + (it.quantidade || 0) * (it.precoDetectado || 0),
-      0
-    );
+    return itensReconhecidos.reduce((acc, it) => {
+      const linhaVal =
+        it.precoTotal !== undefined && it.status !== "manual"
+          ? it.precoTotal
+          : (it.quantidade || 0) * (it.precoDetectado || 0);
+      return acc + linhaVal;
+    }, 0);
   }, [itensReconhecidos]);
 
   const totalFinalProposta = useMemo(() => {
@@ -766,7 +782,10 @@ export function ModalImportarCotacaoMultiFormato({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {itensReconhecidos.map((item) => {
-                      const totalLinha = (item.quantidade || 0) * (item.precoDetectado || 0);
+                      const totalLinha =
+                        item.precoTotal !== undefined && item.status !== "manual"
+                          ? item.precoTotal
+                          : (item.quantidade || 0) * (item.precoDetectado || 0);
                       return (
                         <tr
                           key={item.itemId}
@@ -792,7 +811,7 @@ export function ModalImportarCotacaoMultiFormato({
                           <td className="py-2 px-2 text-center">
                             <input
                               type="number"
-                              step="0.01"
+                              step="any"
                               min="0"
                               value={item.quantidade || ""}
                               onChange={(e) =>
@@ -807,9 +826,15 @@ export function ModalImportarCotacaoMultiFormato({
                           <td className="py-2 px-3 text-right">
                             <input
                               type="number"
-                              step="0.01"
+                              step="any"
                               min="0"
-                              value={item.precoDetectado || ""}
+                              value={
+                                item.precoDetectado
+                                  ? item.precoDetectado % 1 === 0
+                                    ? item.precoDetectado
+                                    : Number(item.precoDetectado.toFixed(4))
+                                  : ""
+                              }
                               placeholder="0,00"
                               onChange={(e) =>
                                 handleAtualizarPrecoManual(item.itemId, parseFloat(e.target.value) || 0)
