@@ -6357,6 +6357,13 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       condicao?: string;
       descontoValor?: number;
       nomeFornecedor?: string;
+      novosItens?: {
+        id?: string;
+        nome: string;
+        quantidade: number;
+        unidade: string;
+        preco: number;
+      }[];
     }
   ) => {
     setComparativoFornecedores((prev) => {
@@ -6382,7 +6389,14 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     });
 
     setComparativoItens((prev) => {
-      return prev.map((item) => {
+      // 1. Atualiza itens existentes
+      const existingIds = new Set<string>();
+      const existingNames = new Set<string>();
+
+      const atualizados = prev.map((item) => {
+        existingIds.add(item.id);
+        if (item.nome) existingNames.add(item.nome.trim().toLowerCase());
+
         const novoPreco = dados.precos[item.id] || 0;
         if (novoPreco <= 0) return item;
 
@@ -6401,6 +6415,49 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
           precos: precosAtuais,
         };
       });
+
+      // 2. Se houver novos itens vindos da extração (PDF, Word, Excel)
+      const novosParaAdicionar: ItemComparativoRapido[] = [];
+      if (dados.novosItens && dados.novosItens.length > 0) {
+        dados.novosItens.forEach((nov, idx) => {
+          const itemId = nov.id || `item-import-${Date.now()}-${idx}`;
+          const nomeNormalizado = (nov.nome || "").trim().toLowerCase();
+
+          if (!existingIds.has(itemId) && (!nomeNormalizado || !existingNames.has(nomeNormalizado))) {
+            const precosIniciais = [0, 0, 0];
+            while (precosIniciais.length <= fornIdx) {
+              precosIniciais.push(0);
+            }
+            precosIniciais[fornIdx] = nov.preco || 0;
+
+            novosParaAdicionar.push({
+              id: itemId,
+              nome: nov.nome,
+              quantidade: nov.quantidade || 1,
+              unidade: nov.unidade || "un",
+              preco1: fornIdx === 0 ? nov.preco || 0 : 0,
+              preco2: fornIdx === 1 ? nov.preco || 0 : 0,
+              preco3: fornIdx === 2 ? nov.preco || 0 : 0,
+              [`preco${fornIdx + 1}`]: nov.preco || 0,
+              precos: precosIniciais,
+            });
+
+            existingIds.add(itemId);
+            if (nomeNormalizado) existingNames.add(nomeNormalizado);
+          }
+        });
+      }
+
+      // Se prev estava vazio ou continha apenas linha sem nome
+      const prevVazioOuInvalido =
+        prev.length === 0 ||
+        (prev.length === 1 && (!prev[0].nome || !prev[0].nome.trim()));
+
+      if (prevVazioOuInvalido && novosParaAdicionar.length > 0) {
+        return novosParaAdicionar;
+      }
+
+      return [...atualizados, ...novosParaAdicionar];
     });
   };
 
