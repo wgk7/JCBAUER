@@ -111,36 +111,44 @@ export function ModalImportarCotacaoMultiFormato({
   const [nomeDetectado, setNomeDetectado] = useState<string>("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prevIsOpenRef = useRef(false);
 
   useEffect(() => {
     setFornecedorIndex(fornecedorIndexPadrao);
   }, [fornecedorIndexPadrao]);
 
-  // Inicializa a grade de itens com base nos itens da cotação ativa
+  // Inicializa a grade de itens com base nos itens da cotação ativa APENAS na abertura inicial
   useEffect(() => {
-    if (!isOpen) return;
-
-    if (Array.isArray(itens) && itens.length > 0) {
-      const inicial: ItemReconhecido[] = itens.map((it) => ({
-        itemId: it.id,
-        itemNome: it.nome,
-        quantidade: it.quantidade || 1,
-        unidade: it.unidade || "un",
-        precoDetectado: 0,
-        status: "faltante" as const,
-      }));
-      setItensReconhecidos(inicial);
-    } else {
-      setItensReconhecidos([]);
+    if (!isOpen) {
+      prevIsOpenRef.current = false;
+      return;
     }
 
-    setTextoColado("");
-    setNomeArquivo("");
-    setPrazoEntrega(fornecedores[fornecedorIndex]?.prazo || "");
-    setCondicaoPagamento(fornecedores[fornecedorIndex]?.condicao || "");
-    setFreteTipo(fornecedores[fornecedorIndex]?.freteTipo || "CIF");
-    setFreteValor(fornecedores[fornecedorIndex]?.freteValor || 0);
-    setDescontoValor(fornecedores[fornecedorIndex]?.descontoValor || 0);
+    if (!prevIsOpenRef.current) {
+      prevIsOpenRef.current = true;
+
+      if (Array.isArray(itens) && itens.length > 0) {
+        const inicial: ItemReconhecido[] = itens.map((it) => ({
+          itemId: it.id,
+          itemNome: it.nome,
+          quantidade: it.quantidade || 1,
+          unidade: it.unidade || "un",
+          precoDetectado: 0,
+          status: "faltante" as const,
+        }));
+        setItensReconhecidos(inicial);
+      } else {
+        setItensReconhecidos([]);
+      }
+
+      setTextoColado("");
+      setNomeArquivo("");
+      setPrazoEntrega(fornecedores[fornecedorIndex]?.prazo || "");
+      setCondicaoPagamento(fornecedores[fornecedorIndex]?.condicao || "");
+      setFreteTipo(fornecedores[fornecedorIndex]?.freteTipo || "CIF");
+      setFreteValor(fornecedores[fornecedorIndex]?.freteValor || 0);
+      setDescontoValor(fornecedores[fornecedorIndex]?.descontoValor || 0);
+    }
   }, [isOpen, itens, fornecedorIndex, fornecedores]);
 
   // Processa itens extraídos pelo motor inteligente (seja via API ou local)
@@ -155,6 +163,23 @@ export function ModalImportarCotacaoMultiFormato({
     }[],
     textoCompleto: string
   ) => {
+    // Se a soma dos itens divergir ligeiramente do total oficial do documento (decorrente de centavos de casas decimais do ERP do fornecedor),
+    // equaliza automaticamente a diferença no campo de desconto para fechar 100% no centavo com o PDF original
+    const somaItensCalc = itensExtraidos.reduce(
+      (acc, it) => acc + (it.quantidade || 0) * (it.precoUnitario || 0),
+      0
+    );
+    const matchTotalDoc = (textoCompleto || "").match(/\b(?:total|total\s*geral)[\s:]*\s*(\d{1,3}(?:\.\d{3})*,\d{2})/i);
+    if (matchTotalDoc && matchTotalDoc[1]) {
+      const totalDoc = parseMoedaBR(matchTotalDoc[1]);
+      if (totalDoc > 0 && somaItensCalc > totalDoc) {
+        const dif = Math.round((somaItensCalc - totalDoc) * 100) / 100;
+        if (dif > 0 && dif < (somaItensCalc * 0.15)) {
+          setDescontoValor(dif);
+        }
+      }
+    }
+
     const itensValidos = (itens || []).filter(
       (item) => item && item.nome && item.nome.trim().length > 0
     );
@@ -943,17 +968,22 @@ export function ModalImportarCotacaoMultiFormato({
               {/* Desconto Comercial */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Desconto Adicional (R$):
+                  Desconto / Ajuste (R$):
                 </label>
                 <input
                   type="number"
-                  step="10"
+                  step="0.01"
                   min="0"
-                  value={descontoValor || ""}
+                  value={descontoValor > 0 ? Number(descontoValor.toFixed(2)) : ""}
                   placeholder="0,00"
                   onChange={(e) => setDescontoValor(parseFloat(e.target.value) || 0)}
                   className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-bold text-right"
                 />
+                {descontoValor > 0 && (
+                  <span className="text-[10px] text-emerald-700 font-semibold block mt-0.5">
+                    Equalizado com o total do PDF
+                  </span>
+                )}
               </div>
             </div>
           </div>
