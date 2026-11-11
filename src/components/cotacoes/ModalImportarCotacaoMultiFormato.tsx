@@ -26,6 +26,7 @@ interface ModalImportarCotacaoMultiFormatoProps {
       condicao?: string;
       descontoValor?: number;
       nomeFornecedor?: string;
+      substituirTodosItens?: boolean;
       novosItens?: {
         id?: string;
         nome: string;
@@ -109,6 +110,16 @@ export function ModalImportarCotacaoMultiFormato({
   const [condicaoPagamento, setCondicaoPagamento] = useState<string>("");
   const [descontoValor, setDescontoValor] = useState<number>(0);
   const [nomeDetectado, setNomeDetectado] = useState<string>("");
+  const [modoSubstituirLista, setModoSubstituirLista] = useState<boolean>(true);
+  const [itensBrutosExtraidos, setItensBrutosExtraidos] = useState<{
+    codigo?: string;
+    nome: string;
+    quantidade: number;
+    unidade: string;
+    precoUnitario: number;
+    precoTotal: number;
+  }[] | null>(null);
+  const [textoBrutoExtraido, setTextoBrutoExtraido] = useState<string>("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevIsOpenRef = useRef(false);
@@ -161,20 +172,26 @@ export function ModalImportarCotacaoMultiFormato({
       precoUnitario: number;
       precoTotal: number;
     }[],
-    textoCompleto: string
+    textoCompleto: string,
+    modoForcado?: boolean
   ) => {
+    setItensBrutosExtraidos(itensExtraidos);
+    setTextoBrutoExtraido(textoCompleto);
+
     // Se a soma dos itens divergir ligeiramente do total oficial do documento (decorrente de centavos de casas decimais do ERP do fornecedor),
     // equaliza automaticamente a diferença no campo de desconto para fechar 100% no centavo com o PDF original
     const somaItensCalc = itensExtraidos.reduce(
       (acc, it) => acc + (it.quantidade || 0) * (it.precoUnitario || 0),
       0
     );
-    const matchTotalDoc = (textoCompleto || "").match(/\b(?:total|total\s*geral)[\s:]*\s*(\d{1,3}(?:\.\d{3})*,\d{2})/i);
+    const matchTotalDoc = (textoCompleto || "").match(
+      /\b(?:total|total\s*geral|total\s*da\s*proposta|total\s*liquido)[\s:]*\s*(\d{1,3}(?:\.\d{3})*,\d{2})/i
+    );
     if (matchTotalDoc && matchTotalDoc[1]) {
       const totalDoc = parseMoedaBR(matchTotalDoc[1]);
       if (totalDoc > 0 && somaItensCalc > totalDoc) {
         const dif = Math.round((somaItensCalc - totalDoc) * 100) / 100;
-        if (dif > 0 && dif < (somaItensCalc * 0.15)) {
+        if (dif > 0 && dif < somaItensCalc * 0.15) {
           setDescontoValor(dif);
         }
       }
@@ -184,8 +201,48 @@ export function ModalImportarCotacaoMultiFormato({
       (item) => item && item.nome && item.nome.trim().length > 0
     );
 
-    // CASO 1: A cotação JÁ TEM itens válidos definidos pelo usuário -> Faz pareamento inteligente
+    const outrosFornsCotados = itensValidos.some((it) => {
+      const precos = Array.isArray(it.precos)
+        ? it.precos
+        : [it.preco1 || 0, it.preco2 || 0, it.preco3 || 0];
+      return precos.some((p, fIdx) => fIdx !== fornecedorIndex && p > 0);
+    });
+
+    // Se a planilha estava vazia ou se outros fornecedores não tinham cotação, usa substituição completa
+    const usarSubstituicao =
+      modoForcado !== undefined
+        ? modoForcado
+        : itensValidos.length === 0 || !outrosFornsCotados;
+
+    setModoSubstituirLista(usarSubstituicao);
+
+    // CASO 1: Substituição direta com TODOS os itens lidos do arquivo (todos os 61 itens preservados sem perdas)
+    if (usarSubstituicao || itensValidos.length === 0) {
+      if (itensExtraidos.length > 0) {
+        const novos: ItemReconhecido[] = itensExtraidos.map((ext, idx) => ({
+          itemId: `item-import-${Date.now()}-${idx}`,
+          itemNome: ext.nome,
+          quantidade: ext.quantidade || 1,
+          unidade: ext.unidade || "un",
+          precoDetectado: ext.precoUnitario || 0,
+          precoTotal: ext.precoTotal,
+          status: (ext.precoUnitario > 0 ? "encontrado" : "faltante") as const,
+          textoOrigem: ext.codigo ? `Cód: ${ext.codigo}` : undefined,
+          isNovo: true,
+        }));
+
+        setItensReconhecidos(novos);
+        dispararAviso(
+          `${novos.length} insumo(s) lidos e preenchidos automaticamente do documento!`
+        );
+        return;
+      }
+    }
+
+    // CASO 2: Modo mesclagem com pareamento 1-a-1 rigoroso (não reutiliza item já alocado e não descarta duplicatas)
     if (itensValidos.length > 0) {
+      const usadosExtIndices = new Set<number>();
+
       const pareados: ItemReconhecido[] = itensValidos.map((item) => {
         const nomeNorm = normalizar(item.nome);
         const palavrasChave = nomeNorm
@@ -193,12 +250,19 @@ export function ModalImportarCotacaoMultiFormato({
           .filter((p) => p.length > 2 && !["com", "para", "de", "da", "do", "tipo"].includes(p));
         const medidas = nomeNorm.match(/\d+[\w.,]+/g) || [];
 
+        let melhorMatchIdx = -1;
         let melhorMatch: (typeof itensExtraidos)[0] | null = null;
         let maiorScore = 0;
 
-        for (const ext of itensExtraidos) {
+        itensExtraidos.forEach((ext, idx) => {
+          if (usadosExtIndices.has(idx)) return; // 1-a-1: nunca reutiliza item já alocado
+
           const extNorm = normalizar(ext.nome);
           let score = 0;
+
+          if (extNorm === nomeNorm) {
+            score += 50;
+          }
 
           for (const pal of palavrasChave) {
             if (extNorm.includes(pal)) score += 2;
@@ -207,13 +271,19 @@ export function ModalImportarCotacaoMultiFormato({
             if (extNorm.includes(med)) score += 4;
           }
 
+          if (item.quantidade && ext.quantidade && item.quantidade === ext.quantidade) {
+            score += 5;
+          }
+
           if (score > maiorScore && score >= 2) {
             maiorScore = score;
             melhorMatch = ext;
+            melhorMatchIdx = idx;
           }
-        }
+        });
 
-        if (melhorMatch && melhorMatch.precoUnitario > 0) {
+        if (melhorMatch && melhorMatchIdx >= 0 && melhorMatch.precoUnitario > 0) {
+          usadosExtIndices.add(melhorMatchIdx);
           return {
             itemId: item.id,
             itemNome: item.nome,
@@ -222,7 +292,7 @@ export function ModalImportarCotacaoMultiFormato({
             precoDetectado: melhorMatch.precoUnitario,
             precoTotal: melhorMatch.precoTotal,
             status: "encontrado" as const,
-            textoOrigem: melhorMatch.nome,
+            textoOrigem: melhorMatch.codigo ? `Cód: ${melhorMatch.codigo}` : melhorMatch.nome,
           };
         }
 
@@ -236,16 +306,10 @@ export function ModalImportarCotacaoMultiFormato({
         };
       });
 
-      // Também inclui itens do documento que não estavam na lista original (para não perder nada!)
+      // Inclui todos os itens do arquivo que não foram consumidos no pareamento (sem filtrar duplicatas de nome!)
       const itensNovosDoArquivo: ItemReconhecido[] = [];
       itensExtraidos.forEach((ext, idx) => {
-        const jaPareado = pareados.some(
-          (p) =>
-            p.status === "encontrado" &&
-            (normalizar(p.textoOrigem || "") === normalizar(ext.nome) ||
-              normalizar(p.itemNome) === normalizar(ext.nome))
-        );
-        if (!jaPareado && ext.precoUnitario > 0) {
+        if (!usadosExtIndices.has(idx) && ext.precoUnitario > 0) {
           itensNovosDoArquivo.push({
             itemId: `novo-${Date.now()}-${idx}`,
             itemNome: ext.nome,
@@ -265,28 +329,7 @@ export function ModalImportarCotacaoMultiFormato({
 
       const totalEncontrados = resultadoFinal.filter((i) => i.precoDetectado > 0).length;
       dispararAviso(
-        `Leitura concluída: ${totalEncontrados} insumo(s) e preços identificados com sucesso!`
-      );
-      return;
-    }
-
-    // CASO 2: A cotação estava VAZIA (0 itens) -> Adiciona todos os itens lidos do arquivo!
-    if (itensExtraidos.length > 0) {
-      const novos: ItemReconhecido[] = itensExtraidos.map((ext, idx) => ({
-        itemId: `item-import-${Date.now()}-${idx}`,
-        itemNome: ext.nome,
-        quantidade: ext.quantidade || 1,
-        unidade: ext.unidade || "un",
-        precoDetectado: ext.precoUnitario || 0,
-        precoTotal: ext.precoTotal,
-        status: (ext.precoUnitario > 0 ? "encontrado" : "faltante") as const,
-        textoOrigem: ext.codigo ? `Cód: ${ext.codigo}` : undefined,
-        isNovo: true,
-      }));
-
-      setItensReconhecidos(novos);
-      dispararAviso(
-        `${novos.length} insumo(s) lidos e preenchidos automaticamente do documento!`
+        `Leitura concluída: ${totalEncontrados} insumo(s) pareados/adicionados com sucesso!`
       );
       return;
     }
@@ -294,6 +337,13 @@ export function ModalImportarCotacaoMultiFormato({
     dispararAviso(
       "Nenhum insumo estruturado com preço foi identificado. Você pode adicionar manualmente na grade abaixo."
     );
+  };
+
+  const alternarModoImportacao = (substituir: boolean) => {
+    setModoSubstituirLista(substituir);
+    if (itensBrutosExtraidos && itensBrutosExtraidos.length > 0) {
+      aplicarItensExtraidos(itensBrutosExtraidos, textoBrutoExtraido, substituir);
+    }
   };
 
   // Motor Inteligente de Interpretação Textual (WhatsApp / TXT / Colado)
@@ -462,6 +512,10 @@ export function ModalImportarCotacaoMultiFormato({
     return itensReconhecidos.filter((i) => i.status === "faltante" || i.precoDetectado <= 0);
   }, [itensReconhecidos]);
 
+  const itensValidosCount = useMemo(() => {
+    return (itens || []).filter((item) => item && item.nome && item.nome.trim().length > 0).length;
+  }, [itens]);
+
   // Mensagem de cobrança rápida no WhatsApp para itens que o fornecedor esqueceu
   const gerarMensagemCobrancaFaltantes = () => {
     const nomesFaltantes = itensFaltantes
@@ -519,6 +573,7 @@ export function ModalImportarCotacaoMultiFormato({
       descontoValor: descontoValor || 0,
       nomeFornecedor: nomeDetectado || undefined,
       novosItens,
+      substituirTodosItens: modoSubstituirLista,
     });
 
     dispararAviso(
@@ -781,6 +836,48 @@ export function ModalImportarCotacaoMultiFormato({
                 </span>
               </div>
             </div>
+
+            {itensBrutosExtraidos && itensBrutosExtraidos.length > 0 && itensValidosCount > 0 && (
+              <div className="bg-sky-50 border border-sky-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="text-xl shrink-0">📄</span>
+                  <div className="min-w-0">
+                    <span className="font-bold text-sky-950 block">
+                      Orçamento com {itensBrutosExtraidos.length} insumos (A planilha atual possui {itensValidosCount} itens)
+                    </span>
+                    <span className="text-[11px] text-sky-800">
+                      {modoSubstituirLista
+                        ? `Carregando a grade completa com todos os ${itensBrutosExtraidos.length} insumos do documento.`
+                        : "Modo mesclagem: equalizando preços com os itens da planilha."}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => alternarModoImportacao(true)}
+                    className={`px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
+                      modoSubstituirLista
+                        ? "bg-sky-700 text-white shadow-xs"
+                        : "bg-white text-sky-900 border border-sky-300 hover:bg-sky-100"
+                    }`}
+                  >
+                    Importar Todos ({itensBrutosExtraidos.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => alternarModoImportacao(false)}
+                    className={`px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
+                      !modoSubstituirLista
+                        ? "bg-sky-700 text-white shadow-xs"
+                        : "bg-white text-sky-900 border border-sky-300 hover:bg-sky-100"
+                    }`}
+                  >
+                    Mesclar Preços
+                  </button>
+                </div>
+              </div>
+            )}
 
             {itensReconhecidos.length === 0 ? (
               <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50 text-slate-500 space-y-1">

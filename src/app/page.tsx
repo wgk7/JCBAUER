@@ -6357,6 +6357,7 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
       condicao?: string;
       descontoValor?: number;
       nomeFornecedor?: string;
+      substituirTodosItens?: boolean;
       novosItens?: {
         id?: string;
         nome: string;
@@ -6389,13 +6390,70 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
     });
 
     setComparativoItens((prev) => {
-      // 1. Atualiza itens existentes
+      const prevVazioOuInvalido =
+        prev.length === 0 ||
+        (prev.length === 1 && (!prev[0].nome || !prev[0].nome.trim()));
+
+      // 1. Se for para substituir todos os itens (importação de orçamento completo) ou se a planilha estava vazia
+      if (
+        (dados.substituirTodosItens || prevVazioOuInvalido) &&
+        dados.novosItens &&
+        dados.novosItens.length > 0
+      ) {
+        const prevPorId = new Map(prev.map((p) => [p.id, p]));
+        const prevPorNome = new Map(
+          prev.map((p) => [(p.nome || "").trim().toLowerCase(), p])
+        );
+
+        return dados.novosItens.map((nov, idx) => {
+          const itemId = nov.id || `item-import-${Date.now()}-${idx}`;
+          const itemExistente =
+            prevPorId.get(itemId) ||
+            prevPorNome.get((nov.nome || "").trim().toLowerCase());
+
+          const precosIniciais = [0, 0, 0];
+          while (precosIniciais.length <= fornIdx) {
+            precosIniciais.push(0);
+          }
+
+          // Preserva cotações de outros fornecedores se o item já existia
+          if (itemExistente) {
+            const precosAntigos = Array.isArray(itemExistente.precos)
+              ? [...itemExistente.precos]
+              : [
+                  itemExistente.preco1 || 0,
+                  itemExistente.preco2 || 0,
+                  itemExistente.preco3 || 0,
+                ];
+            precosAntigos.forEach((pa, f) => {
+              if (f !== fornIdx && pa > 0) {
+                while (precosIniciais.length <= f) precosIniciais.push(0);
+                precosIniciais[f] = pa;
+              }
+            });
+          }
+
+          precosIniciais[fornIdx] = nov.preco || 0;
+
+          return {
+            id: itemId,
+            nome: nov.nome,
+            quantidade: nov.quantidade || 1,
+            unidade: nov.unidade || "un",
+            preco1: precosIniciais[0] || 0,
+            preco2: precosIniciais[1] || 0,
+            preco3: precosIniciais[2] || 0,
+            [`preco${fornIdx + 1}`]: nov.preco || 0,
+            precos: precosIniciais,
+          };
+        });
+      }
+
+      // 2. Modo mesclagem: atualiza preços existentes
       const existingIds = new Set<string>();
-      const existingNames = new Set<string>();
 
       const atualizados = prev.map((item) => {
         existingIds.add(item.id);
-        if (item.nome) existingNames.add(item.nome.trim().toLowerCase());
 
         const novoPreco = dados.precos[item.id] || 0;
         if (novoPreco <= 0) return item;
@@ -6416,14 +6474,14 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
         };
       });
 
-      // 2. Se houver novos itens vindos da extração (PDF, Word, Excel)
+      // 3. Adiciona novos itens do documento sem descartar duplicidades de nomes
       const novosParaAdicionar: ItemComparativoRapido[] = [];
       if (dados.novosItens && dados.novosItens.length > 0) {
         dados.novosItens.forEach((nov, idx) => {
           const itemId = nov.id || `item-import-${Date.now()}-${idx}`;
-          const nomeNormalizado = (nov.nome || "").trim().toLowerCase();
 
-          if (!existingIds.has(itemId) && (!nomeNormalizado || !existingNames.has(nomeNormalizado))) {
+          // IMPORTANTE: NÃO bloqueia por nome! Orçamentos contêm múltiplos circuitos/linhas com o mesmo nome de produto.
+          if (!existingIds.has(itemId)) {
             const precosIniciais = [0, 0, 0];
             while (precosIniciais.length <= fornIdx) {
               precosIniciais.push(0);
@@ -6443,18 +6501,8 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
             });
 
             existingIds.add(itemId);
-            if (nomeNormalizado) existingNames.add(nomeNormalizado);
           }
         });
-      }
-
-      // Se prev estava vazio ou continha apenas linha sem nome
-      const prevVazioOuInvalido =
-        prev.length === 0 ||
-        (prev.length === 1 && (!prev[0].nome || !prev[0].nome.trim()));
-
-      if (prevVazioOuInvalido && novosParaAdicionar.length > 0) {
-        return novosParaAdicionar;
       }
 
       return [...atualizados, ...novosParaAdicionar];
