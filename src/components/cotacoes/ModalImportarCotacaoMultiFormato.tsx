@@ -421,13 +421,10 @@ export function ModalImportarCotacaoMultiFormato({
 
   // Cálculo de Totais da Prévia
   const subtotalItens = useMemo(() => {
-    return itensReconhecidos.reduce((acc, it) => {
-      const linhaVal =
-        it.precoTotal !== undefined && it.status !== "manual"
-          ? it.precoTotal
-          : (it.quantidade || 0) * (it.precoDetectado || 0);
-      return acc + linhaVal;
-    }, 0);
+    return itensReconhecidos.reduce(
+      (acc, it) => acc + (it.quantidade || 0) * (it.precoDetectado || 0),
+      0
+    );
   }, [itensReconhecidos]);
 
   const totalFinalProposta = useMemo(() => {
@@ -782,10 +779,7 @@ export function ModalImportarCotacaoMultiFormato({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {itensReconhecidos.map((item) => {
-                      const totalLinha =
-                        item.precoTotal !== undefined && item.status !== "manual"
-                          ? item.precoTotal
-                          : (item.quantidade || 0) * (item.precoDetectado || 0);
+                      const totalLinha = (item.quantidade || 0) * (item.precoDetectado || 0);
                       return (
                         <tr
                           key={item.itemId}
@@ -826,13 +820,11 @@ export function ModalImportarCotacaoMultiFormato({
                           <td className="py-2 px-3 text-right">
                             <input
                               type="number"
-                              step="any"
+                              step="0.01"
                               min="0"
                               value={
-                                item.precoDetectado
-                                  ? item.precoDetectado % 1 === 0
-                                    ? item.precoDetectado
-                                    : Number(item.precoDetectado.toFixed(4))
+                                item.precoDetectado > 0
+                                  ? Number((Math.round(item.precoDetectado * 100) / 100).toFixed(2))
                                   : ""
                               }
                               placeholder="0,00"

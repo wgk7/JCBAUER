@@ -14698,7 +14698,11 @@ ${settings.companyCnpj ? `CNPJ: <strong>${settings.companyCnpj}</strong> • ` :
                                                 <input
                                                   type="number"
                                                   step="0.01"
-                                                  value={p === 0 ? "" : p}
+                                                  value={
+                                                    p === 0
+                                                      ? ""
+                                                      : Number((Math.round(p * 100) / 100).toFixed(2))
+                                                  }
                                                   placeholder="0,00"
                                                   onChange={(e) =>
                                                     handleAtualizarPrecoItemComparativo(

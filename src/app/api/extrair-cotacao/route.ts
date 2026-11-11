@@ -222,9 +222,8 @@ function parseLinhaERP(linha: string): ItemExtraido | null {
           nome = matchCodHifen[2].trim();
         }
 
-        // Garante que o preço unitário reflita exatamente as casas decimais internas do ERP (ex: 6.555 impresso como 6.56 no PDF)
-        // para que a multiplicação Quantidade * Preço Unitário feche 100% no centavo com o Total do documento
-        const precoUnitarioCalculado = vQtd > 0 && vTot > 0 ? vTot / vQtd : vUnit;
+        // Preço unitário limpo e normalizado em 2 casas decimais (ex: 8.60, 35.62, 12.68 - nunca dízimas confusas)
+        const precoUnitarioLimpo = Math.round(vUnit * 100) / 100;
 
         if (nome.length >= 2 && !/^(item|codigo|descricao|total|valor|subtotal|produto)/i.test(normalizar(nome))) {
           return {
@@ -232,7 +231,7 @@ function parseLinhaERP(linha: string): ItemExtraido | null {
             nome,
             quantidade: vQtd,
             unidade: und,
-            precoUnitario: precoUnitarioCalculado,
+            precoUnitario: precoUnitarioLimpo,
             precoTotal: vTot,
             confianca: 0.98,
           };
@@ -680,6 +679,24 @@ export async function POST(req: NextRequest) {
     }
 
     const condicoes = extrairCondicoesComerciais(textoCompleto);
+
+    // Se o documento tiver um total explícito menor que a soma dos itens (ex: desconto comercial do ERP ou arredondamento),
+    // calcula a diferença e atribui como desconto comercial para que o valor final feche 100% igual ao do PDF original
+    const somaItens = itensDetectados.reduce(
+      (acc, it) => acc + (it.quantidade || 0) * (it.precoUnitario || 0),
+      0
+    );
+
+    const matchTotalDoc = textoCompleto.match(/\b(?:total|total\s*geral)[\s:]*\s*(\d{1,3}(?:\.\d{3})*,\d{2})/i);
+    if (matchTotalDoc && matchTotalDoc[1]) {
+      const totalDoc = parseMoedaBR(matchTotalDoc[1]);
+      if (totalDoc > 0 && somaItens > totalDoc) {
+        const dif = Math.round((somaItens - totalDoc) * 100) / 100;
+        if (condicoes.descontoValor <= 0 && dif > 0 && dif < (somaItens * 0.15)) {
+          condicoes.descontoValor = dif;
+        }
+      }
+    }
 
     const resposta: DadosExtraidos = {
       fornecedorNome: condicoes.fornecedorNome,
