@@ -387,6 +387,80 @@ function extrairItensDeExcel(workbook: XLSX.WorkBook): ItemExtraido[] {
   return itens;
 }
 
+function decodePdfOctal(str: string): string {
+  return str
+    .replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)))
+    .replace(/\\r/g, "\r")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t")
+    .replace(/\\\(/g, "(")
+    .replace(/\\\)/g, ")")
+    .replace(/\\\\/g, "\\");
+}
+
+// Extrator PDF nativo com Node zlib (Zero dependências externas, 100% compatível com Vercel Serverless)
+function extrairTextoPDFNativo(buffer: Buffer): string {
+  try {
+    const zlib = require("zlib");
+    const content = buffer.toString("latin1");
+    const streamRegex = /stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g;
+    let match: RegExpExecArray | null;
+    const allLines: string[] = [];
+
+    while ((match = streamRegex.exec(content)) !== null) {
+      const rawStream = Buffer.from(match[1], "latin1");
+      try {
+        const decompressed = zlib.inflateSync(rawStream).toString("latin1");
+        if (!decompressed.includes("BT")) continue;
+
+        const pageBlocks: { x: number; y: number; text: string }[] = [];
+        // Varredura sequencial exata de comandos de posição Td e comandos de texto Tj/'/"
+        const tokenRegex = /(?:([-\d.]+)\s+([-\d.]+)\s+Td)|\(([^)]*)\)\s*(?:Tj|'|")/g;
+        let currX = 0;
+        let currY = 0;
+        let tm: RegExpExecArray | null;
+
+        while ((tm = tokenRegex.exec(decompressed)) !== null) {
+          if (tm[1] !== undefined && tm[2] !== undefined) {
+            currX = parseFloat(tm[1]);
+            currY = parseFloat(tm[2]);
+          } else if (tm[3] !== undefined) {
+            const text = decodePdfOctal(tm[3]);
+            if (text.trim()) {
+              pageBlocks.push({ x: currX, y: currY, text: text.trim() });
+            }
+          }
+        }
+
+        const rowGroups: { y: number; items: { x: number; text: string }[] }[] = [];
+        for (const b of pageBlocks) {
+          let g = rowGroups.find((gr) => Math.abs(gr.y - b.y) <= 3.5);
+          if (!g) {
+            g = { y: b.y, items: [] };
+            rowGroups.push(g);
+          }
+          g.items.push(b);
+        }
+
+        rowGroups.sort((a, b) => b.y - a.y);
+        const pl = rowGroups
+          .map((g) => {
+            g.items.sort((a, b) => a.x - b.x);
+            return g.items.map((i) => i.text).join(" ").trim();
+          })
+          .filter((l) => l.length > 0);
+
+        allLines.push(...pl);
+      } catch {}
+    }
+
+    return allLines.join("\n");
+  } catch (err) {
+    console.warn("Erro no extrator PDF nativo:", err);
+    return "";
+  }
+}
+
 // Extrai insumos a partir de linhas de texto (PDF, Word, WhatsApp, TXT)
 function extrairItensDeTexto(textoBruto: string): ItemExtraido[] {
   const itens: ItemExtraido[] = [];
@@ -524,73 +598,74 @@ export async function POST(req: NextRequest) {
         const buffer = Buffer.from(arrayBuffer);
 
         if (ext === "pdf") {
-          // Extrai texto estruturado de documento PDF usando pdfjs-dist com reconstrução posicional de tabelas
-          try {
-            const path = await import("path");
-            const url = await import("url");
-            const fs = await import("fs");
-            const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+          // 1. Extração Nativa de PDF com Node zlib (Zero dependências externas, 100% garantido no Vercel)
+          const textoNativo = extrairTextoPDFNativo(buffer);
+          if (textoNativo && textoNativo.trim().length > 30) {
+            textoCompleto = textoNativo;
+            itensDetectados = extrairItensDeTexto(textoNativo);
+          }
 
-            // Configura worker do pdfjs de forma segura para ambiente Node.js / Next.js
-            const localWorker = path.resolve(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
-            if (fs.existsSync(localWorker)) {
-              pdfjs.GlobalWorkerOptions.workerSrc = url.pathToFileURL(localWorker).href;
-            } else {
-              pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version || "6.5.438"}/legacy/build/pdf.worker.min.mjs`;
-            }
+          // 2. Se a extração nativa não pegou itens, utiliza pdfjs com worker em memória
+          if (itensDetectados.length === 0) {
+            try {
+              const [pdfjs] = await Promise.all([
+                import("pdfjs-dist/legacy/build/pdf.mjs"),
+                import("pdfjs-dist/legacy/build/pdf.worker.mjs").catch(() => null),
+              ]);
 
-            const loadingTask = pdfjs.getDocument({
-              data: new Uint8Array(arrayBuffer),
-              useSystemFonts: true,
-              disableFontFace: true,
-              isEvalSupported: false,
-            });
-            const pdfDoc = await loadingTask.promise;
-            let pdfText = "";
+              const loadingTask = pdfjs.getDocument({
+                data: new Uint8Array(arrayBuffer),
+                useSystemFonts: true,
+                disableFontFace: true,
+                isEvalSupported: false,
+              });
+              const pdfDoc = await loadingTask.promise;
+              let pdfText = "";
 
-            for (let i = 1; i <= pdfDoc.numPages; i++) {
-              const page = await pdfDoc.getPage(i);
-              const textContent = await page.getTextContent();
+              for (let i = 1; i <= pdfDoc.numPages; i++) {
+                const page = await pdfDoc.getPage(i);
+                const textContent = await page.getTextContent();
 
-              const rowGroups: { y: number; items: { x: number; text: string }[] }[] = [];
-              for (const item of textContent.items) {
-                const str = (item as any)?.str || "";
-                if (!str.trim()) continue;
-                const transform = (item as any)?.transform || [];
-                const x = transform[4] !== undefined ? transform[4] : 0;
-                const y = transform[5] !== undefined ? Math.round(transform[5]) : 0;
+                const rowGroups: { y: number; items: { x: number; text: string }[] }[] = [];
+                for (const item of textContent.items) {
+                  const str = (item as any)?.str || "";
+                  if (!str.trim()) continue;
+                  const transform = (item as any)?.transform || [];
+                  const x = transform[4] !== undefined ? transform[4] : 0;
+                  const y = transform[5] !== undefined ? Math.round(transform[5]) : 0;
 
-                let group = rowGroups.find((g) => Math.abs(g.y - y) <= 3.5);
-                if (!group) {
-                  group = { y, items: [] };
-                  rowGroups.push(group);
+                  let group = rowGroups.find((g) => Math.abs(g.y - y) <= 3.5);
+                  if (!group) {
+                    group = { y, items: [] };
+                    rowGroups.push(group);
+                  }
+                  group.items.push({ x, text: str });
                 }
-                group.items.push({ x, text: str });
+
+                rowGroups.sort((a, b) => b.y - a.y);
+
+                const pageLines = rowGroups
+                  .map((g) => {
+                    g.items.sort((a, b) => a.x - b.x);
+                    return g.items.map((it) => it.text).join(" ").trim();
+                  })
+                  .filter((l) => l.length > 0);
+
+                if (pageLines.length > 0) {
+                  pdfText += pageLines.join("\n") + "\n";
+                } else {
+                  const fallbackLine = textContent.items.map((item: any) => item.str).join(" ");
+                  pdfText += fallbackLine + "\n";
+                }
               }
 
-              rowGroups.sort((a, b) => b.y - a.y);
-
-              const pageLines = rowGroups
-                .map((g) => {
-                  g.items.sort((a, b) => a.x - b.x);
-                  return g.items.map((it) => it.text).join(" ").trim();
-                })
-                .filter((l) => l.length > 0);
-
-              if (pageLines.length > 0) {
-                pdfText += pageLines.join("\n") + "\n";
-              } else {
-                const fallbackLine = textContent.items.map((item: any) => item.str).join(" ");
-                pdfText += fallbackLine + "\n";
+              if (pdfText.trim().length > 0) {
+                textoCompleto = pdfText;
+                itensDetectados = extrairItensDeTexto(pdfText);
               }
+            } catch (pdfErr) {
+              console.error("Aviso ao tentar motor secundário PDF:", pdfErr);
             }
-
-            if (pdfText.trim().length > 0) {
-              textoCompleto = pdfText;
-              itensDetectados = extrairItensDeTexto(pdfText);
-            }
-          } catch (pdfErr) {
-            console.error("Erro ao ler PDF via pdfjs:", pdfErr);
           }
         } else if (ext === "docx" || ext === "doc") {
           // Extrai texto de documento Word usando mammoth
